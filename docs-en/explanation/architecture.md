@@ -127,6 +127,15 @@ inferenceapi provides stable chat, embeddings, rerank, audio, image, video, and 
 The scheduler runs filters, the GPU planner, and scorers in sequence and produces schedule_explain. The accelerator registry is
 the sole entry point for adding dGPU backends. See the [ADR Index](../adr/README.md) for more long-term tradeoffs, and [ADR 0030](../adr/0030-network-objects.md) for the node networking design.
 
-<!-- translation-source-sha256: 4922a92dffca2264c797e3986e51c21122c2d8a426e6951bfb12f8e015febc98 -->
+<!-- translation-source-sha256: a5187324d89c935847bcc1bc0262b63a1d6a07c4587fb4b4d20283a4ca42e918 # Architecture -->
+<!-- translation-source-sha256: 88d50ce8709c3c27b72ae4b404600e119fe80c10289495ae6f8e5ba775fae45f ## Two Binaries -->
+<!-- translation-source-sha256: a1f1235886671543731830a27556c39cbe553571d0e106201087599e437a410e ## Overview -->
+<!-- translation-source-sha256: cf7832b50ff94075c01d09200fbdfd20d6c2871e16b382917e2f9e40d36fab8d ## Connections and Streams -->
+<!-- translation-source-sha256: 5a757a40072e7ba11430339d8a8cf9cb5e91a3150902d164cd2a8e4f24bb4cbf ## Server Resource and Run Lifetimes -->
+<!-- translation-source-sha256: a25b94fe86a8ad37901d60f05f771761ded5c86890731e26c2654d30e8b515bd ## Deployment Lifecycle -->
+<!-- translation-source-sha256: d267c51324ba90eb96286feac4dd947a0886be547afe3e83ad8164949c092834 ## Why There Are No Cloud Provider SDKs or NVML -->
+<!-- translation-source-sha256: 347f264e4b67d8e34c24ce8993f79f422111ea04efd1d6d54d1078f467bd7489 ## Runtimes and Images -->
+<!-- translation-source-sha256: cd6bf54db08c1272754a6b9ecd50e65ac3bb51dd31a56a57fd99300484c7865b ## Storage and Events -->
+<!-- translation-source-sha256: 0a1419157b6a2014df7f7f7c0622bef050fe566790a738364dab8c6971d76bd2 ## Extension Points -->
 <!-- translation-localized-code-block: 167d5e87ca7539da09ef0cc542067ff5dc3b07a9363c7ef5e316f2f81306eda7 7e010cf647f284e2567ec28a53a48d9decd79b9b10d63ce726a08d16b3c3ea31 根据同站security-model修正管理API认证标签，原JWT遗漏HttpOnly会话和平台API token -->
 <!-- translation-localized-code-block: 77869ca31e30f73fa69b7b1e7bd294c127c4a5ab1e2d5c77635e8b6d93feaa38 067be51fbe0918ef224453d2ab0dafbf7f688af4b3fcf3ca81cc3717bd301bc8 Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged. -->

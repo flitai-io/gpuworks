@@ -38,4 +38,8 @@ Three consumers share the same assembly logic: the Playground, the example code 
 - Tests: `inferenceapi` validation and example snapshots; proxy allowlisting of discovery routes and rejection of non-GET requests; literal JSON round-trip for DTOs; RTL coverage of entry routes, declarative inputs rendering, discovery degradation, and unchanged raw-mode submission; template-probe L3 assembly.
 - Follow-up: initially store per-user presets in localStorage. “Save as inference template” writes the current expert request back to `request_defaults` in a user-source spec, feeding expert usage back into the catalog.
 
-<!-- translation-source-sha256: 37fbba5252f46ac7beca005130388b02a9fd63754b63eb8fd8a954e114b7d0fc -->
+<!-- translation-source-sha256: 9079aa0f4917955cfe08e85c8e6c60e3e07d6ada2fe1a0485dd8acd43ba0ffde # ADR 0015: Compose Playground Requests From Protocol Definitions × Catalog Declarations × Engine Discovery × User Overrides, With an Expert Mode for Direct Raw Request Editing -->
+<!-- translation-source-sha256: b791b15322e5c080b1e20fadb8a0c3ed60f2c798c559c83f03ef8d5c82ce3948 ## Context -->
+<!-- translation-source-sha256: 0f242772de074405d207e806cf62e21698484cdec4d89b6b06961de9f77cc5db ## Decision -->
+<!-- translation-source-sha256: a09afca0d4aa32b81ccde5bd9d747a6ebabbf1ff1add0a3a1ce5e394d1bc0bff ## Alternatives and Reasons for Rejection -->
+<!-- translation-source-sha256: 91a4b2b81c7e5b1f568de5be5284071e9950c1d24def61405e9fb0a646860c56 ## Impact -->

@@ -69,4 +69,8 @@ The Kubernetes integration ([ADR 0052](0052-kubernetes-nodes.md)) already answer
   - an agent inside a job;
   - schedulers such as OpenPBS.
 
-<!-- translation-source-sha256: b8fb08968a13d99b50fb4a906ec77a75003b4f30e041f878b98e66749414a6a3 -->
+<!-- translation-source-sha256: 49ab442c4fe4da1d421bcf32f5565c2f8eff5f0d03ffbff4c255c1f6b576ca00 # ADR 0075: On a Slurm compute node the cards are Slurm's; an instance borrows them with a placeholder job and uses whichever cards it gets -->
+<!-- translation-source-sha256: 0fac41f4ec8121168f830e0a1dfbe630d531f7bfc68e4ecd5db06beb255cd839 ## Context -->
+<!-- translation-source-sha256: b96790deed3fb53ccf06bade8b1255d2114f282e72f560c4262d02c05b0a2907 ## Decision -->
+<!-- translation-source-sha256: d68b5676345e06d1204a683a16660b5cfd5fd0b042f8fe45dee800f56e7d573d ## Trade-offs -->
+<!-- translation-source-sha256: 11aa7e8ac92b5910ffcd0b759657a01c37a63399eebf267b09c1b325d2114b8d ## Consequences -->

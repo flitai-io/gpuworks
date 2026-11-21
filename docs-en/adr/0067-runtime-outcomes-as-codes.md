@@ -40,4 +40,8 @@ That prose cannot be localized, counted or matched reliably; the assistant depen
 - The assistant and rule cards diagnose by code and no longer drift with the upstream engines' log wording.
 - Docs: the domain glossary's "failure codes and check results" (`CONTEXT.md`), [API conventions](../reference/api-conventions.md).
 
-<!-- translation-source-sha256: 0d2fcd578c0e94dee1ce9840e11f219acc63b6a90138a031121f2ecb040730a6 -->
+<!-- translation-source-sha256: 2a15a8a6e1736dfb1647c5bf9dc32dda507aedbee0318c07535b311b1c463ebc # ADR 0067: Runtime failures and check results are codes with parameters; English text is only a fallback -->
+<!-- translation-source-sha256: 2be8eb2ce7eb56db7bfbdc0b2f158d01a346465f659f1d1a3db968a8c1a348f8 ## Context -->
+<!-- translation-source-sha256: 3eb9abb0e5d016e7233a5d388d19409160a28c21f8a699b53f9050c06f9a48e2 ## Decision -->
+<!-- translation-source-sha256: fedeb09fdddecaf4c8efa48e4aa087ecd2e4ccabc264d41aaf6e4d53814f841d ## Trade-offs -->
+<!-- translation-source-sha256: 9bdb7566800b24017758583db24697a065d293264e13090693e6c96943980f4f ## Consequences -->

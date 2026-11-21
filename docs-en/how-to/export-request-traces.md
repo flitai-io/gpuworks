@@ -191,5 +191,15 @@ Only spans with platform-side failures (`error`, `interrupted`) have Error statu
 
 Prompts and replies are **not exported**, and the platform itself does not store them.
 
-<!-- translation-source-sha256: 688124de0e9a9b479db665c92a0d54d0c9f9ebc6719c53e21561a80546593775 -->
+<!-- translation-source-sha256: 9e89ef83343678079720b4f353fa9f7cc83990d55189ccbf018ef9331542b96f # Export Request Traces to OpenTelemetry -->
+<!-- translation-source-sha256: 31d2c80f1e002158bf3f9ab59578aa9d8a6a5b8bd88961993f90e3ad1a74afb0 ## 1. View Your First Trace in Jaeger -->
+<!-- translation-source-sha256: 5462a618c3eeb6056252edfc6d41423b0678b563e4f4da54ddb62ebf400ae739 ## 2. Connect a Production Environment -->
+<!-- translation-source-sha256: 7df8a36facebb3c8842f2b88d880a283ec1cc1a55b7921f7d2eeff3994eb48dd ## 3. Connect the Upstream Gateway and Engine -->
+<!-- translation-source-sha256: 7cbcca3364c3607b69649b3fdad8bab9619c33f5a0b6542dd7259e906fc8e309 ## 4. Navigate Between the Console and the Tracing System -->
+<!-- translation-source-sha256: f33863d02d75aac99c75cf34f05b937979919022abe256bdb6170584a4a48cb7 ## 5. Troubleshooting -->
+<!-- translation-source-sha256: 6f028599cd3ace8a31e11ed2b08dde5f122cee4f9e2db0729c594daf2f126bfc ## 6. Limitations -->
+<!-- translation-source-sha256: cbc9e1da0f4463621b37fbe8a568cacd320ed069b905703ed87d36e122a108d2 ## Appendix: Span Fields -->
+<!-- translation-source-sha256: 29bf16f3f83f4957efa798644fee1bfb8660020b5beed881367c47b34e9139c0 ### Prefill Child Spans for PD Disaggregation Deployments -->
+<!-- translation-source-sha256: e83baed12d2ff5895247d0bfecde9533c11412329900a26d6e7aa07213941520 ### Timeline Events and Resource Attributes -->
+<!-- translation-source-sha256: c9b9b2e8aaff3788ef5c20ec6ed915df8f1921b303dbb840854dc4f465aa3baa ### Determine Span Status -->
 <!-- translation-localized-code-block: c87cce8916d515a6b24467acbe5590291890c9618f42b2743c08fb0fe1d463cd 67d464e4acec589ac40309dd150cf2f2695cc935b7474316bc7bd9857ffdf160 Translate inference-token and served-name placeholders and generic sample user message to English; this is an uncaptured example, not tested transcript or screenshot evidence. -->

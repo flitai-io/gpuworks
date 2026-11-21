@@ -153,5 +153,13 @@ When you do not need inference, you can stop the model to release runtime resour
 
 Stopping the deployment retains its configuration, model files, and environment package; it does not uninstall GPUWorks. The console and agent continue running independently. The console installed in this tutorial is not registered to start at boot.
 
-<!-- translation-source-sha256: ae01c5cfedfe4b69dfbc263f634f3d7538f2fec97d29f27b595105287e6f78f0 -->
+<!-- translation-source-sha256: 37d4dae93bb690c8934afb313a75cf12fac3f8fe186d5df29cb881ecd81a98ce # Run Your First Local Model on a Mac -->
+<!-- translation-source-sha256: 7c0882e26f18118c7f7fbcf78c1e69aac44ce303281aa3dec23b2018cad748d0 ## Before You Begin -->
+<!-- translation-source-sha256: 33fa14864f768d551ccba565972031cf0be6251ad69919d3e3e39d98762ada61 ## 1. Download the Release Package and Install the Console -->
+<!-- translation-source-sha256: 6db3d37e2dc621578c796ee27387d0a410cdf7b6f69ba8b3506f71f765f1afb0 ## 2. Connect This Mac to the Console -->
+<!-- translation-source-sha256: cf66fe11339f206eb622f310eb77fded0dfafb564838123103da23b9739352c3 ### If a LaunchAgents Directory Permission Error Occurs -->
+<!-- translation-source-sha256: d72ca3f2edf7488c311b2b64cb104de5adca96c46e65d33cb052e34b0084351f ## 3. Choose a Model From an Inference Template -->
+<!-- translation-source-sha256: 0d9f0baccc30eb261eec236b2e80710427ec8bec8ed05c97a3b470e584bb7ec1 ## 4. Deploy to the Local Mac -->
+<!-- translation-source-sha256: a7e901d290a2d19b39b10d2dee54aea270431252f5413cc8c9b3a5108a063b04 ## 5. Complete a Local Chat in the Playground -->
+<!-- translation-source-sha256: 3066b27d9f8f40d10b809a9306c29f14b6fb0bb951204b79f58ae8f57d22e497 ## Optional: Stop the Model When You Finish -->
 <!-- translation-localized-code-block: 759bfa7d80675897fa4f7c934ed3cb1a7deec31455450a7b837290a482210328 4243c866d8c7087ea32206f24f47b3ff3e752683a35caa380488b526770725c9 Translate the natural-language prompt while retaining its request for a Chinese answer; the page explicitly distinguishes the original screenshot wording. -->

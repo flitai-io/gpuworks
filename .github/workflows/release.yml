@@ -207,14 +207,16 @@ jobs:
           name: dist-docs
           path: dist/docs/
       # The per-job SHA256SUMS each cover one archive; the release carries one
-      # over all of them, as gpuworks-dist assembles for the sources.
+      # over all of them, as gpuworks-dist assembles for the sources. The notes
+      # are the English page without its translation review markers.
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.meta.outputs.release_id }}
         run: |
+          python3 docs-site/translation_markers.py "docs-en/releases/$TAG.md" > "$RUNNER_TEMP/release-notes.md"
           cd dist
           sha256sum gpuworks-"$TAG"-*.tar.gz > SHA256SUMS
           gh release create "$TAG" --verify-tag --title "$TAG" \
-            --notes-file "../docs-en/releases/$TAG.md" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             gpuworks-"$TAG"-*.tar.gz SHA256SUMS docs/*.pdf

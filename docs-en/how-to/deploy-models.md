@@ -136,5 +136,13 @@ If submission fails, the error appears on the page with one of the following sta
 | `NODE_REQUIREMENTS_NOT_EDITABLE` | Multi-node and PD deployments list nodes by rank and have no editable node requirements. Use “Edit replicas” to change their nodes |
 | `NODE_REQUIREMENTS_UNMET` | The selected node does not satisfy the deployment's node requirements (labels, vendor, and so on). Select a matching node or adjust the requirements |
 
-<!-- translation-source-sha256: 904557f30c711234242b9bbbb3c2354005d188b71b1e4456309560160e3e45f4 -->
+<!-- translation-source-sha256: 77ce487427a40545d777f3aaf4965af1b1c557f8f125b6109822e601cdd82914 # Deploy Models and Understand Scheduling Results -->
+<!-- translation-source-sha256: 6cfa09824c0d3b553216504929fd6587e9bdeca2c4bf9c0ef6bd66feab35e307 ## Steps -->
+<!-- translation-source-sha256: 21cd53b635c29d6251f732378ddd0e8a6a7856b64ab44a9cf3eb8fbb22639351 ### Select a Model and Runtime Scheme -->
+<!-- translation-source-sha256: 4d5273f9755303371be7e43632f1e9e2b96bd84a922fd10d7e1541c54891981e ### Select a Deployment Shape and Nodes -->
+<!-- translation-source-sha256: 12f67e2c96fcefab9c3dec52d9426e03de96a5ed89fa5350137a9494239f38fa ### Confirm the Launch Configuration, Image, and Weights -->
+<!-- translation-source-sha256: 1637f5fe2ef338110d48b27e727afc5590c0d787a0194a27f7e3dc63c23f02ee ### Evaluate and Deploy -->
+<!-- translation-source-sha256: 35b1c8f827b21c3ef41fdf5b514ea2b69e841ccfbed6b2f88e0e1993fa6efedd ## Adjust After Deployment -->
+<!-- translation-source-sha256: 1a4e1afd2c69c68470bf769500786511b52a9df9f4da82ad578cdb98a0acaaa7 ## Multiple Deployments for the Same Model Name -->
+<!-- translation-source-sha256: 1fe941ff248cb3274d5c8104070a018089a16b14decbaa3ea46af5e80a3bdab6 ## Common Issues -->
 <!-- translation-localized-code-block: 3f7bcea4babb3aa89f5841e7e49c5ec9ed2447d48c4ddd7fc3ec19b3540848b3 ec505cd5af4bae19eef698a2786536dfd7864a08dbf0655c03da288a7a89e580 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->

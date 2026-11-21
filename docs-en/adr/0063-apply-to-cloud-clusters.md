@@ -37,4 +37,9 @@ Item 1's “the user picks one GPU node pool to connect, and the node selector i
 - There is no “automatic sync” or background reconciliation: cluster changes (node pool scaling) are followed by the DaemonSet itself, so the server does not need a standing connection.
 - client-go is not introduced: the manifest has only nine kinds of objects, a minimal REST client is enough, and it matches the agent side (item 4 of ADR 0052).
 
-<!-- translation-source-sha256: e8be4715b60825361afbb4ef4857b31d1483e5c87ef65e4fc269a6c2143153de -->
+<!-- translation-source-sha256: 1c3dd8cae645de4e56fde74f6c416785a2daadfe5b2d93ddfcb9f53000f7e8b5 # ADR 0063: After User Confirmation, the Server Applies the Connect Manifest to a Managed Cluster with a Short-Lived kubeconfig Issued on the Spot by the Cloud Provider -->
+<!-- translation-source-sha256: bce67d1687d7dc2647e116ebcd602873fd62b0f8917a4220c7f12c67a5545355 ## Background -->
+<!-- translation-source-sha256: f1fd8e9956af08a5df8e77758d01562e03f90d03869bc3495002f05317ad6f5a ## Decisions -->
+<!-- translation-source-sha256: d6bda40bba22dbd9d20324ccd50160c73b0e824d6b889bc485723dbb62a611e2 ## Amendment (2026-11-10): One Entry per Cloud Cluster, Holding Several GPU Node Pools of One Vendor -->
+<!-- translation-source-sha256: 5cfc656bca5a01cbffa9c8c13700014fa323e73e472fc5f2973fe8b76a2f57f3 ## Amendment (2026-11-12): An Entry Has No Vendor, Node Pools May Be Mixed, and Apply Replaces a Changed PriorityClass -->
+<!-- translation-source-sha256: d555eb83344aed6c15b88dc0be91dbbd21df857da597596dfd722c5e7700b87b ## Trade-offs -->

@@ -192,4 +192,10 @@ Top-level shared packages in `internal/`:
 
 React + Vite; build artifacts are output to `internal/server/webui/dist` and embedded by the server with `go:embed`. Parameter dictionaries are delivered by the server's `/engines` endpoint and are **not hardcoded into the frontend**. i18n: `ui/src/i18n/` (en/zh locales) + `ui/i18n/` (glossary and review status); `make i18n-check` is a prerequisite for `make ui`.
 
-<!-- translation-source-sha256: 5768caa2b8b36c45a2d7cf44fd4b9f6ac091dc60c9b8edd1ae9ca425dd95c109 -->
+<!-- translation-source-sha256: 588f105fae27aee99bc97d2ac52f14f46b799973a21cad8eb22dd0a76d9b9965 # Code Map -->
+<!-- translation-source-sha256: f669310395d873be226ec5560eaebd659a69a1c2c796b051840aa7be49d70de3 ## Server Side (`internal/server/`) -->
+<!-- translation-source-sha256: 3055c04d8d83f0004d1cf4a13fea73755ae3a95ffa4a52c57ad593f89a3f444d ## Agent Side (`internal/agent/`) -->
+<!-- translation-source-sha256: 2968818acd25141ac125c171700a0da5d321049c0f37b3abf4d94e6ceede7922 ## Shared Libraries (`pkg/` and Top-Level `internal/`) -->
+<!-- translation-source-sha256: b369f4f834dc1a0175f774fab172fb7ea58770736a8adb5c44dcd83260dc126b ## Auxiliary Commands -->
+<!-- translation-source-sha256: 86c3bb29df4a9d97a40448de8fb95919127b5a1f5484fa303d28534d629cab95 ## Test Assets (`test/`) -->
+<!-- translation-source-sha256: 0cf534a1e01ef0258a30dafd393fad03c94f48c7dfd17bd35626668d76f3eecc ## Frontend (`ui/`) -->

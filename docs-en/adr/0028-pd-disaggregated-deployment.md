@@ -151,4 +151,7 @@ the request with the same KV parameters to other D instances. Internal requests 
 - PPU images include only Mooncake, not NIXL; supporting PPU most likely means adding another Mooncake mode without changing the data model.
 - Per-role images or presets and auxiliary roles (a coordination process for a shared KV pool) require only extensions to the `pd` object and catalog; `role` is a string with unrestricted values.
 
-<!-- translation-source-sha256: 1ce4b137cbc203df4019d3935e9ec1c1d3fdcbb88e8b07571328f572bd66cb8e -->
+<!-- translation-source-sha256: 708433ed1b697c971207c8c83d3f1bbf68475a08dcd1520814ee3eb8a77e9d52 # ADR 0028: PD Disaggregation Uses One Deployment With Instance Roles and Two Stages Orchestrated by the Existing Gateway -->
+<!-- translation-source-sha256: ce3e1b37e76de43d91d8e25365902878bd5f38bce58cdf5ad13e6780d6081391 ## Decision -->
+<!-- translation-source-sha256: fcc2626825bd250b5d61f0fd5b76054d04218262eca9209b75c086ec28a061c0 ## Rationale -->
+<!-- translation-source-sha256: fafe95b33efddc2ef9071cb44bfc35c7e97e2ebe60d88213b0e0b6fc59287c92 ## Future Work -->

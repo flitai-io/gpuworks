@@ -197,5 +197,15 @@ call, and reports:
 
 This check is included in `make test-unit`.
 
-<!-- translation-source-sha256: f638c01a6d9aba713db7f577e9825befe260f6185b0e6567771d0f36f581f980 -->
+<!-- translation-source-sha256: 9430ec1d83972f42a839d9a62667c21c0b2c4958de6d971ca86affe1f9247305 # HTTP API Conventions -->
+<!-- translation-source-sha256: 4eedc84c97a083698f30bb59136ba3a9e08cd89a5611541a493d9654395a8762 ## Example: Sign In and Query the Inference Service List -->
+<!-- translation-source-sha256: 8d2742a2083cf96a822ce3c5a005fb3891cf9e0f527914ade32b9fe192f518bb ### 1. Set the address and sign in -->
+<!-- translation-source-sha256: ddbb1404108c865cad52751d004f8438237ad649fdbaca37901f25fcdfdbd356 ### 2. Query the deployment list -->
+<!-- translation-source-sha256: f98a51cc0720b18e83462d778d5ddef4dc184a1f124804888469462360d88af3 ### 3. Query deployment details -->
+<!-- translation-source-sha256: b2b28f9336d8fdf644052737b8bc8b5ee59c2c607cfd8436b6e796987801f4fa ## Field Naming -->
+<!-- translation-source-sha256: 91f772294d3153eda1852c479296e5d88259cadd4a779ade09b249f546cda4f2 ## Collections -->
+<!-- translation-source-sha256: f48d1e262baadf4e58cd76b542e243659f052e731b0b0c9089ff9ec9f5f92d51 ## Opaque Fields -->
+<!-- translation-source-sha256: 45246930eb15fb28bdee8f1e45cdc066df26656c641684fb62651b59316c2f53 ## Errors -->
+<!-- translation-source-sha256: f64f1003966a03d22eb3796496f983009db5caf597f6a4f66cdd7375101f25bd ### Common HTTP Statuses and Error Codes -->
+<!-- translation-source-sha256: bdd75ee5112cec32ed080569cff9a49c8a785efea72efb8951bb812243add9a4 ## Checks -->
 <!-- translation-localized-code-block: bae0e4c7d262a34ee3ef790d5e20acb056000102304e33d31fffd72989b4b11c 575be17f25555cdcb9a913a995f63b3814eab0f2391908631ca49f5fa2d37787 Translate password input prompt -->

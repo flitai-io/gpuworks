@@ -46,4 +46,7 @@ This leaves parallel semantics used only for existing deployments and continues 
   the result is the OCI configuration read at that moment, displayed without saving. For instances that have run, you can also view launch facts. Old catalog values could already differ from the artifact.
 - For layer sources and precedence, see [Deployment Launch Parameter Sources](../reference/deployment-launch-sources.md).
 
-<!-- translation-source-sha256: 061989069dc11f77358967ca6d44f2089521cf6bfc73d4164b7ce1774e2702bc -->
+<!-- translation-source-sha256: 3f997ea401cb8b78c44f162a9ed0b3b5b52f440ddd832662b021af1aa16ee701 # ADR 0031: The Image Catalog Carries No Launch Configuration; All Deployments Use the Same Launch Semantics -->
+<!-- translation-source-sha256: e9561d4004f84f1cead8845efba24f2c0752cbab6de5fd8388a1cc3e1d6fd631 ## Context -->
+<!-- translation-source-sha256: ccdf7c7e95b61e70904c77bfe996e979724be1f63809c6d1fde0fb59d0a74136 ## Decision -->
+<!-- translation-source-sha256: 1aca455b4a0343d5e4847a0dfbfa9046d97e80007185556d840954e9cb18a5a7 ## Consequences -->

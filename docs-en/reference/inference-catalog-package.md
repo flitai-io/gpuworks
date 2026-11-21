@@ -200,4 +200,18 @@ When checking weight indexes, also account for these differences:
 - The DeepSeek-V3 family may have one more MTP layer than the configuration specifies (61+1); vision and audio encoders may contain multiple parallel stacks. `-verify` already classifies these cases.
 - The `dots-studio/dots3-note-prev` checkpoint has one more layer than its config. The serving engine constructs the model from the config, so the config takes precedence.
 
-<!-- translation-source-sha256: 29039837d5399a351989a6b01249271b1061df159581b1aeb6681bb2e7431a79 -->
+<!-- translation-source-sha256: 696f53ab854aebf61e5e493fce4a323c54bbf0a3eec7804ba0c67bd8b4b0a20b # Executable Inference Catalog Packages -->
+<!-- translation-source-sha256: 65be247da5a7f8803fa37f3b4615c3ac95f3ab4fef2c2fb4bab5ae71dabd4c95 ## Package Contents -->
+<!-- translation-source-sha256: fc8d2eea70c402aa03dfa2ce7f0d73d656bf27e7f0e338b95d3fd51dda907396 ### Relationship Between model.yaml and Specs -->
+<!-- translation-source-sha256: 428a9cbf8c223a2aff4f3eb05c69ab4f8f40736bccd9b5342cdeaada1e9ff3d7 ## Importing and Overwriting -->
+<!-- translation-source-sha256: d4641889857f897ea8de5886e4bdc53b19fb9fd1cca17948dcaf01efc74ed3ab ### Import Entry Points and File Formats -->
+<!-- translation-source-sha256: 0d8147fb09d4619370ea442e27746ebb771caf17c0d869938cefc54e67e6f137 ### tar Package Path and File Requirements -->
+<!-- translation-source-sha256: 291eb07adc06e06bd9f1e1f20caf11507a5f85380140d9cb57240a658fe23ce9 ### What an Overwrite Import Preserves -->
+<!-- translation-source-sha256: 20e6e6b916f3eb09327ff4e7530560527e622bedc696fe805291713523aa351c ### What an Official Package Carries That This Server Cannot Read -->
+<!-- translation-source-sha256: 033b36a2a34f4a42f29cc26862b313ddd670dc1af259d462c77e23cc34adbfe9 ## Delivering and Using Auxiliary Files -->
+<!-- translation-source-sha256: bbb70ce3b3ee67ca1ccd3a25db7e7dc59b386bbd10a2632e00ee5df400901235 ### Asset Delivery Path -->
+<!-- translation-source-sha256: 579e1dc38c8e524a39f43c90ccc7aaee039a2c82aea34d823befb0227b6f7838 ### Plugin Arguments Require a File Source -->
+<!-- translation-source-sha256: dde5e72fe89f9bcaaaed53f6e81b8450d71c6f0a51a9a265d340bdecca7594e4 ## model_config: Model-Level Estimation Facts -->
+<!-- translation-source-sha256: 7c903a58b462f731c499de1215d7648e941e60712a312acd248aa6fffd20a735 ### Why the Catalog Includes This Data -->
+<!-- translation-source-sha256: d58777815aa1c9f3c7301cf6ddd4187f628fa763f262080ace12b2549363bca9 ### Difference Between model_config and KV Capacity -->
+<!-- translation-source-sha256: 99f3967a024596480fddf1d519809d9d81957b3e9b0da5e58b8c3d1bbf63a44e ### Maintaining and Validating These Facts -->

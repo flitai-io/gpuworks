@@ -31,4 +31,8 @@ Only processes on the macOS host can use an Apple silicon Mac's GPU through Meta
 - Services such as mlx-vlm and mlx-audio that select models per request use callable templates. An adapter layer in the package (`gpuworks_adapters`) pins each instance to `--model`, because the gateway rewrites the request's `model` to the deployment service name.
 - New darwin platform differences (launchd for installation, sysctl for `sysinfo`, and darwin ioctl and `kern.proc` for terminal ptys and process reaping) all remain on the agent side. Instance terminals enter the instance's environment (the environment package's PATH, and the instance's HOME and working directory), not a container. Running the darwin server build on the same machine as the agent gives an “all-in-one single-machine” setup, with the same installation workflow as Linux nodes.
 
-<!-- translation-source-sha256: f58285c7318071b2ed5a49faf9bcd00b0014375b3fa8b7b9c3d31b56cdd61f0c -->
+<!-- translation-source-sha256: ce34d603bb8171c8c8e40d0085e9d3d72b95e7ff4d34b24e8497caadad4330c0 # ADR 0044: Engines on Mac Nodes Run as Host Processes; Images Are Darwin Environment Packages -->
+<!-- translation-source-sha256: 54b5135149575d20591013b0f86242d3d44a328653530615199fc6cafb7b96a1 ## Context -->
+<!-- translation-source-sha256: 93ea64d341b82ecbe9ff4d3c30856a1ef98e2d71260654fac5b9589a1ee79ebf ## Decision -->
+<!-- translation-source-sha256: d0736d9afd90f4863634f06e533791b1a9fd5ab77de8ef0dbeee70bfaabae2d4 ## Tradeoffs -->
+<!-- translation-source-sha256: 182f5e52ec623ffda7f80c2c7f21f93e08de69bd04e02d6839e57abee5f3edac ## Consequences -->

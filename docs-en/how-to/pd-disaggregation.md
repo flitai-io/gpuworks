@@ -306,5 +306,26 @@ By default, evaluations measure end-to-end performance through the gateway. If y
   if a container exits or disappears, it is treated as failed and the controller recreates it according to the retry policy. Use **Retry** when the retry limit is reached.
   This check is not continuous HTTP health probing. If the container is still running but the engine does not respond, check logs and request errors, then restart or replace the instance through role adjustment if necessary.
 
-<!-- translation-source-sha256: 294464e09a92a35e7565027933a7f31fe141d60f9eee23dda7c36cf40210d263 -->
+<!-- translation-source-sha256: 69122557be7acdfbade63e93224dea60470f7006d4c1ed3391cfe5776ec120bf # PD Disaggregation Deployment -->
+<!-- translation-source-sha256: b03f6bf81f3808d8b6642103e3de00052f5b11e134fe8f1626afd3e7717d98fd ## When to Use It -->
+<!-- translation-source-sha256: be79a10fc81c95a4b3615ed88818b99f28face48910758b809e973c874008ceb ## Deploy -->
+<!-- translation-source-sha256: 72b3aa78ce8c2b45b81847a3380244d1dcce9119a04e55d0f446f925def27c18 ### Kernels that hang UCX -->
+<!-- translation-source-sha256: 43407a1860da9324c4985dbf07b8821cf0ff3567a9d509c64a11ea0860181a3b ### PPU KV over RDMA -->
+<!-- translation-source-sha256: c198b0420c795cc1fed41757a97ef4e9f847ecd308cfae3d52329aea58e15b4c ## Automatic and Manual Placement -->
+<!-- translation-source-sha256: ab918e0f856854a460427efaa0f465bb444a0388af1c544e5a0ae927c4f57c1b ### How Automatic Placement Chooses Nodes -->
+<!-- translation-source-sha256: a6fa4d973cbf77ec863a8927da1ab33b2d378a420907272cc983303ca3c5d872 ### Choosing Again When an Instance Starts -->
+<!-- translation-source-sha256: 645d68c75bb6560f461efc4cd71a3fb8188e9b549ce9923c3bc5a8a2c9742280 ### Cards Pinned by Manual Placement Are Held -->
+<!-- translation-source-sha256: db05ad4774342f25c46c9529701fe41d9403d56e621768c9ebb1c09792074c5b ## Hygon DCU -->
+<!-- translation-source-sha256: 1d224b7be02be9b0d6ea7aee4b90c09989fa5269be90f76d234afb9c824f761a ### Hygon SGLang over Mooncake RDMA -->
+<!-- translation-source-sha256: 3dc81d1da52a27e49784cfc374413d3c14e39a79716167a333fe81eea914119e ## During Operation -->
+<!-- translation-source-sha256: adf09b53f7d537abfe6a07bc14b6e6ec2e28b806cf35d1cc1a90632147a968c5 ### Status -->
+<!-- translation-source-sha256: e11cfd2a94a9df70a3233394de85be27db77a076401389e617e7e8babb2f7889 ### Self-Check -->
+<!-- translation-source-sha256: 8462188918bbd5543e8aabe882d5a86c6c7f1af28757cbca785a26aa26039f6b ### Scale -->
+<!-- translation-source-sha256: ae0d77ab05d39213fde4ab7a5b99a2e8c55975c7c1749db2a7251bf41e79b497 ### Retry an Instance -->
+<!-- translation-source-sha256: 8af149159e4e87dab034aebda03b7fc14bf6b3252dc48b38d3e5560e498dc473 ### Image and Network Changes -->
+<!-- translation-source-sha256: f5e207bec6507f5495eefa6966c166c63375644492cc5d68ff1ec4ea468df814 ### Restart -->
+<!-- translation-source-sha256: d8f8d26effedf71b85c357175ea09e7918306809d855da08a23c1d393ac0082c ### Monitoring -->
+<!-- translation-source-sha256: 46078be192bf133e63a30643569064ce0e8a61b26e548195f6cca3662784b8f9 ### Requests -->
+<!-- translation-source-sha256: 2d64e3b060f58d33f320efd2908da6eeecaee18d8b265d96a5b619dc5d86f5ad ### Evaluation -->
+<!-- translation-source-sha256: 6645c4523fc0f0b9c496037bc66a3fbb6550e820573fc2928aba32e6b8450042 ## Troubleshooting -->
 <!-- translation-localized-code-block: 2513da8d7e22b4b434e5b388074c523ee6fe392dc62a5486c6f3b2e866546493 900283aac222ec81c58a9b790638cf4b5d10495895e866cd20adbc835c88153e Translate the inline shell comment. -->

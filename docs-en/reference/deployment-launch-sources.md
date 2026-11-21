@@ -386,5 +386,28 @@ For example `docker ps -a --filter label=gpuworks.server=https://gpuworks.exampl
 - [Inference Catalog model.yaml Syntax Reference](inference-catalog-spec.md), [Image Catalog and Inference Image Families](image-families.md)
 - [Deploy Models](../how-to/deploy-models.md), [Multi-Node Inference](../how-to/multi-node-inference.md), [PD Disaggregation](../how-to/pd-disaggregation.md)
 
-<!-- translation-source-sha256: 599228586d0f82d6132e6a93ed2be4cf142d4f1f6c4eca6ac5a597b29238d175 -->
+<!-- translation-source-sha256: 80866c720eec3704f4c4c35ffc04a92217177fb0b31d16cecacdc779a5aeff4e # Deployment Launch Parameter Sources -->
+<!-- translation-source-sha256: 5e99ba37c02aaf654a4b3ad3f0eca30d3c09def5f30a817d9f402eecc7c97de3 ## Single Source of Truth and Two Boundaries -->
+<!-- translation-source-sha256: 95c975c07050d8ba781c9f7cda7799ad97f144a4ff19fdd8a289212d1504994c ## Layers at a Glance -->
+<!-- translation-source-sha256: 6a2fcc27cc96f75659122ac47beb16d3203191e8bf1c23d8bb092637a6a6e244 ## Engine Baseline -->
+<!-- translation-source-sha256: 9182790a3584e17825946558804ae1cd8b359c45ed587d55eed89ba31d31ccbf ## Parameter Dictionary -->
+<!-- translation-source-sha256: 6b487cfe74683ab95af8bc04b27fb4752ce73fe017067ca7c72532f40aa10050 ## GPU/Chip Dialects -->
+<!-- translation-source-sha256: 9680430205c7f1f6a48b9522e102381f0670171b97e4894feaaad023b7aa5985 ## Scheduler-Derived Values -->
+<!-- translation-source-sha256: e7997618bde109c24525841c0067c10fd193e80564573262cb5a09b4d384e2ea ## Inference Template Specs -->
+<!-- translation-source-sha256: b72681d90b73277c964104e81d249d128b93e6178482fbb22e8aac033ac02133 ## Topology -->
+<!-- translation-source-sha256: b6b39ba843a7c8fd6f321f4105e02fbcf504073d1f642472825c08faa4db713f ### Multi-Node Peers File (`GPUWORKS_PEERS_FILE`) -->
+<!-- translation-source-sha256: 0fedf9b59e4bb3f5a97769e0acbb6cb1bdbf3c687a8935194dce04dd76b173e1 ## User Input and Container Overrides -->
+<!-- translation-source-sha256: a7595de5ab55ab4dc0ed406f98c2889ac44ca9472ae285c6f9b3049e14c949b4 ### Parameters -->
+<!-- translation-source-sha256: 8b3dd7dcc0a4138d3c57db2875dbef13a9e45cbf8a80a38345f1a8049b8f9458 ### Command Modes -->
+<!-- translation-source-sha256: 7ad5feb68f5fb7e97bea822ef9bc92dbbf3196ec6dcadbf32869b668a0561f7b ### Container Override Fields -->
+<!-- translation-source-sha256: 7cc2b6f33347b0d9b66ba63c9c4a0fb6af8b5a417fdc665815d0d36051f8a48f ### `/dev/shm` Size -->
+<!-- translation-source-sha256: 48a7b71d1828df37d9707175d380a78ceddfc7234253976351bd0422b9d84871 ### Locked Memory (memlock) -->
+<!-- translation-source-sha256: 3b65db7c208f4f8d4a7be3cfddcddb58fef55416c35eedf80c20670ccdec8f3c ### The three-layer order of docker run arguments -->
+<!-- translation-source-sha256: 799082e339ecc310746057cf4a7160f67f9001369facb4f5533c9ef02be2f413 ### Disallowed Docker Arguments -->
+<!-- translation-source-sha256: 99b335171c079ef2ccccf80c3e3dd11b85713797d865528d365392695d2b9565 ## Startup Wait Limit -->
+<!-- translation-source-sha256: d3a20fa47676a3d0fcf5336ad13fd98385bf4db45f58abbc09495f8793deed29 ## Environment Variable Layers -->
+<!-- translation-source-sha256: 5db8a885d66eb6f5288f23c22744d0c85031fbd017e3af540a33d47061712e2d ## Variable Expansion -->
+<!-- translation-source-sha256: d53ef11b886a3bc5b3251a8a1c4ad708fddcad85198e71565d60cc3318f04198 ## Agent Injection -->
+<!-- translation-source-sha256: 8726e92ccab82993e82b6a6784882697af08ee5e4c185866e0f9d09e50c13d99 ## Runtime Assembly -->
+<!-- translation-source-sha256: 7458cea11e4c8b0e87bcf9b6871c25b82d6f36953dc9b2116d085dc942761d5e ## Related Documentation -->
 <!-- translation-localized-code-block: 87810a25cc9d7f6adbb697b3c419cb2727115525f01d20d8ba378215c02d16e7 9f5706e114d2dd907dd8185a9c7d45f2bdd0387155df33a59bb6930888f598f1 Translate explanatory comments and placeholders in runtime assembly illustration. -->

@@ -206,4 +206,20 @@ Register a directory on a shared file system as a **Mounted shared directory**, 
 - An agent installed on a Slurm node as an ordinary node, not through a cluster entry, still recognizes Slurm and borrows cards; its settings come from the environment variables `GPUWORKS_SLURM` (`auto`, `on`, `off`), `GPUWORKS_SLURM_NODE`, `GPUWORKS_SLURM_SBATCH_ARGS`, `GPUWORKS_SLURM_PENDING_TIMEOUT` and `GPUWORKS_SLURM_IDLE_RETURN`. For an agent installed through a cluster entry the node name and the settings come from the entry and these variables have no effect (`GPUWORKS_SLURM=off` is the exception: it keeps the agent out of Slurm mode).
 - Not supported yet: clusters without root (the agent running inside a job), Slurm on Kubernetes (such as Slinky), cards other than NVIDIA, a quota precheck before submitting, and relaying by a job's remaining time limit.
 
-<!-- translation-source-sha256: 0ba8195ee13787724ae74b7a4ea1933a95096d334a9f0847a9dfb2c8907d0c27 -->
+<!-- translation-source-sha256: e9ffe23d252a2686ef70df79e8cbd9182b46d9e1cefb8098b6c662f4e9d539a3 # Connect a Slurm Cluster -->
+<!-- translation-source-sha256: ecc2c5932bddc910b63c06765a5f849f73e0fbfb50b1b7dabb654d507ac459c1 ## What You Get -->
+<!-- translation-source-sha256: 9e950ea9ddd039aa3aa916f21610f5bd45a9922d38a3729393110860a255e9c5 ## Requirements -->
+<!-- translation-source-sha256: 0a39862f4217af4a1f7db0b4ea48a86733a3cca1f90319fc7ebb5a3cd46e5a94 ## Connect an On-Premises Slurm Cluster -->
+<!-- translation-source-sha256: ea85db7318b45ca963260e4596354505a7015b395219f7b7fc377b59feb70ede ### What the Connect Command Does -->
+<!-- translation-source-sha256: 785e1e4cacee247785a26a89d5f4766e254d4b1db2d028a4dd7701539cd54f1f ### Check First, Then Apply -->
+<!-- translation-source-sha256: e9d49bbec54973b5eb3b385e8e34d824b5f25d034b96f4d3cea3157f232322e3 ### How Nodes Join -->
+<!-- translation-source-sha256: fc19d1ab91ae8b7a8b728420cd89a61ae916800124109e6e492f8488c2fff663 ### Run the Agent as an Ordinary Account -->
+<!-- translation-source-sha256: 035ca86d09f98edd0b17a85c438cf4057cf8c6dd515539aefe92183e01ef4b5d ## The Cluster Row -->
+<!-- translation-source-sha256: 87cf3a5cb78b26f83340740c4f743d12273c7f6d6b7e7317b555b6bb3412ad25 ## Edit, Revoke, Uninstall, Delete -->
+<!-- translation-source-sha256: 3f75832333aad49b0ca77617fd60cb5a0b89d03f33f8969c09c15c936ea97339 ## Alibaba Cloud E-HPC -->
+<!-- translation-source-sha256: 9739225cd6ce5227716e7894cb9075d61ec60ff9a85ed9c48d62a7e07cb25c66 ### What Check and Apply Does -->
+<!-- translation-source-sha256: 69c314defe0737b0c79d84fa9641c87f2ed32c93cc1b96a8b020a624c3d594e4 ### Cloud Account Permissions -->
+<!-- translation-source-sha256: 3873b141fec850d58c590b192b1d9e773bbb4d2d048df191a0cd7911a5ea7c0d ### Differences from an On-Premises Cluster -->
+<!-- translation-source-sha256: 8196c30038e55bb0b7cd9eafe189e953ecbbfed7218e0e2e4fb6eb80ce9574e6 ## Where Models Are Stored -->
+<!-- translation-source-sha256: 7a2ad96cc9fd2d8d81534477ff621ef41df57b05214966b9a60422182a79ef96 ## What You See While It Runs -->
+<!-- translation-source-sha256: 33b1ca28140651f86c3f399fa7e18a8b93f234b93786dd32d02eba3775680519 ## Limits -->

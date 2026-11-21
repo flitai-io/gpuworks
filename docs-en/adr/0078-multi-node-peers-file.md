@@ -31,4 +31,8 @@ The server already has all of these facts when it places a group: which nodes th
 - No new database columns or tables; the document is saved in the instance's existing desired state.
 - Single-node deployments, and ranks on agents that do not advertise the capability, have no peers file.
 
-<!-- translation-source-sha256: 8fdaac7e6b5360cbcb9d37af7ab7fb2890949cfbba69e1287606209a07303732 -->
+<!-- translation-source-sha256: d1fc23cd96dd6d53d94b20b9353acc66bfa3d585c68117b5855e7c468d166035 # ADR 0078: Every rank of a multi-node deployment gets a read-only peers file -->
+<!-- translation-source-sha256: c619f5bbcc0d8ca86462d9e78338f2f0a0116a6c8672ea53dbee0a515b768e1a ## Context -->
+<!-- translation-source-sha256: 619260fcd8fd3243455d19a1bcd816a8009d433f45a6bebb3d5fc3b7233b33ed ## Decision -->
+<!-- translation-source-sha256: 74fdedde147d4ad4c8ca62d79e01075d6b7042252efa559728336baccad4b24f ## Trade-offs -->
+<!-- translation-source-sha256: 8220743ec89813be7249905903c02e7ab094509d6143ee2d7c0cda2a6ed261e9 ## Consequences -->

@@ -489,4 +489,33 @@ The core's part of the first five pushed tables (`availability`, `fleet_capacity
 - It has no `init()` registration and no new package globals: everything comes in through `cli.Options` and `app.Config`.
 - It never interrupts running workloads: the gate acts only on new requests and writes, and holders cordon without draining.
 
-<!-- translation-source-sha256: bdb2da269f597673b527c742bde067a6812bcf18201e949e57019cfae3e8898f -->
+<!-- translation-source-sha256: 600e483e0b83247381c3c8f35d4c3a9cd2add820dab7afdc49b2c72a818f3699 # Extension Points: The Module Contract and Installable Extensions -->
+<!-- translation-source-sha256: 6e2c8b3b69d01b86bf00ccf832608a3f9f438723c909f6c6ff0f4fb9bf33a032 ## Tiers -->
+<!-- translation-source-sha256: c038a66ecb98cf6640ab0f130c8fdecc416cee3f7838156205d8e11c42acf375 ## How a build composes -->
+<!-- translation-source-sha256: 946482e66d11c51d48e231688b39dd6e6f86885d230121e9e4951f3f94c93b66 ## Modules and the Host -->
+<!-- translation-source-sha256: bb4b0a8ca852821bcb93b5224c5602547dba0e040ab2a679a6cf26ac4a2fec66 ## Reapplying holds and the node fleet -->
+<!-- translation-source-sha256: 2943f81690cda9ea5bf5f35a0039d7d1e8340998af623c72f252ab2b4f93de83 ## Node identity and node inventory -->
+<!-- translation-source-sha256: 9ecb281ae30f5bf0846d54c4585c8451f859dab2bb0912982eb541919e54d968 ### The management server's host identity -->
+<!-- translation-source-sha256: 4ae6c783942232690aaca56e9e4a5788c45162e113ef31e26f3d30165bb45d96 ## Tables and migrations -->
+<!-- translation-source-sha256: 7626426b7d3733a9d407e37351869c21ccd297962bd626ed1c3572afa9d6d21b ## Hooks and call threads -->
+<!-- translation-source-sha256: c54e35660cf20799f4be55e9a0f36a22787956e1e19398ba5292402113e218a3 ## Purity rules -->
+<!-- translation-source-sha256: a42a118d8ff86decfe7a9547ac88155edbad68b2f8b152ba6b66eee97332a5f7 ## Availability -->
+<!-- translation-source-sha256: 2f0d63478baf7bf38b004b38e55e2a5b16a71c2d155f644580d42c62bbfa9988 ## Console overlay -->
+<!-- translation-source-sha256: e9fcf7fac20aca4c21f4dfcc449146cf5207289490a5ff3489950b61e20a7fac ## Codes and texts -->
+<!-- translation-source-sha256: 6fa8885393d900cd0bd114408d5214c5a1e5d017fd8793abcb7c51e96cdf5e7c ## Upgrades and installation -->
+<!-- translation-source-sha256: 2f477a9aaaaec4ed58b18dac635e88c1238e37faa62845c0718220b02d485332 ## Installable extensions -->
+<!-- translation-source-sha256: 5d53140ea1b81ddd5aa82bf77688c09e587d5ce5e3f061758fbd16b7a4e158cd ### The plugin host module -->
+<!-- translation-source-sha256: f661b22d129a49d5c35e13fd3d2c39f0e0780184211c3d25b1fcfdec1a76912c ### Management API -->
+<!-- translation-source-sha256: ee1585e74c9cef0b04f22119405aae3edd9a2fa237b17373f4924915a347e4ed ### Local administrator floor -->
+<!-- translation-source-sha256: 11a2a79af68dee78e6260046e43fb148f11bb660e4b545aa1331fd11dafe52f8 ### Not built yet -->
+<!-- translation-source-sha256: 363fc87d5e625d6ac6f187464547bf40922265cd3965db0d0008e7ba40cc8b0b ### Trampoline: `gpuworks plugin-exec` -->
+<!-- translation-source-sha256: 798dbe0813cad6921845730325e9ed3b7823a4c799e890df606828eb7d1d7b8c ### Supervision -->
+<!-- translation-source-sha256: c9070a14f05dd8d51d1cb641518d156440d04fb476df691531cbd8e070ced948 ### Health: banners, the diagnostics check and metrics -->
+<!-- translation-source-sha256: 58ed25f22c31370bdecb8fb867663dc480e9591da9543ed7940805a7a71b6574 ### Calls and the route table -->
+<!-- translation-source-sha256: 0f233829a95996c53912e15001b159b3f1da7a84878fdbfdd06a0298c40096bc ### Host setup -->
+<!-- translation-source-sha256: 29247820fde4c506e37bba67d73af32aab517446768b216ff0de25f1b96d4d0f ### Plugin routes -->
+<!-- translation-source-sha256: 14fa2e1c9fb41cb50efb0b831f714c10a449381862dbcb9478707c85e83d3919 ### gwx/1 connections and the host API -->
+<!-- translation-source-sha256: aaf8f3059021b513660e26edfea7ef83fdc92d07e7b4972eacfb805de2622b1c ### Plugin SDK: `pkg/pluginsdk` -->
+<!-- translation-source-sha256: 023cdd527089a4ca4ae0c9d9cb96a646ca41eaf425c51a7e34899709efb9e3bb ### Conformance suite: `pkg/pluginsdk/conformance` -->
+<!-- translation-source-sha256: f929facbfa47fb6dc7de5c2e929e913eeabbfc8cc6121f8c93a8f1beeddd49d1 ### Pushed state -->
+<!-- translation-source-sha256: 3a9a24030110d056398b971f646b463c808967a03ef33c0b91a8c948e97d89ed ## What the open-source code does not do -->

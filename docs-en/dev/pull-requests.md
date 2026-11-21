@@ -48,7 +48,7 @@ paths. Check wire JSON contracts for API changes, and user interactions, states,
 operation for UI changes.
 
 Update affected documentation. Chinese pages live under `docs/`, with English translations at
-the same relative paths under `docs-en/`. Review both editions and update the source hash recorded
+the same relative paths under `docs-en/`. Review both editions and update the section source hashes recorded
 at the end of the English page with `python3 docs-site/check_translations.py --write`, following
 [CONTRIBUTING.md](../../CONTRIBUTING.md#documentation-conventions).
 
@@ -158,4 +158,10 @@ external acceptance has a named next step. An authorized maintainer decides whet
 is ready and merges it under repository policy. Include required user documentation, upgrade
 instructions, and rollback limitations with the change.
 
-<!-- translation-source-sha256: 3075a94208871058f0d4a72049b534cf00915487500379c29c34999567d80a84 -->
+<!-- translation-source-sha256: 06b75769bf605e965096a3604e198653061e32ffce48a8a81df51184be82c00a # GPUWorks PR / MR workflow -->
+<!-- translation-source-sha256: bbfbd7e7711be7703457b1af20509c45b5565cd72d4075b984e12b64aebf6472 ## 1. Define the problem and scope -->
+<!-- translation-source-sha256: 49a9ed95d64f4d4f57f7db6deb57e8cff0e64bac37ce35b92a6135a034912966 ## 2. Create a working branch -->
+<!-- translation-source-sha256: 8e3e2fdc36f90e23ba1efa427da6e25a2af6d8af6398fc21892bb6f14732c801 ## 3. Implement and validate -->
+<!-- translation-source-sha256: 144e886c7f3a55b4479c71b34a156ee28eec7edd0744c04eed735cbbf502d331 ## 4. Review the diff and commit -->
+<!-- translation-source-sha256: 2afde31744a9b3c2ea95179190cec4917926d115c9b0d9587916aeb9d12164b3 ## 5. Open the PR / MR -->
+<!-- translation-source-sha256: e69a7bb83a685c42d3ed390cf66b67c2d2f6d9d385e59d74b2ffeb0967122698 ## 6. Address review and complete the merge -->

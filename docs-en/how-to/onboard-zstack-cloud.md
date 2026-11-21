@@ -76,4 +76,10 @@ Click **Edit** for the environment in the **Connected external platforms** list 
 
 Credentials are encrypted at rest, and the Secret is not displayed in the edit form.
 
-<!-- translation-source-sha256: 4d2f97e1d38047cd1a35b98007e5f709641bf8413e9d08e7f9879bba6f31edb9 -->
+<!-- translation-source-sha256: 59a2f61ce6b09e6d359dc5d38e1927d6689dfd3ef51dd74ac14b7a35beb573c1 # Onboard ZStack Cloud -->
+<!-- translation-source-sha256: 04ef952749c1c2d26bd7a96c3fb27c10d09359f0af553d1cfc6d1132b1bab7f2 ## Version and Environment Requirements -->
+<!-- translation-source-sha256: ba20fd9b85931800020da31047aa04d7aaa50456fe006779fca6976cf39be5f8 ## Prepare Connection Credentials -->
+<!-- translation-source-sha256: 470a788fc390e6afd275706bfa69177997b0203b2cb9642ffda014f427fae2ef ## Add a ZStack Cloud Environment -->
+<!-- translation-source-sha256: 1480b86c84beb0b2792a97dd3eb991d4b7071b17406cffee887fa17f2436248e ## Synchronize Hosts and GPUs -->
+<!-- translation-source-sha256: 01946b76a8705285cb11311107c1628fd97a81ffdf62ccc48e7eb6d6592117d6 ## Install the Agent and Confirm Onboarding -->
+<!-- translation-source-sha256: dec10c3f5c587f6ad9f439698809f208fbccd1bba5b87ab0907b11ba7e897f2d ## Update Connection Credentials -->

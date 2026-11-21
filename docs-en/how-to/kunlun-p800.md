@@ -100,4 +100,9 @@ The hardware catalog displays `Kunlunxin P800 PCIe` and stores vendor `kunlunxin
 
 The 27B profile defaults to an 8192-token input/output budget and one concurrent sequence. Longer contexts require memory evaluation and validation. Both Hugging Face and ModelScope sources pin original, unquantized weights to a revision. The shared model retains its multimodal metadata; Playground reads serving launch arguments and offers only text input for a `--language-model-only` deployment, without changing other deployments of those weights.
 
-<!-- translation-source-sha256: 063d055b42c3ec8c1f831c3e9cbf36c47eeb2f40cdfe54d113a4bc7f1ec03007 -->
+<!-- translation-source-sha256: 7086d2fdebb1ac9fdf605e47cfe21bfc1899c159a23d00276789151f152be7ba # Kunlun P800 Deployment -->
+<!-- translation-source-sha256: 6e8a70dfbe4674c74e2e92e6ef98df4f6b86d13bad164cba2d0aae2cff253e93 ## Current Capabilities -->
+<!-- translation-source-sha256: 9a84d94b8006309f8220bc9facb2018879aaa851281a051836fed19612e7a22b ## Images and Model Profiles -->
+<!-- translation-source-sha256: a241e31c521891471db7a989f7852f23a75fe0b0da56263727aa66459467d28c ## Single-Node PP and DP -->
+<!-- translation-source-sha256: ef1df9f88bf7eeb78e881146831659eb1cec0ef279ac448f16f7db01da788b26 ## Two-Node Communication Prerequisites -->
+<!-- translation-source-sha256: 5fc3c914a9a246e868dfb5c6edbea58bb0a3baf0bdc787d14fc0f56703bb734e ## Validation and Boundaries -->

@@ -92,4 +92,9 @@ The bell in the page header lists notices the publisher sends to this installati
 
 For design tradeoffs, see [ADR 0054](../adr/0054-usage-report-and-notices.md).
 
-<!-- translation-source-sha256: 6ca9fc0b06f3aba11ea9c2010c9b5947d9f54eae2fe5450bc58370c57897c3e1 -->
+<!-- translation-source-sha256: fc02ebb78004c0694083706623926b5dfa7c606ef7087ba7a50dfa73f2628ad9 # User Experience Improvement Program -->
+<!-- translation-source-sha256: e47963636aa460a474d175766bf9766c61ccc45f4967883d2b2b82929132a5ec ## Toggle -->
+<!-- translation-source-sha256: 6adc1135ad2924704a5388371f9d7442477c219f08fe44b086171f66dbaee7a5 ## Delivery -->
+<!-- translation-source-sha256: 7789f41d7e037afc3b815abf9c6e0b0fe50b61e2b3afbf1027f63ffa9a310dbb ## Never Sent -->
+<!-- translation-source-sha256: 24a2e74edda1246ffa07cd3f8a15c5fb2877c39e61d545f3e0b067414dabae02 ## Fields -->
+<!-- translation-source-sha256: ca9d04613cceffff57fb9f7ea48f9202cf0351a673ab0116f5d15a91ff809297 ## Publisher Notices -->

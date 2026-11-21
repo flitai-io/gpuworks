@@ -33,4 +33,8 @@ The product is also considering making complex networking (custom networks, dedi
 - **Split into a separate repository or plugin**: Go's static single-binary model is unsuitable for plugins, splitting repositories is costly, and core flows still need a local management-network implementation.
 - **Move network HTTP handling into a separate package with its own routes**: this provides a more thorough edition switch, but DTO assembly for network pages currently shares the api layer with other pages. Keep that consistency for now, and split when routes need to be excluded by edition.
 
-<!-- translation-source-sha256: 6da0fdb80cccdb4aa84ce3ef343b5ec295effab2ad33f57549e8b4270e0bdf5a -->
+<!-- translation-source-sha256: 9a05789a630947aa3dbf9dc763f7801849c9d484e111ec7025bfffb780e51423 # ADR 0026: Centralize Network Decisions in a Pure Leaf Package and One Service, With the Network Catalog Injected Through an Interface -->
+<!-- translation-source-sha256: 2e576d9b807590e6a113de0f74fd35d150482587f0d23ead8310e972abd8c7ed ## Context -->
+<!-- translation-source-sha256: b5b644ebddfe73b0ee5b5f7b8b873bf08f18cb75349339d810f4a3b951bf9503 ## Decision -->
+<!-- translation-source-sha256: 4fc39f3a57d4e9469e181abace663e333623e5d577e10c843a2000f2738da7df ## Consequences -->
+<!-- translation-source-sha256: 3d0cbcdeb41b876d01d2237ef92be674828b365fb9bd9f4aca83f30068f73c87 ## Alternatives Considered -->

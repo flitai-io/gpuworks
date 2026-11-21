@@ -121,4 +121,15 @@ When a deployment that shares cards by yield policy (any policy other than never
 - Requests interrupted on yield-anytime and yield-on-a-turn deployments must be retried by the client; the platform-managed [batch jobs](../how-to/batch-api.md#与随时出让搭配) (`/v1/batches`) retry automatically until the job expires.
 - A deployment does not sleep on its own while no other deployment waits for its cards. A deployment that had "auto sleep when not preempted" turned on before the upgrade no longer sleeps on its own when nobody waits for its cards; to sleep at fixed times, use a [schedule](../how-to/scheduling-center.md#定时计划).
 
-<!-- translation-source-sha256: ac58edeb8165554e2cca8f7ea11c0f2d3325dab456576929c4b6a4ab6901a82c -->
+<!-- translation-source-sha256: 398bf21eaa39f0c434ba917176fce5d5e3cfe44eebcdfaaf33e05ecc90e45f62 # Yield Policy: How Deployments Share a Set of GPUs -->
+<!-- translation-source-sha256: fddc1ae2012ae1929b70fd9e2234e31c1237b924f65f333acca3d5ce007842e2 ## Why This Is Needed -->
+<!-- translation-source-sha256: 19600d73b70108bb6e5dc28d7e83ee21a5f2fe64629d309d71e01aad27f446e8 ## Yield Policy -->
+<!-- translation-source-sha256: e924de78cba0738a1793025491cea53d5c43201d9161dc83ea296e0079c623b3 ### Parameters -->
+<!-- translation-source-sha256: 00ab7644ef7af2dd96bdfce3259062c92e8a7a7c4c0bc0ae388f01fa863e713c ## The Yield Rule -->
+<!-- translation-source-sha256: 0b47c3692bb25148d3b655a229212b7af7ff39c2f7c3219650820d5e579da1ea ## Two Yield-When-Idle Deployments on One Card -->
+<!-- translation-source-sha256: b2879c1dfcde4d0d186a66925ccee987a379d8c5b8ab62f4e225d08027d80b83 ## One Yield, Step by Step -->
+<!-- translation-source-sha256: 422527261c4df45cec6478356e065e4d0ed6a9b480ef5292b131051f38899791 ## Why Platform-Chosen Sleeps Default to L1 -->
+<!-- translation-source-sha256: ff3b08ac0064219b5d306cb3f7c58f77e8acdda01becbb0e272493bdda706767 ## Held Sleep -->
+<!-- translation-source-sha256: b0cee88eaa0eb9ecf3ec6b46964641cf66caa86570fe6876b883ac6b0c8dacc3 ## How Placement Leaves Room for Sharing -->
+<!-- translation-source-sha256: e8f832f807fbd860a47c470150a746f961bdf8852a4814aa5df2433be5ffa334 ## How a New Replica Waits for Room -->
+<!-- translation-source-sha256: c643408b737bb33f4e3586091348d8ef319270ac8b4184f128b8d6ac3b5a44fb ## Limitations -->

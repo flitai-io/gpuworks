@@ -54,4 +54,8 @@ A row holds only the data decisions are made on. There is no `init()` registrati
 - A backend's own dictionary keys (keys that depend on `kv_offload_backend`) have no mechanism yet. `PDRoleLaunchConfig` clears only the native keys, and `TestPDRoleLaunchConfigDropsEveryOffloadKey` fails once such a key appears, as a reminder to clear it on roles that do not keep the backend.
 - A rendering cannot carry mounts or `/dev/shm` needs yet; the first backend that needs them adds the fields.
 
-<!-- translation-source-sha256: 497dfadb24f5160db1320b5a6da76c961ff8adcff701d1deb4df2012382d33eb -->
+<!-- translation-source-sha256: ae122e25f6fbc24143739cc9c7fb1fbf8c37dfaeaaca33252774d1fa27bd2a9f # Adding a KV offload backend -->
+<!-- translation-source-sha256: 58722d102565c48fc9bb6266cbac9129dad315cf2f320a79a43d91f5d83172be ## Backend model -->
+<!-- translation-source-sha256: e9442f7d6c36882599e79b7b00aad83cdf035647d00b347348bff75197c2de1f ## Where each part lives -->
+<!-- translation-source-sha256: 689c687cf253e1c603096cb12b8fba44c9f011f358f64c44d34b5825d767b056 ## Adding a backend -->
+<!-- translation-source-sha256: 2d262c2c25a3463c389b80a5e5ca391a6c3c60a86b6e6edfde51fc5a5e9199ab ## Known limits -->

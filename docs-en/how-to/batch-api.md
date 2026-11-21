@@ -313,5 +313,23 @@ How a batch interacts with a yield-anytime deployment:
 | Reading the output file returns 404 | The batch ended more than 30 days ago and the file was deleted, or no request succeeded so the output file never existed |
 | 401 `invalid_api_key` | Check `Authorization: Bearer <key>` |
 
-<!-- translation-source-sha256: fd1b972f4ef0db8a3167f51e3fea4abeb362fd9bdc5aef23dcdaa7559a22ba0c -->
+<!-- translation-source-sha256: 248f051c840f74f3ebda3b4ee3b7b64b7c5ccb60147d5e3e9816fc22afbd3e30 # Run Batches: the Batch API and the Console -->
+<!-- translation-source-sha256: 72bbc65c03182507f36b2797c1fc31ed7f0cbddd10507cb1dfb05883153f7531 ## What a Batch Does -->
+<!-- translation-source-sha256: a19e0e784d0c4c9155b124216c97b88a5f9feb5f160568fc1d7fe1e2f59d4f0c ## 1. Prepare the Input File -->
+<!-- translation-source-sha256: cb092e5f5937ac935c187252b5cfba50c91a571d63bcca768b7b67e70173954c ## 2. Run a Batch with curl -->
+<!-- translation-source-sha256: 82ac64122db7f065ec53ca262022fdb3a2995a84c8cd23151e0f12e682082fa3 ### Upload the File -->
+<!-- translation-source-sha256: 312d2f206b7b947f90130f9d32466b44d6d6a33e6a51c7ac23fb731a58a39023 ### Create the Batch -->
+<!-- translation-source-sha256: 85221ebfda681edf1641316196a4228a655e9c9bde5e955a03d6e792194fd5cf ### Poll the Progress -->
+<!-- translation-source-sha256: 37225abad5cadc34791cbfae4f58956e1417be9be43cf1e1fea555b98c59f0eb ### Download the Results -->
+<!-- translation-source-sha256: 01f42c65f8d26edf0f3882bc2be9ac4f5e599c5c2578ce68d45becca3e9c4e78 ## 3. Use the OpenAI Python SDK -->
+<!-- translation-source-sha256: 6342a7a1ae27b56a3c560c3451dc7a607005c26c915040e31bf58e38b5e2747e ## 4. Run from the Console -->
+<!-- translation-source-sha256: 4845d85c1fdf4a5e19c0d72cffd2294a79e53ce235d718639508e22baadd8eed ## Choosing the Model -->
+<!-- translation-source-sha256: de617272d166bfd7c64405bc107a055b5fd8843a8084035a88da111b0c605c2f ## Completion Window -->
+<!-- translation-source-sha256: 283ee46869c1d0b8642c7414bb097a01fc4b7429207a973bca317dded7392fa8 ## Statuses, Cancellation, and Expiry -->
+<!-- translation-source-sha256: 68392af579d763b1420484403f95fe6d66cb2080acc6e03c29cf3136852385a3 ## Reading the Result Files -->
+<!-- translation-source-sha256: 6b21d334cff894934b0f861a19f9eaa25907ef4398e5586071fee11ad1ade514 ## Which Failures Are Retried Automatically -->
+<!-- translation-source-sha256: b848d15f33fa66c1846867840e54c51cca9b79575e96f4b04d30fb35afd00661 ## Batches in Usage and Request Records -->
+<!-- translation-source-sha256: 84fa482e5d4ef3a47a49399d7935beb573ac97e9177f50e9968e093ec298f397 ## Pairing with Yield Anytime -->
+<!-- translation-source-sha256: 4f15401316ac82ede025ee858017d749fe9f80e970b7aa183b1247a6dde550fd ## Scope and Limits -->
+<!-- translation-source-sha256: 7fa950be8feddb5ede7ab9e3b58ca3ada573c1c8d6d35a9380e68b1bbc35eeb1 ## Troubleshooting -->
 <!-- translation-localized-code-block: 99c27d4c7c0f7c7f316e94615dd19c248a756fda2cd3f87c48828bbb4ffa1f84 f0fd6c6bfd121918a8813d6f5c64fdaa9479e8d6b3991fbccfc9c66c4a2110d5 Shell prompt text is translated; the commands are unchanged. -->

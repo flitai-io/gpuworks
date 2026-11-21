@@ -179,4 +179,14 @@ When one instance fails to sleep, only its own desired state and any still-activ
   Reassess this requirement if the deployment architecture changes.
 - Stopping an instance differs from sleep: stop actually stops and removes the running container. Click **Start** in deployment details (`POST /api/v1/deployments/{id}/start`) to recover.
 
-<!-- translation-source-sha256: 42fc0e40eea351b32e0db501841ef4f10fad3aab64ba6cc5b6cc5896190a8075 -->
+<!-- translation-source-sha256: f1177a474558410adc28371f87acc53605bed45b34251329525f30dede739674 # Sleep and Wake Operations -->
+<!-- translation-source-sha256: aee82febe4ad2bb01f40b34913247a7259ce9e47b7c8713a61fbe612d04287a6 ## Two Levels -->
+<!-- translation-source-sha256: 57d4b8d83c57417d18ea01e14b781a6bf53fdd6c6d3a468d9117805d2d91389b ## What Happens to In-Flight Requests During Sleep -->
+<!-- translation-source-sha256: 511172006e1d718c4b0d3f3fc2ecc3ca4a89a385af612e4795a5042b9a8f6cf4 ## Put an Entire Deployment to Sleep -->
+<!-- translation-source-sha256: 45afaf25004af0333ea370473277c050e99ca8c4f4015bdb1d758c4824877e63 ## Confirming That a Deployment Is Asleep -->
+<!-- translation-source-sha256: 3e697c28a82b270cdf215faccd830bc1a833ea07fee25e8f82dc565389bc11cd ## Partial Sleep: Replicas and PD Roles -->
+<!-- translation-source-sha256: 903f3e3a3509faa2ddb6fe297e80dc3e6adf374de3535752c554388405aee0e3 ## Host Memory Check Before L1 Sleep -->
+<!-- translation-source-sha256: 1597a6f000b1b1c5d8f42ded63c2d100532c260f72b37797b576b0e65a67fd80 ## What the GPU Can Do After Sleep -->
+<!-- translation-source-sha256: c7b89cf30135ef794ad07054485743d896d32dda1e1626bf40c186609eee6738 ## Wake -->
+<!-- translation-source-sha256: e43452f23297cd87ce66ba2d6952f265c267943b3aa767277380afb1e7dd74ed ### Wait or Yield When It Does Not Fit -->
+<!-- translation-source-sha256: 3a1a8bf02970cc5000540d3a63c8a591f8a264eb111301e9e8ff3134170521ce ## Limitations -->

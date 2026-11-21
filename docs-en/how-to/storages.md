@@ -230,4 +230,18 @@ Images are not stored in storage; they reside in each node's container runtime. 
   the engine is not started against an empty directory.
 - **The node model root directory** is now part of local storage. To switch disks, change the local storage path or add new local storage; it is no longer configured separately on the node.
 
-<!-- translation-source-sha256: b85ecdc6ad013e6db3ff26a9964aaea8b80072d2f0a5b3f43ba478404763c846 -->
+<!-- translation-source-sha256: 1883433ec089697a91004ce376497f3dd0e72d84e8ea90c1f08ab28ade8eae4f # Use Storage: Local Directories, NFS, and NFS With Local Cache -->
+<!-- translation-source-sha256: fc23ce8d5ed5237ef124f6a79ac0b504212441ae51b970ef1773fc64310cd0b5 ## Add NFS Storage -->
+<!-- translation-source-sha256: a9160f16b80a6cd23e0c4d59a8eab9ddfe4359f66dab1dcebbf3aef550121cf8 ## Import an Existing Model Library -->
+<!-- translation-source-sha256: 7e84339928f088068ae3629724f458d8778d821c3f1c7409d1d1a427cbb074a3 ### Recognized Formats, Task Types, and Import Boundaries -->
+<!-- translation-source-sha256: a9f079a18e435b3829016e5e8c8c9e0a8c84c3bf1552a3b85e873faf5cb21292 ## Select Storage for a Deployment -->
+<!-- translation-source-sha256: 12bb1058baa0d3c059106e6ff88c482bad9028731c48b69c84468659d3a0ee3a ## Cache Preparation Progress and Recovery -->
+<!-- translation-source-sha256: 909252492f04d3118241be3ee819cdc3a29af2619b174487acdc50e2c566188a ## Local Cache Capacity -->
+<!-- translation-source-sha256: aba9dda870dc72a92ac608e0c56da619cc6cbb1ba58eaef8972667c05c4439d8 ### Default Policy and Node Overrides -->
+<!-- translation-source-sha256: 623e8a75be70bed0d5395b9ea522d403d4af276f1b06268b4d79a49668ec57f6 ### Check Cleanup Results and Clear Caches -->
+<!-- translation-source-sha256: 94c806eb85f89ec547337ae698db3966a0c99b019e86c9b390d39378cacf6578 ### Handle Blocked Cleanup and Pending Deletion Confirmation -->
+<!-- translation-source-sha256: aa036bbcf4a4d1dd93dc3ea4bd6ea917ced3d932796d67410f256a41af72b0d8 ## Switch Between NFS and NFS with Local Cache -->
+<!-- translation-source-sha256: ea9a5e17e1cac6fc5224092e5b9f78aa66050ce9300e304f0b6063be4100f12d ## Share One NFS Across Multiple gpuworks Installations -->
+<!-- translation-source-sha256: 350e82793b2a15216d295619b822fb1245d1bf18a050355d613e4b0f3e0872f5 ## Browse Files in Storage -->
+<!-- translation-source-sha256: 5cc3b267c055b2cd86821fe0651951bff9386c5f779252a9ab45e69d652cb282 ## Disable Storage -->
+<!-- translation-source-sha256: fafc498adcc775fa5519f5c83a10dba9f6b08fd84de807d2e1cff38e5a1f4cbc ## Notes -->

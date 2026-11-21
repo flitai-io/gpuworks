@@ -260,7 +260,26 @@ On Linux, the command stops the corresponding systemd service or nohup process, 
 
 **Binaries, models, logs, and the state directory are retained.** After a successful manual uninstall, return to the console and select **Force removal: only delete management records** to finish removing the node. To completely remove the data, first confirm that no instances or models are still in use, then have an administrator delete the corresponding directories.
 
-<!-- translation-source-sha256: 19ba402299c6c5e62570c7087d7f750636dbd0a79cd3390cee04753cd8f6b031 -->
+<!-- translation-source-sha256: 001bfd0236a9f89c9a9c73aa647650b00079b66aadfc2c061807eb98c1bd88d8 # Connect, Upgrade, and Uninstall Nodes -->
+<!-- translation-source-sha256: 2cfd3ec18747aa0181b9d75dd0eb951be138417f2c8b83e01ff8e62981afe2fa ## Prepare to Connect -->
+<!-- translation-source-sha256: ac1a190aca7b147f110e70b49bf3cc798264f3697e4cac4d507661bfbe86b6d6 ## Choose a Connection Method -->
+<!-- translation-source-sha256: b43736ea9f85eed49fae1fb0b9d2fa7e4d5b441b6591ebcd90153eb8982a1e25 ### agent_dial and server_dial -->
+<!-- translation-source-sha256: 7feb95596185afa128ca6aa21740e694e34aa0f732ccc5cd0e5c45c7f5a97147 ### Connect with a Manual Command -->
+<!-- translation-source-sha256: 2440d77e8f80e4bbb1ee0918b81667f5c2cbc59661bd74c8b8b122abf98be52b ### Connect with the SSH Wizard -->
+<!-- translation-source-sha256: 46dacbe94ec794df78a1d102e2a306ae195d54987418a103bc76b1163e7cf2c8 ### Offline Package -->
+<!-- translation-source-sha256: a392e2f31edb9415ad88765cd79585c98d34a77738acf5e0cd6bd82b96814298 ### Verify the Connection -->
+<!-- translation-source-sha256: 897342eb2f3e69c1998a6ece8c28b90dedb0eb1707bb03e2e0a6e7777d709efa ### Startup Methods and Subsequent Restarts -->
+<!-- translation-source-sha256: 66c81658927a8b4fc4032e24c5c6c41d225624f4b2e789b871dcf90099ee957f ## Mac (Apple Silicon) Nodes -->
+<!-- translation-source-sha256: bf2238de18a91251e791818ecb2d42960ce692b31297ca0ae7ae0a8d01440f45 ### Mac Environment and Data Notes -->
+<!-- translation-source-sha256: 50a7201f8fa91978d3cee460e0395777feb7eb60cec746f2680d976b6fc50729 ## Installation Directory Checks -->
+<!-- translation-source-sha256: f62e40814332340c6f41970d5b1330f971877ad84091c8450283ec4fa7f95331 ### Why udocker (runveil) Nodes Cannot Use a Network Volume for Installation -->
+<!-- translation-source-sha256: b94c4443274e6c7ee94a4bf831d1d3eccc476787f75dc79ad0b302895ff14ae7 ### Accelerator Device Permissions (Non-root Installation) -->
+<!-- translation-source-sha256: ee9fe1fc6a84207b5c3ceddf8853cf71295551a3019db3f074f5753c6f970cde ## Multiple Accelerator Vendors on One Host -->
+<!-- translation-source-sha256: 32317f522ffd7f03daa22e3af19c18a6a508eba94e32184e3e863ce8449c9a9b ## Connect the Same Host Again -->
+<!-- translation-source-sha256: 893bc80691f2a99a74b4855d8271f84634da5f9fba2c71873ecd6277375dc0ad ## No Network Connectivity Between Node and Server -->
+<!-- translation-source-sha256: 4c6f842d39148174ea548b5274227515324eb4f957785da11c9627901289ea58 ## Upgrade -->
+<!-- translation-source-sha256: 464c3fcebce334672d28375b1c31dde5d5c7e7c1ea825d7a3ccf108bbed8ecb4 ## Maintain Nodes: Cordon and Drain -->
+<!-- translation-source-sha256: f6b289f75bac457265c7c4182609b9c6fb220f353dd8f6d11740fdb33f6d0198 ## Uninstall -->
 <!-- translation-localized-code-block: 88ddeff56766d61d95f726b03c19bcdd484f3058933f20151101f2aa86b3e2d8 3013982f8f2cf42b34ce49ffcfebbdb4df071d024665d8b213ed9e002ba2b8dc Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
 <!-- translation-localized-code-block: 181a232a825fc9cab52b5351f82956d27bb63db9de1f89189683b763f45ae66e a676446b2b83c5c8f6ea4dbbc7b13b20f13fd8c96dcde9c1221174a8a8251d86 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
 <!-- translation-localized-code-block: 46acba10a4f9eda089ae5143f05203f228f6ee9ec76d0d086dba619af8b295c2 dca5fd1a1d98ead273c71bf5d8beb2cd4044783316b14ab2289493021e7cc5e1 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->

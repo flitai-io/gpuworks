@@ -154,4 +154,11 @@ A single parameter scan does not establish the throughput ceiling, and stability
 Information that cannot be obtained automatically from external endpoints, such as GPU model, precision, and the actual kernel, appears as unknown. Managed deployments export snapshots of existing GPUs, TP,
 images, and startup arguments. Configuration values cannot substitute for logs or profiler evidence of the kernel actually running.
 
-<!-- translation-source-sha256: 807ac66836ebbdca9b5d9afe25a4b05474d543191f8267a276150cb9dcbcce70 -->
+<!-- translation-source-sha256: f9739b38f9f61cd86aadbd5a826ad69c9d2be2d06af88ef48c6ce0da975faf06 # Run Evaluations and Interpret Reports -->
+<!-- translation-source-sha256: 9047e3a68ea00909b4d83dbf31e066fd6c7a9e8e46be8a06d14a53af726c5670 ## Create and Complete an Evaluation Run -->
+<!-- translation-source-sha256: 31e536c2a0ab236e8edb522663d6ea858d86f46947b21739891a061b81312a0e ## Metric Definitions -->
+<!-- translation-source-sha256: 871cc2986b1a6760bc8e1ecc6f88d9a205d64ae4ead29ea543600667846329a3 ## Advanced Settings -->
+<!-- translation-source-sha256: ccc5f7a7ffa359583469d7f8fbb4edb89fc3eb27359ca9031ad7ce3825f316ba ### Choose a Load Mode -->
+<!-- translation-source-sha256: c5b36f04f4e5e599581d9aab784a1b91ed28bd76d637cf34e519a5fcbbb50973 ### Set Experience Thresholds -->
+<!-- translation-source-sha256: c3b231348f08f97ababe242abec0e4617299abc20e50ce15ffeb73d2ea31f888 ## Request and Session Evidence -->
+<!-- translation-source-sha256: f2335209bf43280e33d64f4663ee1e64be39381c877424c41afcdf2cc6882a22 ## Export and Compare -->

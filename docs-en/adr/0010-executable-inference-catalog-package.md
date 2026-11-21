@@ -8,4 +8,4 @@ Runtime topology is produced as scalar variables by a restricted solver with no 
 
 Launch information follows one fixed, one-way data flow: InferenceSpec contains catalog facts; ImageDefaults contains the image runtime baseline; ContainerOverrides contains field-level changes for the current deployment; ResolvedLaunch is the sole final launch plan produced by merging these with deployment/GPU selections; and InstanceDesiredState adds instance identity and scheduling lifecycle facts on top of ResolvedLaunch. The old RunSpec, InstanceSpec, engine Result, RuntimeSpec, and Assembly are all removed without compatibility aliases. Preview and controller must share the same ResolveLaunch entry point. The database field `DesiredStateJSON` stores only a serialized snapshot of InstanceDesiredState.
 
-<!-- translation-source-sha256: b64d921ce511baddcc59caffcf17f93964a0c084be1a2d42bb9bb3e3fc41fa94 -->
+<!-- translation-source-sha256: b64d921ce511baddcc59caffcf17f93964a0c084be1a2d42bb9bb3e3fc41fa94 # ADR 0010: Package the Inference Catalog as an Executable Multi-File Bundle Alongside Each Model -->

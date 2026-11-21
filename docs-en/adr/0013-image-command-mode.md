@@ -27,4 +27,7 @@ Instance-level entrypoint/cmd overrides remain available and are independent of 
 
 Rejected alternatives: retain unconditional engine takeover (incorrect semantics for community images); automatically detect entrypoint structure (too varied to be reliable).
 
-<!-- translation-source-sha256: 638c04b4e137640c81bc2687b2067162c17d3bdb672dea1516f982a5eb567610 -->
+<!-- translation-source-sha256: 9d48036030e15e8f86163958627c490900ddcb4a6e6cd11740ee4ef89205cfa0 # ADR 0013: Three Command Modes for Container Command Assembly Based on Image Source -->
+<!-- translation-source-sha256: 9aaeec763c14c301b80fa729932b21499a36d51831c7f610bd2569f899fb8b54 ## Context -->
+<!-- translation-source-sha256: fed9d18131b2c964cbaadfa2b300f45434ef260769fe50c438579607055f945f ## Decision -->
+<!-- translation-source-sha256: e61f952dbb99b50eb87ef1af022d09e5a11c10393f23b64bb42dc47b78d14c3d ## Consequences -->

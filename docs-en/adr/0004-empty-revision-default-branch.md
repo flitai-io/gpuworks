@@ -22,4 +22,8 @@ An empty revision has first-class semantics: **follow the source platform's defa
 - The actual downloaded commit becomes a runtime fact, reported with status and displayed in the UI's advanced information.
 - Test fixtures (fake hubs) must strictly simulate the platform's actual revision behavior; otherwise, this class of problem remains invisible locally. This requirement is now in CLAUDE.md.
 
-<!-- translation-source-sha256: 7c6bbbb35d79d97b297cf6dab71c5765c05c90a4be287e99d0efafc76c6dfd9c -->
+<!-- translation-source-sha256: c0431d63bc71f62510487c44dff9172013b8e89e4dbb1a1862c34c868a645693 # ADR 0004: An Empty Revision Follows the Platform's Default Branch Instead of Being Filled with main -->
+<!-- translation-source-sha256: 60e328e834ce18e11c4d15293c9a3414d23f94bc3520b5539bcd48f4efeb002f ## Background -->
+<!-- translation-source-sha256: e6abe2ec5f47acd177c01e3b1237009e20a7fcbcd51f15c290f53fe59e224157 ## Decision -->
+<!-- translation-source-sha256: 8d63f5710b75bdf06c4d189141d998f727b2de74986866e47d6845c393a537e4 ## Alternatives and Trade-Offs -->
+<!-- translation-source-sha256: 6871d1b3d41851d52c3553561a747c756f31adf89315d4e29bbb68f1bf961fbd ## Consequences -->

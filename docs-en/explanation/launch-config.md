@@ -118,4 +118,16 @@ The deployment's launch configuration is determined by materializing and resolvi
 - The deployment's own container settings (environment variables, removed environment variables, mounts, docker arguments, `/dev/shm` size, entrypoint, and command) all belong to the "Container overrides" layer. Docker arguments that duplicate platform-managed items or dedicated fields (such as `--network`, `--shm-size`, `-e`, `-v`, and `--entrypoint`) are rejected instead of silently overriding them.
 - For the source layer of each item and override precedence, see [Deployment Launch Parameter Sources](../reference/deployment-launch-sources.md).
 
-<!-- translation-source-sha256: ac4c5e6c65d4e976c24c1d7ecd4bfe12f784102f45eefbb5fa7b67685a8cb715 -->
+<!-- translation-source-sha256: 7d5d71d88bf724aa1ce6a666e9c3242e5a6a7bf7635c3a8c0ddbaa4da6b94747 # Deployment Launch Configuration Semantics -->
+<!-- translation-source-sha256: d5fceeb2d695dc9f6922409cb0d49f4e539270b36b338636acf4c4db8d828079 ## One Parameter Dictionary, One Materialization Step -->
+<!-- translation-source-sha256: 03b7b41c2b3bde9d8a12b3f67b8600a2c5c7c396e36ba402b20b09a56ed5a74d ### What It Is -->
+<!-- translation-source-sha256: 4bb7df25a0eda5159e47134086aaa472359d6e59817f564370c7ad1d116ec6c3 ### Merge Precedence and Defaults -->
+<!-- translation-source-sha256: 4c09562f6659a1bd947098c1edeebfe6a21aff37bd8de17c4aeabd9424bd8265 ### Flags Inside and Outside the Dictionary -->
+<!-- translation-source-sha256: e52519412a630c8ad4885bd0ca4be73e5974213a8f0610c30f818ef401f6173b ## Not Set and Clear -->
+<!-- translation-source-sha256: d2730fa05cfe55d55629c5f7e19e215296c2e50927523d6e0d00328fba5099c9 ## How Conflicts Are Handled -->
+<!-- translation-source-sha256: 23655fc4b8a0b7940d08317bd21f9d003819164b91c3ea431a8c4bea59d172d0 ## Parameters Left to the Engine -->
+<!-- translation-source-sha256: fd91912ae3a4712ca5e41d49ca964ff7b7326d8d6a9ad16c3fdbf96b1ab9ed05 ## The Three Command Modes -->
+<!-- translation-source-sha256: 374ada004f44f962f0986cc7dd81c7a9627036a26ae654772e7d5e63dc36687d ### Manual Is the Only Way to Take Over the Complete Command -->
+<!-- translation-source-sha256: 71995a467d55f734f2196e6946ed49953054a23909052a712bb62382067ff313 ### Manual Commands for Multi-Node and PD Deployments -->
+<!-- translation-source-sha256: e15ec7f5155bb2bbd0be97c1c445d0daee9fe90c5001f80f8573d189fc0670b4 ## Configured Environment and Image Environment -->
+<!-- translation-source-sha256: 13bbc4704a862ca8d5fb0060a6509f670cb73adad7d647d7a71376b34627ab92 ## The Image Catalog Carries No Launch Configuration -->

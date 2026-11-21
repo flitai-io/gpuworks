@@ -28,4 +28,7 @@ Unaffected parts:
 
 This gives up the guarantee that built-in catalog image references are frozen and reproducible at release time in exchange for availability: images remain pullable after upstream rebuilds a tag. The catalog itself no longer guarantees unchanged image contents; contents follow the tag's current upstream target. This is an accepted trade-off under this decision, no longer treated as a regression.
 
-<!-- translation-source-sha256: 255e0b51eabec297cc29d42a56741d9c47820b6bd7c0ebf454fa439d8b0cd4fc -->
+<!-- translation-source-sha256: f6e561668cc7274017254926d1db6873199809aa59147cd32f9a876aa88e4faf # ADR 0017: Use Tag-Only Image References in the Built-In Catalog and Remove Mandatory Digest Immutability -->
+<!-- translation-source-sha256: 8078806e9ca824bf362f307c6b4f80de1cd9978fa26dc730ef722d95a1d7906a ## Context -->
+<!-- translation-source-sha256: 07b24ac503ce0568279d648ca541597a54b1d722405c1c1b29441a4d74a033f6 ## Decision -->
+<!-- translation-source-sha256: 389e7911a8e6d57f475587d04b95f5a572210a19e1fce1640cb2834ea6a25c5f ## Trade-Offs -->

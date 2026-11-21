@@ -731,4 +731,34 @@ Values of `rule`: `required` (missing or empty), `grammar` (does not match its g
 
 From the repository root, `make test-extapi` runs the format check, vet and tests of this module; `make test` includes it.
 
-<!-- translation-source-sha256: 5b9480ba46fdfb62c0355fb918b6de91bbbfba282db68cdef874026f6984d7c9 -->
+<!-- translation-source-sha256: 80b29d1d2dc89880de610a200e6dc0ea7e80342edc835a0e1ecc4567a70318ac # Plugin Protocol and Wire Formats (gwx/1) -->
+<!-- translation-source-sha256: e9b5a7bf20292b136e80cf55be445d96c675de7e4b6148ff7281dc52645b86f7 ## General rules -->
+<!-- translation-source-sha256: 8b136dc0debcdfbbdca9200785c639fa215682a293534e151bd8e07a460462bf ### Versions and compatibility -->
+<!-- translation-source-sha256: a5f9b8f0d6a6953f9c61c29c9e4580b68a3514f9258d084b5d3bf2ede552cb6f ## Canonical JSON and digests -->
+<!-- translation-source-sha256: 6a1c40c3d1a7c4be25ea4270c3dad3578f8bd3151b9c3f039ae98e76756b9799 ## Signature envelope -->
+<!-- translation-source-sha256: dfa574d853e0a9108c680b9b77a6de3b9c14ac34fd7ffbda54f21c0e0472c2f4 ## Package manifest -->
+<!-- translation-source-sha256: b4623ce7398e720066aaeedddf5b810e745b126eb11943f5c7ef791d44027b4d ### Permissions -->
+<!-- translation-source-sha256: 8cf3c55887fe1b1ede51fd944b8811f314fadc35724c0b7eda2a7aace8fdc87b ### Settings -->
+<!-- translation-source-sha256: 3bc06d9fe6534bba808559a8262cff3b5136f1fbfa2c33acc48d69dbc0aa40bc ### The server's install policy -->
+<!-- translation-source-sha256: 5109bed984ba15e4de0fa6195573f81d54118c85fe9a8431615f04a2522aac31 ### Host setup (`host.setup@1`) -->
+<!-- translation-source-sha256: b6198a8f5efb9d9cc63ac6ff8aa9da9778589f4084169a2a0ce21a4f2e21b3bc ## Publisher certificate -->
+<!-- translation-source-sha256: 50ab7af1d05ed35f14f5c6704971222b5b3f5915dcc27417c08d58aaf80e0ac7 ## Trust updates and revocation lists -->
+<!-- translation-source-sha256: 49757da2cc185aff721a27affee3e747f6bd5346e17dbd49dcf9a61eabeca813 ## Package index -->
+<!-- translation-source-sha256: 432b2239d6f3b263ba53321eb780dc7ca55238dc95cb17e9d8a15f35104ebe30 ## gwx/1 transport and handshake -->
+<!-- translation-source-sha256: b493f0efb30b06cdf37b0caea876c4f017b8181cbc29c66cdaf3f3d932eced88 ## Route requests and the principal -->
+<!-- translation-source-sha256: 2b3ff811a753947e0540897fb65172f852c291cb8a7d04b13b3de943f2e8eac9 ## Health and errors -->
+<!-- translation-source-sha256: 93722f818870ffa714f7dec647d64496ed65658396e76f6bbf47203c624e0e17 ## Pushes and acknowledgements -->
+<!-- translation-source-sha256: d7b6821f5b00b3040c4b975ed8ff0add5597a1406a8170dc647d35e1a91d88b2 ## Node reads -->
+<!-- translation-source-sha256: bd39d657a8ef284e4596ffe2a7bab7be1974ddb4dabfa10a76f6831a9aaf048b ### Node identity -->
+<!-- translation-source-sha256: 103602c378efc7c335540ccd8b8c8fba292d876e971b737d4fc140164b4baeca ### Node inventory -->
+<!-- translation-source-sha256: 98db0211de8eb6f45236dfd31b9e26993d6e55c223abf18fc2ad6eabd108a74f ### Rate limits and refusals -->
+<!-- translation-source-sha256: 83356c25f5d761f027aec9917af762be420d6a362eebd18061488da85d745b9a ## Host API clock, readiness, own state and derived keys -->
+<!-- translation-source-sha256: e96d417555671f3bc74df4f6cf60d8348daf2cc6eeadbcc8ccee4476d8aa5cd0 ## Host identity -->
+<!-- translation-source-sha256: 02d76dd9df6371ee363fc260804f8ffa741a5634920eb5c57f285604acfa30d7 ## Pushed tables -->
+<!-- translation-source-sha256: 1466103f63782beca86ef7918d600ba97f34253e3cd161e0ebd833cb6f390095 ### `table.availability@1` -->
+<!-- translation-source-sha256: 1cde251b8c098bcf0b6afb9fb39562182551cf96070f681bdcf78be560c3420a ### `table.fleet_capacity@1` -->
+<!-- translation-source-sha256: ae222980d1484fd48651f759138a38299f82696259eb016cb4cbfb2b35a909a6 ### `table.node_holds@1` -->
+<!-- translation-source-sha256: 2bedc50a6eee5da507dfcd4d085c4851025d3ab71384e4f0da25fe9dc2480477 ### `table.banners@1` -->
+<!-- translation-source-sha256: 7aa0b67f4f6a1ff8ef74fef6166b463aa8d01a8ebe206ee20813d34f96f6391a ### `table.attestations@1` -->
+<!-- translation-source-sha256: d96c495b834dadf07218106deb5d56f05c1ea07cd68bd3a807e62e4d36228b7f ## Error codes -->
+<!-- translation-source-sha256: 9a7cddd7f8fda7aa69021189a02513fed46d5acbdde7bd96eab859eee7248d4e ## Golden files -->

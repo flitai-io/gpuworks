@@ -208,7 +208,16 @@ metrics:
 | A gauge has the wrong value | The family has multiple lines, and only the first was used; select the required line with a selector |
 | The throughput chart stays at 0 and spikes when requests finish | The mapped counter increments only when requests finish (check whether `# HELP` says finished requests). Map a counter that includes in-flight requests instead. For example, use `tensorfold_health:completion_tokens_total` instead of `tensorfold:generation_tokens_total` for TensorFold |
 
-<!-- translation-source-sha256: 21a7f5865d234450d2044d35cb85e2e9d47885a541c98f93c87265199f9b806f -->
+<!-- translation-source-sha256: 7d1bc400bdf2eeb62b7769e71e4db6ec17cd0b7116c4a2f0237ecc8c09cdf25a # Declare Engine Metrics for an Inference Template -->
+<!-- translation-source-sha256: a7e12b5a1ed121fe255bed8f6daec1500dfdc0307eaa35374b6668ecafbecb6c ## Decide Whether a Declaration Is Needed -->
+<!-- translation-source-sha256: e1748cd0fd6ba7c66be0266dedd804cdd0d18703b1d1a37beeed6f503934aada ## 1. Inspect the Engine's Raw Metrics -->
+<!-- translation-source-sha256: 7af0953d32381163564a17cf0c9003a3f6c673198e6f244d9270a9f7a765fa55 ## 2. Write the Mappings -->
+<!-- translation-source-sha256: 5aedb05cb55ae87339587e2043e124cef6cf2b5050b515c17b4a76082c000255 ## 3. Import and Fix Validation Errors -->
+<!-- translation-source-sha256: 670fb58c8b0107b25f330ec7913ed55f48fc9861c33c20fb54ecc4cb5e85624f ### Metrics on another port -->
+<!-- translation-source-sha256: d5214978d2dd05584bfaf225c1460786c88df88955d6634bb892303574ebeba8 ## 4. Verify That the Mappings Take Effect -->
+<!-- translation-source-sha256: fa7021c5d35923b824db7ffd56e0ad463154a8f360f389e86087d6d244b01090 ## Examples -->
+<!-- translation-source-sha256: 879cc3c6d61b5db426963fda486555fa03e51b79a2d3d45ca9dea4988c9d172a ## JSON Endpoints -->
+<!-- translation-source-sha256: 8aa95ab3f0d6388120b259b92aef920cff2d8bb8a13c2eec604304747f7c3297 ## Troubleshooting -->
 <!-- translation-localized-code-block: efcf48e7f67274b8efe441b319eef5025b39ede13d8a161e1aec2d1f830e9ef4 61583f8a3fb80812b8068e4e06e936197cd8e6cc8a5b79258c5faa89422224c7 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
 <!-- translation-localized-code-block: 9c2e5fe6142d1639ab7482aed29d76bdbf48a8066c12241135466638dc4111d2 ae6fd25a2a23dbeeecfc322e8af5ebf2d7fe7cedf6a2210f4dc9deaf5a495452 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->
 <!-- translation-localized-code-block: 615324c25a0f9212a695ccbb296d80021adcc2baaf928315ed299c07e79f9500 a428cec71bf5d549bcf2bb996aa06b011b500991ae42ed928885ea69b8850bfa -->

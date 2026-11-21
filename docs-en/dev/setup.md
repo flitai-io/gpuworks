@@ -102,7 +102,13 @@ git diff --check
 
 For complete requirements on test layers, race detection, build tags, and physical hardware, see the [Testing Guide](testing.md).
 
-<!-- translation-source-sha256: 5761c2c8346c509732fd73ab88c96a0b614907f8a6c6dc723e40e3f8e08a2241 -->
+<!-- translation-source-sha256: 814e1143437e4ab29f8d965e56e226c36d648beaa46753552d90ea01dbc3e9a7 # Local Development Environment -->
+<!-- translation-source-sha256: 232adc51cd397fe0bb44cfe0d375355c24d7ec8744186947dad50a31133fe792 ## Dependencies -->
+<!-- translation-source-sha256: ae296aefd1a6ceeb2a65b402413938f1ca5581745343d1996b975bf1d70982e9 ## Browser E2E -->
+<!-- translation-source-sha256: a58f7fe12d9fe4306719a301f00507d49379ff4bce85841951933340cac4c895 ## Start the Backend and Frontend Separately -->
+<!-- translation-source-sha256: 83ae9b77ede250a1b8a2608db6f6c1fe1aaf69fb0fb8e4d01b14e071ae82c100 ## Local Secrets -->
+<!-- translation-source-sha256: 3c671e05a94aad8e572ecacee64c92679f3134b58fb09dc5ac60acb1c8ba0fb5 ## Deploy to a Long-Running Acceptance Environment -->
+<!-- translation-source-sha256: db8c4f8d00a2e25f7f9f46aa9ca2a410a53519b37b23c25795d13a75130c4e7d ## Common Checks -->
 <!-- translation-localized-code-block: 67400283761805fbfcf4db14842c1da263db4f3ef35362a5753b5febab0f2efb a4b55e8544b32fa601de0ebe1b428945fa8d14dd8fe5458fcc29e77d61a6d687 Translate explanatory build-command comment -->
 <!-- translation-localized-code-block: dea59384e98e508bb4f51f4985b2c3004a0c5a99b547af917fdcdb8f80ee5071 86d28401690e54ddeee0277f5db30af00918a10d0787d35b866ba3e06760d9e2 E2E prerequisite commands; the comments are translated. -->
 <!-- translation-localized-code-block: 2b4cabed9b9f0472760573657d754e4bfb95b8bd581e0412999244c40beda9c8 2b54fc45d9d78a3cdbe1e1174ecbeedde8330da72118674f94c1d33f0ee45278 E2E prerequisite commands; the comments are translated. -->

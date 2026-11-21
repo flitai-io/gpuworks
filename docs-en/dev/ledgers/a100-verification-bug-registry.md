@@ -85,4 +85,13 @@ BUG-020, 027, 029, 032, 034, 042, 045, 052, 054, 055. These require cooperation 
 - Add newly discovered BUGs to §3 first, then move them to §2 once planned.
 - Every `partial` entry must state “done / not done”; the word partial alone is insufficient.
 
-<!-- translation-source-sha256: 94e3d3f09b94a8b75546862bb292d9ea1c432f043c9b2c882c96f2f712d215b6 -->
+<!-- translation-source-sha256: 0e977b827fc776f5fbdc509807aabaad0202766759d721b4b816871bda8fbe8e # A100 Verification Bug Status Registry -->
+<!-- translation-source-sha256: a32251c7d3fb57e78f96239d1e57da807f55188ed945b0632afdd75b9989709f ## 1. Fixed (fixed / partial) -->
+<!-- translation-source-sha256: 97f1335a326288f8eaaad4cedc9c1142a4b6894920f59c77de41ce8cbfe2c7bf ## 2. Planned (planned; See `artifacts/work/2026-09-04-a100-verification/plan-a100-p0-remediation.md` for the Plan) -->
+<!-- translation-source-sha256: a7d2f09783132a1d780764d67d75d801ec670992084a4e7b98abf6f2f13eb527 ## 3. Backlog (backlog) -->
+<!-- translation-source-sha256: a4aaf65126b573ba8fc9826c10cd6cdd36cd988ff6e1e50f4f3e236d1c43cab4 ### 3.1 Catalog Parameters / API Contracts (Minimal Fix Evidence Exists; Land in Batches; Corresponds to “M4: Batch Landing of Proven Catalog Fixes (P1)” in `artifacts/work/2026-09-04-a100-verification/plan-nvidia-a100-verification-fixes.md`) -->
+<!-- translation-source-sha256: e6723fafcf20deab1b99e0966810d99fc68ffba79f90e42e9408a5feba59d697 ### 3.2 Catalog Sources and Hub Resolution -->
+<!-- translation-source-sha256: efdef0e2f91340a54b9d938abf74ad50016e980678ccdf3771e3468b8a228fe1 ### 3.3 Platform Capabilities (Corresponds to “M5.1 Platform Capabilities GPUWorks Must Fix” in `artifacts/work/2026-09-04-a100-verification/plan-nvidia-a100-verification-fixes.md`) -->
+<!-- translation-source-sha256: fffcf6495f81a3e4290174e139090d907ee26c78c0df0528b2ec3c49c5ed8bd3 ### 3.4 Joint Component / Runner Delivery (Corresponds to “M5.2 Joint Catalog + Runner/Component Delivery” in `artifacts/work/2026-09-04-a100-verification/plan-nvidia-a100-verification-fixes.md`) -->
+<!-- translation-source-sha256: 34ec3bf351445883fdb09289226a52d3012b4321024658196aae7ad434f43fbf ## 4. Issues Not Fixed by the Platform -->
+<!-- translation-source-sha256: ff1999127974656036ebb403c51ca8e3a0daeb524575dc62b0c5043f4e4ced46 ## 5. Maintenance Rules -->

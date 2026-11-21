@@ -177,4 +177,13 @@ Further reading: [Install and Upgrade the Control Plane](../how-to/install-serve
 
 Every action on a page uses a REST endpoint under `/api/v1`. See [Complete REST API Routes](api.md) for the full route list. For the fields and decision logic behind upgrade-related UI elements (the “Agent” column and “Upgrade available” badge on the node page), see [Upgrades and Version Compatibility](../how-to/upgrade-and-compatibility.md).
 
-<!-- translation-source-sha256: 6f21baa0fba8bb0a4b9aa54cfa3f1604d95cc884b000d23fd59a3a9c5811bf3c -->
+<!-- translation-source-sha256: 51be00e2cf1828f7059e5da7d7937dda2ecf5e47a7f0f1227e7bfe3bf6bf7709 # Console Page Tour -->
+<!-- translation-source-sha256: 87efe12f7f9b671894475976658c18e3947f2ffccff5887469b7158f759be866 ## Global Shell -->
+<!-- translation-source-sha256: 18ce2e47a8708fa1ce477375ce9e19a373111511b9c6702440a2c1592072d012 ## Overview -->
+<!-- translation-source-sha256: c8ab7add5fc324741e85b2c819d5ab53e08dfb62527d8e2b6eee70b22c5b7386 ## Monitoring & Analytics -->
+<!-- translation-source-sha256: fd97c308bcf9442baa6c6fb5268ab78205dfb075ae76530a41b87bda48749d11 ## Compute -->
+<!-- translation-source-sha256: 697de00dc77ec5e4a1280bcabb8d14a7c4cfed223bb81451917c06b7b633a819 ## Models -->
+<!-- translation-source-sha256: 43a21fd64582a6b7cad1a84707be5e6dd89e527c08aa90db6e23858f23633b31 ## Inference -->
+<!-- translation-source-sha256: eddceb7ecf3e155e1388d7fbcb530b0d399f331fccbaa412c3c40024593447f4 ## Administration -->
+<!-- translation-source-sha256: 0fa92768ce99a49401b297fd04c27d19575dd8bc999ad9f220a3be504424d086 ### Settings -->
+<!-- translation-source-sha256: 04542ee877955cacdd78f381a1d9c1a5386c2a3213b4b8eee639a716d0049038 ## Mapping to the API -->

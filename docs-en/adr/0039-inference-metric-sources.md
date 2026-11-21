@@ -46,4 +46,8 @@ Deployment snapshots freeze launch configuration, whereas metric mappings determ
 - Documentation: [Inference Metric Vocabulary](../reference/inference-metrics.md), [`api.metrics` Syntax](../reference/inference-catalog-spec.md#apimetrics引擎指标映射),
   [Declare Engine Metrics for an Inference Template](../how-to/declare-engine-metrics.md).
 
-<!-- translation-source-sha256: 2bbc1b01c6cbcf110e3acb18916462869db50111f02cecbf87d9990e4cbef5af -->
+<!-- translation-source-sha256: 0fdb9febe543615eaeb859e60ba2b60bbe913d865a32b724202fa8dbbb1c1085 # ADR 0039: Inference Metric Sources Are Layered; the Server Alone Resolves Observation Configuration and Updates It In Place at Runtime -->
+<!-- translation-source-sha256: c4cb1836b18e70825542e9bb505031c83305ae6b2caebe6409180b0154555fea ## Context -->
+<!-- translation-source-sha256: 3666bcebb0fd924903a4c0df8dd5a1f23f460f7ae00cc251bfba92188843bd9c ## Decision -->
+<!-- translation-source-sha256: 1e7e48bbd4723bd6cd83af7ce8dbb27634a95f406b9926014e8e94e7c2e83c93 ## Tradeoffs -->
+<!-- translation-source-sha256: a4e7519c4e29c20267ca9391b48a4b59bb928e1433b2d19eb6397e287d70b96e ## Consequences -->

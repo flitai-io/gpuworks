@@ -254,4 +254,20 @@ The gateway does not emulate all OpenAI product APIs. For the exact capabilities
 
 Streaming SSE and binary responses (such as WAV) are forwarded with their original content type without truncation.
 
-<!-- translation-source-sha256: 99ca1d5c2537950e451694530e609f9ba81c6229c9a1cded6fd6f039fabd1207 -->
+<!-- translation-source-sha256: 146ba1db59f6915d93d5c0497a63492d4efae6d2c61d64e6ba4f34e24120be14 # OpenAI-Compatible Gateway -->
+<!-- translation-source-sha256: 3419573a4fd81544ccdec8647a87d11ee1ec1ccf5113453070fb944603190c79 ## Authentication -->
+<!-- translation-source-sha256: 389d4b5522a5bd3216a5041c7dac412010d158cc57bd4bb5ad5788145d664111 ## Supported Operations -->
+<!-- translation-source-sha256: 7bf01655b1c8196029d9b3ac65802f9f07b54314ee15dfcd83cb02319629c518 ## Replica Selection and Retries -->
+<!-- translation-source-sha256: 6acb770e47b044aaa2f5ae020be8de5399e18f1c1a2ca8766b6335625d6cff3b ## Batches (Files and Batches) -->
+<!-- translation-source-sha256: 475124ec8de50b9072b50ee962f92870520b5df325b80187af159d220745f2a7 ## Tokenization (tokenize) -->
+<!-- translation-source-sha256: b04cb3cd49891b8cf9a25bb166f063ce5af28e7721601eb94fa2fff50353569d ## Request Priority -->
+<!-- translation-source-sha256: 91d6198ea9bcfb40d784f10fa77320acb27b0b45bcb8fdb958cf4d46554ea647 ## Trace Context -->
+<!-- translation-source-sha256: 2b9c4f0c8955d7d09cb9fc312559725988923ab947e97e8e4f21fbe931ef9cdf ### Trace Identifiers and Request IDs -->
+<!-- translation-source-sha256: 19589bf0b20be8387b262c114cb369861640ef81042c8ac4039bd2b51d39dafe ### Connect to the Caller's Trace -->
+<!-- translation-source-sha256: 588ff427c9765c06b01b308bea79a08e63ea16d1883e9063327bbbd969207d2e ## Usage -->
+<!-- translation-source-sha256: 9c37d4f05b6f03c9e6aff79e566c378a64251aaa8a9fdb9a0f2af24fb3a2745d ### Obtain Usage for Streaming Requests -->
+<!-- translation-source-sha256: b1aad95e9d7e77247af93d91aabebaafbbdcd7f28bfb207c6b8fec973a997271 ### Usage for Messages and Responses -->
+<!-- translation-source-sha256: 1e99cb203865e1dc47e85e652d668709bf98e039c55d60b02f03d99d54a77696 ### Source of Cache Hit Counts in PD Disaggregation Deployments -->
+<!-- translation-source-sha256: e7f31181b01ee976e4b99e6b3d226da30de2d87a01421059370b45457fa8a71e ## Errors -->
+<!-- translation-source-sha256: 8ae89817b16c25868b3a33ebd10d60695c312cb82bf517b25aef2b73b85182c8 ## Playground -->
+<!-- translation-source-sha256: 9923f454eda93d5f4500f52ff744daba8ddd4870a4f1564e373d004af15c11b7 ## Differences and Troubleshooting -->

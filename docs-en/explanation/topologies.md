@@ -318,7 +318,15 @@ or ZStack) on the External Platforms page. List instances and confirm the model,
 | `29500/tcp` (default master port) and NCCL / KV ports | Node ↔ node | Multi-node inference and cross-node PD ranks / KV; use the ports in the deployment preview |
 | Outbound | Server host → Cloudflare | Only when using `gpuworks expose` |
 
-<!-- translation-source-sha256: 8c4bd91f1eb4ca61d684efb3782058b9e579e51a0ab55ba2ee2677567ead0a2d -->
+<!-- translation-source-sha256: c9e4e7a7342c790d74846b18765d70b7cbd7dd9748b7b068b9a0a71f54a66827 # Typical Deployment Topologies -->
+<!-- translation-source-sha256: b209c3f86bc642c1025f0c0f6e53465a36995e2c3a6eff843a22f81627e92820 ## a. Single Host: Server and Agent on the Same Machine -->
+<!-- translation-source-sha256: 0061d86b8e688dee9a0b03d4efe415e5487d6b7be398e6b5e6dc05a996198f56 ## b. One Control Plane and Multiple Directly Connected GPU Nodes (agent_dial) -->
+<!-- translation-source-sha256: 2006b409331e0d725d900217f020a2c90d2ff89368d106b80508cdb4ee3685ec ## c. Nodes Behind NAT with server_dial -->
+<!-- translation-source-sha256: a665d106c474d16645b8160b092d329879dbecee5a7155d7053aec0e3f9931a7 ## d. Reverse Proxy / Public Exposure with a Gateway -->
+<!-- translation-source-sha256: 0cd9dc0e72486f9e00c759691157fc63068788fd2fd2082a706bad176094dbf5 ## e. Separate Networks: Management / Storage-Sync / Serving / Compute -->
+<!-- translation-source-sha256: c9db31760a642fc8fc789f33122d2d01016107246e213ab2a9b7593fd62d3bd7 ## f. Multi-Node Inference and PD Disaggregation -->
+<!-- translation-source-sha256: 010010873b27f74db02ec2569d7c167bac148ca69a82991580e15a981a4c42ec ## g. Connect Rented Cloud Instances -->
+<!-- translation-source-sha256: 344b66b6898a837656ec658d08ddfbd8a0c45eb068ce1e6e4f9a4c4086e57b0a ## Port Quick Reference -->
 <!-- translation-localized-code-block: 9706d8cf9df021a0024a817f7dffb12da491ba2722146082c25df6b27b629905 abe42117643c34fb409b527b037444acd047044ccf162cf0f3e949b4fb847016 Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged. -->
 <!-- translation-localized-code-block: 5b558ffd801bd01cae66592320ad8f543745537e70004b62bcf3ca6dcf96e115 8629cbea276054d8996485a8c25ed6a47824033197b9383cbc43cb26ca9dc19f Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged. -->
 <!-- translation-localized-code-block: f783e5e7eff56021f068f7a277292ee203e18775b0ca2598512000ffe29e2f0a ed170f241ad3ed7b13bb6e5de644305466763fb098ac92eee79a146f30a0797a Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged. -->

@@ -44,4 +44,7 @@ it decides the adapter's CLI on the author's behalf.
 - Managed writable directories (such as the KV disk tier) can currently be requested only through vLLM's argument dictionary, so callable cannot request them and no corresponding variables are exposed yet.
   When generic managed directories are added for callable, add paired "path + capacity limit" entries to the vocabulary.
 
-<!-- translation-source-sha256: cbae84292f573126fc66cc70f86110b341dca3c9d605236ff16ab00b62f1ef55 -->
+<!-- translation-source-sha256: d7b7be681281f188cd6794b83dc15ddaafde24ca68407da22fa65ef412a229e4 # ADR 0036: Templates Own the Callable Command Line; Platform Facts Are Template Variables -->
+<!-- translation-source-sha256: c9d297044ac41e1af94cb1ce5c0405dd709e08a0f25e2ba4bdf54590de80c056 ## Context -->
+<!-- translation-source-sha256: 1b48f3ddb8d4edd78a82fe209440bc231d5493c45452db64088d9db83c3ca7c8 ## Decision -->
+<!-- translation-source-sha256: 63f810dc017dba1e7c81387e8fd055c1e516d818f31ade637620493b1c085ec1 ## Consequences -->

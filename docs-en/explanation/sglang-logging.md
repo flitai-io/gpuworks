@@ -62,4 +62,8 @@ A few boundaries apply:
 
 If you only want to use your own logging configuration without taking over the entire script, set `SGLANG_LOGGING_CONFIG_PATH` in the environment variables and ensure the file exists. The platform skips injection when it sees this variable.
 
-<!-- translation-source-sha256: b3e962a8eb98a5f9352bd55244c5bc5755ab2b9528007ae0ea5ea39c9bd992f8 -->
+<!-- translation-source-sha256: 54a403c6883842fa8090315fe90794ed62c6973bdf99de77a198f0c185d74f5a # SGLang Logging Injection: Behavior and Boundaries -->
+<!-- translation-source-sha256: 1fa6e1dbfd8965bec8cf5c629b9efc6ee8972c1556c0f26b7b89f43487523e72 ## What It Is and Why It Exists -->
+<!-- translation-source-sha256: 0e48541f372001b0db300940f3a7a87e6cdc0c21805a072a38f83924f866317e ## What Happens Automatically -->
+<!-- translation-source-sha256: c004358c598686015f8546a933b9b85109cbfa35b072da44af8fd40f85c04784 ## When Injection Does Not Happen -->
+<!-- translation-source-sha256: 3ea1445b88816de5d63260484ed6b1217a6637b2bca85639b5f78d080c0c8412 ## How to Take Control Yourself -->

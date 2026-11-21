@@ -121,4 +121,11 @@ Single-node device injection does not require XDR or RDMA. Multi-node TP require
 
 Container options follow the common administrator template contract. Scheduled device injection is not a security sandbox for arbitrary privileged options, images or host mounts. The agent injects container-logical `XPU_VISIBLE_DEVICES`, and `CUDA_VISIBLE_DEVICES` in the image entrypoint also uses container-logical indexes. Import suitable image and model specs explicitly; see [Kunlun P800 deployment](../how-to/kunlun-p800.md).
 
-<!-- translation-source-sha256: 48211d5f1f77a36c60877fc959b92b1b57188e970c3e8f9e6cbf26f60f04d1cd -->
+<!-- translation-source-sha256: 889f339ffd99a4374002a52c74c1d6a31bdf5a2eba39e5c987613fdae5821e9f # Vendor Support Matrix -->
+<!-- translation-source-sha256: 6964ffed4400f853715fb4b3e5eb090ca10e86f445836ae7702b695ba55c78c2 ## dGPU Capability Comparison -->
+<!-- translation-source-sha256: 023a3c02b785d1f4534b826467e0c48cf8f2bfc5a943023918bbc6bb9ed420f7 ## AMD full-GPU implementation boundary and validation status -->
+<!-- translation-source-sha256: 1387c582596b2644621140db2548f8aab41b1f81f7eaf5329052ee731ef1b261 ## AMD dGPU memory quota -->
+<!-- translation-source-sha256: 00f542d3dd9f21e9a71f441424d1ec65b81a9f9f2731fefdf84931b4eb2be30a ## PPU device identity and dGPU probes -->
+<!-- translation-source-sha256: 626e9e27ef591b0f394d7d951c07416848a10794d48a1f0b7f2f4ea3fd92c239 ## Hygon full-GPU driver libraries -->
+<!-- translation-source-sha256: 45e159980f43519e0abbff2fb0d9651a4e73ef52267f717ca5a35c657ce152aa ## Hygon Z100 / K100_AI / BW dGPU -->
+<!-- translation-source-sha256: 6037cb1d3ca2a2e1984c6b202b94560579176161806512ea60a6bf1259ac4762 ## GPU Models and Architectures -->

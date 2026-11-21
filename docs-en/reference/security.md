@@ -83,4 +83,11 @@ Private files retain their own 0600 permissions.
 
 For security model tradeoffs (reliance on reverse proxy TLS, token visibility in target processes, and trust boundaries), see [Security Model](../explanation/security-model.md). Production deployments should also back up the database and master key, and rotate the admin password/API key.
 
-<!-- translation-source-sha256: 31a9ae3ef7f803493d7cb5fc697aa37ffe754b12f195ef788ec867dedc76e5b5 -->
+<!-- translation-source-sha256: c9ce93fd4823244e35879da7e24461e9a84ffec265a5fcfbcd2ec63319e6ebcb # Security Defaults Checklist -->
+<!-- translation-source-sha256: aac3119b73509a682a6ec67c6f42ef53ec1fdfa62b50855dc07acf49b1423697 ## Management Sessions and API Tokens -->
+<!-- translation-source-sha256: 06efdb235396d02fc597b8e0091392f333d6af9eb4663ce3e746a6f987f167a7 ## Administrator Password -->
+<!-- translation-source-sha256: bb990b7fda19035c050662b07f523381206c5e0c76b29c7cb2e23a7b4d71adb1 ## Credential Encryption and Installation Files -->
+<!-- translation-source-sha256: 582510246b3bea0f808e8375b784ba9f6999a3cc1002313cdafa4cf3102eddc4 ### Agent Installation -->
+<!-- translation-source-sha256: c23bee76d4b2a5e61d30b0d9679be219be185065ea8282b6f65d85fd17c15bc3 ### Control Plane Installation and Upgrades -->
+<!-- translation-source-sha256: fd0c5424e439da2be0e3d92acedded1073cc6c0326c12004f973de495eab8d24 ## Directory Permissions for udocker/runveil -->
+<!-- translation-source-sha256: 09a437d60caa4714d647529929a7e618b2c6d5b4fe4936c1f6f047a76c6b6a21 ## Network Connections and Terminal Access -->

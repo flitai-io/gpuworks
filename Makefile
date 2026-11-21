@@ -510,8 +510,8 @@ githooks:
 check-doc-links:
 	CGO_ENABLED=0 $(GO) run ./scripts/doclinks
 
-## check-translations: every docs-en/ page must match the reviewed SHA-256 of
-## its docs/ source recorded at the end of the page, with the same headings and
+## check-translations: every section of a docs-en/ page must match the reviewed
+## SHA-256 of its docs/ source section recorded at the end of the page, with the same headings and
 ## code blocks (the same check the docs-build CI job runs, without Hugo)
 check-translations:
 	python3 -B docs-site/check_translations.py

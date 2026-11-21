@@ -8,4 +8,4 @@ The request body first enters an in-memory replay body with a global budget, spi
 
 This decision does not implement load sharing across servers, precise KV event awareness, sleep draining, or prefill/decode (PD) disaggregation. Periodic refreshes, event triggers, and the slow path for snapshot misses preserve eventual consistency for future HA. Affinity hashing uses FNV, which is stable across processes, rather than hashing with a process-random seed.
 
-<!-- translation-source-sha256: 4c89e0383134a62b3146082ad4464c22e0bfdb0ed368b40ffac805fe8991cf2a -->
+<!-- translation-source-sha256: 4c89e0383134a62b3146082ad4464c22e0bfdb0ed368b40ffac805fe8991cf2a # ADR 0023: The Multi-Replica Inference Gateway Uses Load Balancing and Retries Connection-Level Failures by Default -->

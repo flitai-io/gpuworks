@@ -102,4 +102,9 @@ To judge whether an analysis is useful, verify it against the original problem: 
 and after you act, does the instance become ready, do requests recover, or is the original scheduling constraint removed? Make configuration changes yourself on the corresponding page, then click **Analyze again** to view the new state.
 Receiving an answer or passing platform checks does not mean the failure is fixed. When evidence is insufficient, retain the uncertainty and continue checking logs or request records.
 
-<!-- translation-source-sha256: 0ad8deb65292830f2cbf670e8fdf3e3823cfd82c30a5c8b8df397f297ff63e20 -->
+<!-- translation-source-sha256: 30a67958a117cd6da38c6de29b9eec4de7769dfbd619ee4132e46be83619980d # Use the AI Assistant -->
+<!-- translation-source-sha256: b4d260a961d79ab106a80b197ba463888fe78efef0bcf36132bb1f30988f67e2 ## Entry Points: Start With a Click, No Prompt Required -->
+<!-- translation-source-sha256: 44d601ee4ec3fc722c889a9a1a4601b7bb75971dd4272ebbe4fc4aa72af70570 ## Two Parts: Platform Checks and AI Analysis -->
+<!-- translation-source-sha256: 73df501e997f3c4cadc285232140acf50a8cb920539a48121ad65a7d970eae12 ## How AI Analysis Works -->
+<!-- translation-source-sha256: 001c5c4e6a39baec474fecaa569493244af534031bb875336212c0a9db0eba2e ## Boundaries -->
+<!-- translation-source-sha256: e8383f41a6a5aa3f79485bb79d9d9a5f0b34ccb5819c8e8e18fc531b875271ca ## Evaluate the Analysis -->

@@ -32,4 +32,8 @@ The server's controller was already reorganized this way: one self-locking type 
 - `NodeRuntime` gets no field classification test in this step: most of its fields are subsystem state that leaves whole as each subsystem is extracted, guarded by the ratchet; the per-instance cleanup test is required on `Engine` first.
 - Splitting subsystems does not change the agent–server protocol or behaviour.
 
-<!-- translation-source-sha256: 146b93ea09468aa95cb07fe9fd5617c3e70e2e03284ca4a47466c12024804438 -->
+<!-- translation-source-sha256: 1fefc51a6628030b5e283545fcda984978ac051edba9d12e925141f051fa955c # ADR 0066: Agent state is grouped by owner and lifetime, and the composition root only wires -->
+<!-- translation-source-sha256: 6bb0799216194e6e87d97f266210745adc8a5610710d37433df43625963c9281 ## Context -->
+<!-- translation-source-sha256: 44fb71bce722d590eadadeada0aa0a9665504036313a8fdbc3fe25bad781f5bd ## Decision -->
+<!-- translation-source-sha256: 240a7b4a698384a13befbcde5b3cb3fb88ede57ede3e85074daa46f3d41eb136 ## Consequences -->
+<!-- translation-source-sha256: f8b362e66d7af523801b19a0805d1aaa11715d5e90b5b36ddb10ca1608431f0f ## Costs and what is not done -->

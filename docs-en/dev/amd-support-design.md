@@ -90,4 +90,12 @@ Tools connect only to an explicitly selected, authorized runtime; they never sta
 
 Before adding AMD models, partitioning or sleep/PD, establish device/engine and failure-path evidence, then update capability data and the backend. Current software checks do not inherit the retired AMD host's results or generalize one AMD395 to MI300 or other ASICs.
 
-<!-- translation-source-sha256: a029a001bc4b935cc19d9236f4e2ea7520b7393312ced7982533ebee97697e4a -->
+<!-- translation-source-sha256: a9fbe159b05b045b3e21a08cda210e6d4edb01aa4fa1180ff30b24857d57f31a # AMD support design -->
+<!-- translation-source-sha256: e2e692ac40d121b945b260a08c860774770b1a0e4ef88b4e5959294fdedaf8c2 ## Goals and scope -->
+<!-- translation-source-sha256: 8cc835b8d574bc2887e2ca208bec48c53685e3b7749adc22aa1e95a4a75b1b84 ## Data flow and fact ownership -->
+<!-- translation-source-sha256: 92b95e6623054c85ac70d7908fb4064d940c895b7e69ed9710bd17a1d62a6106 ## Discovery, caching and concurrency -->
+<!-- translation-source-sha256: 4ee9f18af38642cc829c7328aba9756071db814fd76a195df08711716c73e3b2 ## Common per-card admission -->
+<!-- translation-source-sha256: a4e6d0ba1b65684798307fbd1b1928e531cce79229cca011571c10f357e57889 ## Agent lifecycle and atomic injection -->
+<!-- translation-source-sha256: 73900d09b414bae4ee7a2a561dbb69ce04ef910f5214473726348b4dc1cb234a ## Impact on other vendors and separation -->
+<!-- translation-source-sha256: e1c71ec1857563c4da81fdc180345b3e149324bf78c7341f44a4124499804981 ## Memory, image and model contracts -->
+<!-- translation-source-sha256: eb467bb84c57a244a9d4423e3cd5850d82f7a09b484c687af6fc78cb2cb90a3e ## Validation boundaries and future work -->

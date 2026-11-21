@@ -81,7 +81,14 @@ The MCP client sends the platform data it reads to its own configured model. The
 | 401 | The token is incorrect, revoked, or expired, or its owner's account has been deleted. |
 | 403 `PLATFORM_TOKEN_READ_ONLY` | A read-only token was used for a write operation when calling the management API directly. This does not occur in MCP itself. |
 
-<!-- translation-source-sha256: be5232f32da10ac3b92736b326a8fb03c7f465dd4c839e28d6701b99c12de9c6 -->
+<!-- translation-source-sha256: 14143b5e429927138d73b5a5dc9c3150e64933b689082bd7e7bc879400f21e0b # Connect Through MCP -->
+<!-- translation-source-sha256: 54fd635222a5a05c550e08e4c3c9739a4583d96256c31374864e64c311835604 ## Enable the Service -->
+<!-- translation-source-sha256: 005376579c8eb8892a480b486fcca6d821269ac613ac29fc2b4b2f2ec863ffb9 ## Platform API Tokens -->
+<!-- translation-source-sha256: cda1dc6015c0a1bfba38680ec4ea74574856213ca23e4dec66e23460018bc3a0 ## Connect to MCP -->
+<!-- translation-source-sha256: 87ae8bdf598ba113b14da98c87467f6b75c9a810ba9aade7014eb1422ccc575e ## Available Tools -->
+<!-- translation-source-sha256: e1fbba80df9687ac549f3dcde776145514f9d038023a67eb9bcf399fd37dd891 ## Manage Tokens -->
+<!-- translation-source-sha256: 755938d861b44a22c1d32f7bc36dd5d1ad32f7e6b2a96e5dfb8e779541499fe0 ## Where Data Goes -->
+<!-- translation-source-sha256: 6c8a7a2cab8f936bc683b02b4596fd8b19f5c04c164cacad800dd5e906ba80c7 ## Troubleshooting -->
 <!-- translation-localized-code-block: 8a2b0addd4b234c1a3e1c263562caabd4ffa916daf5df56b1e4d955e2bd57e8d 3ba776d1fb4ba0682bc2b49859c7fae3017aed7443ce47b4903628cc977a5513 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
 <!-- translation-localized-code-block: 9ea452f4923e0b27a59771db0cf2f7967b2d54d3f73516fd762513ed2dbe3c7a 38965e00633c7b57f1b9a7d7e299e67bd9b07a6264d4ac451f935e5bacbc8773 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
 <!-- translation-localized-code-block: 1ae789a1be156c6e71ca0a7165a224c5f661be3a2949a075af86bddedb728f19 c9049a399aec23f86f72f4ca306d2adbfe55f155dbf0a90e4e5bd819a3632485 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->

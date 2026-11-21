@@ -25,4 +25,7 @@ The one-line installer `get.sh` picks the fastest of `dl.gpuworks.ai`, Alibaba C
 upgrades from the console read the ed25519-signed release index. For a manual download, archives live under `https://dl.gpuworks.ai/releases/<version>/`,
 and `SHA256SUMS` in the same directory lists the checksum of each platform's archive. The download sources keep every release's archives permanently and the most recent 30 nightly builds.
 
-<!-- translation-source-sha256: e3f3cdff21f1c95f12e5a75a9e67bef0a42cefb1861b960ee85edc4814c30432 -->
+<!-- translation-source-sha256: b15b632d1fffd668837bd63ef40a5fd5ac1ab4fb1443bb7fa67ef515cdbb4a1a # Release Notes -->
+<!-- translation-source-sha256: a8d74466b24083f06951a3d9dab579520dc351f3fd8ed6d4d8a8e420ffaf51d8 ## Versions -->
+<!-- translation-source-sha256: 2356c69d50f2318a392ac496d2d7448ced9eb77e41975461dccd775a5a0a6b5b ## Version Numbers -->
+<!-- translation-source-sha256: eb06c57bf2a46137de22dad65edbdb35256e954664e8a5bedd6944afa74b35b1 ## Downloading and Verifying -->

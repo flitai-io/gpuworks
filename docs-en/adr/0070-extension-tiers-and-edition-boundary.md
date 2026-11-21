@@ -39,4 +39,8 @@ A few things cannot change once released: the key reserved for extensions in `se
 - `api.Deps` gained exactly one field for extensions (`Extensions`); later API-side hooks are added inside that struct.
 - The contract and operational details are in [Extension Points](../dev/extensions.md).
 
-<!-- translation-source-sha256: dcaef04133f5c3e86996941480e87b0a7722a82b4c1fabcbdc28434cb19fae7e -->
+<!-- translation-source-sha256: b8fecb40cff6e148aae1cdaa63936a0a38500bbeba00f5db5c89c4b5d7cd5b4a # ADR 0070: Extension Tiers and the Edition Boundary: Open-Source Code Speaks Only of Availability, and a Separately Built Server Composes Through One Set of Interfaces -->
+<!-- translation-source-sha256: 81079e615d1e5ced18803a59711e776aae499369f36055db571ecb33f47d6c8f ## Context -->
+<!-- translation-source-sha256: 5f731bb1d55e1da8aec30e05b0c44aacd5f15e86ec1b1f3b03179ff385fe4e4e ## Decision -->
+<!-- translation-source-sha256: eccc5b5c6b27447ef0d6cbab7dcaccc195ffdc60c0a1398dd93db7e64111ab35 ## Trade-offs -->
+<!-- translation-source-sha256: f013bf9a0dcebae9fab704d53e428136cacfe14de6cd9d2582918924226963b1 ## Consequences -->

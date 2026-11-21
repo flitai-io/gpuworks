@@ -39,4 +39,8 @@ There are two possible data sources:
 - The settings page lets you configure the Collector address, headers, sampling ratio, and trace link template, and send a test span.
 - Documentation: [Export Request Traces to OpenTelemetry](../how-to/export-request-traces.md), [OpenAI-Compatible Gateway](../reference/openai-gateway.md#trace-context), [API Reference](../reference/api.md).
 
-<!-- translation-source-sha256: c445dab4b4afc365509569005f4f2aed36b6eea5dc09064a613b94b83c2a466f -->
+<!-- translation-source-sha256: 670b8b31adf9f9db600ff738502471f366c5c7975ce388d3b2263629a9348bd0 # ADR 0046: The Gateway Creates W3C Trace Context for Every Request, Stores the Trace ID in Request Records, and Exports Per-Request Records over OTLP -->
+<!-- translation-source-sha256: 9b7d3ca354327f6e491de3cc4b14fda80bf8e63c7e0a5d07bfbc52e8e27efb9c ## Context -->
+<!-- translation-source-sha256: dd4f84db787afb1bd6e171ae6f442031e7837a71bb32bd0f69d52dd3065c8f4f ## Decision -->
+<!-- translation-source-sha256: f1cd6ad853593a3adda338628031f635911c42a5cb11fb405871da771414d45d ## Tradeoffs -->
+<!-- translation-source-sha256: 5e84c46162a7afb65192511f99e11334d326e48d68508d412104f254e24ce6ea ## Consequences -->

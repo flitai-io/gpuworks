@@ -50,4 +50,7 @@ The root [`CLAUDE.md`](../../CLAUDE.md) is authoritative for development convent
 - [Release Builds](release.md)
 - [Contributing and Documentation Rules](contributing.md)
 
-<!-- translation-source-sha256: 6827bdacfc3a53e455de335877ca8f0982913dd42674d7847dd69b2d0120b680 -->
+<!-- translation-source-sha256: eb743876a85e847ebdefb51b66b411b998b97037c5baad253612b08918b2fb63 # Developer Documentation -->
+<!-- translation-source-sha256: 116e712dc9b02d99ef386edc93b753e6d38c9b93c55a17c05a0203c929a1f808 ## From Clone to Demo -->
+<!-- translation-source-sha256: f103d4e248e7d9def4aad41c74f50845f4a54811390b8ba5024a354b8abf1e41 ## Repository Map -->
+<!-- translation-source-sha256: fc99dbbd3f92bc9339da38af9cc66f5933a8a9bed2a4d2b6368832ebd73a427e ## Next Steps -->

@@ -186,7 +186,7 @@ rules: every push to master builds `nightly` (the release id is the 8-character 
 4. A version tag also calls `docs.yml` to build the docs site, then prints the handbooks in both languages;
 5. The `publish` job merges the four outputs (plus the PDFs for a tag) and runs `scripts/publish_dist.sh`;
 6. A version tag also gets a GitHub release carrying the four archives, a `SHA256SUMS` covering all of them
-   and the PDFs, with notes from `docs-en/releases/<tag>.md`.
+   and the PDFs, with notes from `docs-en/releases/<tag>.md` minus its translation review markers.
 
 GitLab remains the only publisher to the distribution sources. The `publish` job runs only when the
 repository variable `GPUWORKS_DIST_PUBLISH` is `true`; at the switch, turn off GitLab's `release-publish`
@@ -252,5 +252,14 @@ embedded seed is generated from the gpuworks-runner build matrix by `make image-
 - Record the release version, build commit, platform, embedded asset digests, and catalog package digest. Store one-time acceptance results in
   `artifacts/work/<YYYY-MM-DD>-<topic>/` (move them with the topic into `artifacts/archive/` after completion).
 
-<!-- translation-source-sha256: c17b95cfca738e443a9de0b169ea8f9635d2231836cc08d4a2aa8e73d794945c -->
+<!-- translation-source-sha256: 380ca742c2dd61ef49dd156973902812f1d52c8475127999dbff095c3b9fd434 # Release Guide -->
+<!-- translation-source-sha256: 9aadf552a7b17d37e4bb529f3165267cf854b47d6e32bf8cbca5992f5ab761e4 ## Build Artifacts -->
+<!-- translation-source-sha256: 42932b93632fa7546204b34d9107d978394aecabb5dea1d91d77f4aecd28097e ## Release Documentation PDFs -->
+<!-- translation-source-sha256: d7ce5d3d9eeb9df54e385d8877ce972c83455c47a0527194b5eb544befb004a8 ## Version Numbers -->
+<!-- translation-source-sha256: 76a74f767d39dfbee237cef24fd07069619e753a65f6ffffb48339b5416d22b8 ## Distribution Channel -->
+<!-- translation-source-sha256: 43e6e82a406f6474f33b1436024c8e7d2e9a8f5167bc8d4a1ed73cfd15fea161 ### GitHub Actions Releases -->
+<!-- translation-source-sha256: 32a0c93ed7537847e5c6869de4228919ff01e969e898cef1f5f3a268150adfcd ### Kubernetes Agent Image -->
+<!-- translation-source-sha256: 28162a8691fe3e14460cdf3b97b977de5713069ca949be433af79bd0c0473b36 ## Embedded Native Assets -->
+<!-- translation-source-sha256: a6733565856202d23003d644b735bd8ce7dce418fb278199d5e2dd49c202561d ## Database and Catalog Packages -->
+<!-- translation-source-sha256: 3027f836a7754e1a3e7900b93c5102a75164ef89c3a9c1e20e9bcc2541175d09 ## Upgrade and Rollback -->
 <!-- translation-localized-code-block: 957acfe4b88a2bb0b730fab70c725bbbdaf2e1536f84f94d12918def820c5a7c cac397a0dea3afc07b0e87be5f17fd4204658d3b070919f828730dc6f0f4992d Translate release validation command comments -->

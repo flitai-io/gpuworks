@@ -52,4 +52,7 @@ When a PD mode allows an empty prefill role, sleeping all prefill instances is e
   Followers do not report a sleep level; the ledger uses the reported level of their generation's leader to account for residual usage and wake admission. Partial wake operates at replica granularity.
 - Creation does not accept a list of multi-node replicas; create one first, then add more.
 
-<!-- translation-source-sha256: 82dd17d7efba24387286f0d4dff957a8f63548a38d70a3ca9aff6e8b792a9c60 -->
+<!-- translation-source-sha256: 55824daaeb5d14f2509adadc78e771fd8b125315053ad3bafc831209780cee54 # ADR 0033: Lifecycle Operations Apply to Replicas: Draining State, Rolling Restarts by Default, Multiple Multi-Node Replicas, and Sleep Intent on Instances -->
+<!-- translation-source-sha256: db7d73f64049b4bf497d565e5ed598697c8b8d521d5fb2576fe555fe3c06b5f7 ## Context -->
+<!-- translation-source-sha256: 881861ab580e182d1f8af762d89dcdd324f9b2fcdfbdb0d93df536b2d517a1a6 ## Decision -->
+<!-- translation-source-sha256: cc14b211a4218e9ff7e1e69422432d9b75dcb938fdc07e41bf74d56f2eefb577 ## Consequences -->

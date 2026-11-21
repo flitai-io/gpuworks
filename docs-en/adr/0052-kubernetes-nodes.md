@@ -78,4 +78,11 @@ Why: with the engine port range, RuntimeClass, and idle return in the manifest, 
 
 Consequences: no new persisted facts; one more control message between server and agent, `kube.settings` (an older agent ignores it, and so does a node that is not a Kubernetes node); one more optional field, `NVIDIAIsolation`, in the node's status report.
 
-<!-- translation-source-sha256: dda7553288e1b0b4f04060d579d2840a66a4f87e23630d28eabafc6f51943db4 -->
+<!-- translation-source-sha256: 240b936fe8fc9715c8b58ec80e17cde3a30f1420577a68f81e058dfbd8563b9f # ADR 0052: Kubernetes Is Both a Node Source and a Runtime; Cards Are Borrowed from the kubelet on Demand -->
+<!-- translation-source-sha256: 9701eb3abc48efdff292e8cf2d64e2f177c0895a2e84c9e81a2307b41ce73d49 ## Background -->
+<!-- translation-source-sha256: b033e324f228d10fb7aea9a669dc4eed205f0436afd48c679f81ed6f3904271c ## Decisions -->
+<!-- translation-source-sha256: ed305ced42b7eef2d7c6fd4f70209d251e20a4569dfd94e6ff6a981047fda414 ## Trade-offs -->
+<!-- translation-source-sha256: 298ba7b5f9b16b22b1100edcec80f5b36ba8d2861039fa81b3ff20fe415f152e ## Consequences -->
+<!-- translation-source-sha256: 9d67a644c8e04095166777e0d03f1d916bc8efd2bbf4d1b6c79c48e403f9e6e2 ## Amendment (2026-11-12): Zero Vendor Configuration -->
+<!-- translation-source-sha256: fcae9041100df27a9970427686c572f231508c14aa15f14381d9b077df8544e0 ## Amendment (2026-11-12): AMD and Kunlunxin -->
+<!-- translation-source-sha256: d4241e4210a6936bb841f650ed92b99af299b6884e4772ca8d945339c848bcc5 ## Amendment (2026-11-14): Live Settings, AMD and PPU dGPU, NVIDIA CDI Soft Isolation, Events for Refused Enrollment -->

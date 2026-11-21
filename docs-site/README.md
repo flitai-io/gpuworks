@@ -39,7 +39,7 @@ Hugo 将中文发布到 `/docs/`、英文发布到 `/docs/en/`，主题语言选
 英文稿分批补齐时，未翻译的引用明确标为 `(Chinese)` 并链接中文正文；不会复制中文内容充当英文页。
 英文首页显示实际覆盖率，空栏目说明待翻译。已核对的真实英文界面截图放在 `docs/assets/screenshots/en/`，仅英文正文引用；尚未复现的场景保留中文原图并说明图片语言。
 
-翻译后把已复核的中文 SHA-256 记录到英文页末尾的标记注释，然后运行检查：
+翻译后把已复核的中文各小节 SHA-256 记录到英文页末尾的标记注释，然后运行检查：
 
 ```bash
 python3 docs-site/check_translations.py --write docs/<路径>.md
@@ -56,9 +56,10 @@ Mermaid 图的可见文字、纯文本公式、写作模板和目录说明也可
 逐块复核结构、路径及技术标识后，用 `--write docs/<路径>.md --approve-code-blocks` 把原块与英文块的 SHA-256 登记到该英文页末尾。
 检查只接受已复核的精确内容组合，后续修改任一块都需重新复核，不能用刷新哈希代替内容审阅。
 
-标记格式由 `translation_markers.py` 定义：英文页末尾连续的 `<!-- translation-source-sha256: ... -->` 与
-`<!-- translation-localized-code-block: <原块> <译块> [理由] -->` 注释行。每页的复核事实只放在该页，
-两个分支只有改到同一页才会冲突；`stage_docs.py` 暂存英文页时去掉这段标记，站点与 PDF 都不包含它。
+标记格式由 `translation_markers.py` 定义：英文页末尾连续的注释行，先按页面顺序每个一至三级小节一行
+`<!-- translation-source-sha256: <中文小节哈希> <英文标题> -->`，再是 `<!-- translation-localized-code-block: <原块> <译块> [理由] -->`。
+页末标记块以外（代码块除外）出现的标记行会被报错，它们多半是解决合并冲突时留下的。每页的复核事实只放在该页，两个分支只有改到同一页的同一小节或相邻小节才会在标记上冲突；`stage_docs.py` 暂存英文页时去掉这段标记，
+站点与 PDF 都不包含它；GitHub Release 的说明经 `python3 docs-site/translation_markers.py docs-en/releases/<tag>.md` 去掉标记后发布。
 
 ## Read the Docs 私有托管
 

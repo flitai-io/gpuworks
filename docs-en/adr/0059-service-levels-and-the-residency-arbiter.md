@@ -198,4 +198,14 @@ Decision 6 of the original says held requests, each turn's start, the pending-re
 - Clients retry on connection errors and on a 503 with `Retry-After`, with a total backoff that covers a restart.
 - The process-level case `TestProcessResidencyAcrossAServerStopAndKill` covers a graceful stop, SIGKILL and a resume.
 
-<!-- translation-source-sha256: 18c5f550d3cdf01af40c9542b849453b5f682d1d438892a8c25b666571273988 -->
+<!-- translation-source-sha256: c9a9a45d33f53bc6cb9271441aa48c891a5bc9ebae92c208f3d49e94b0c9398a # ADR 0059: Share GPUs by Service Level: the Gateway Holds Requests While a Wake Happens, and the Residency Arbiter Preempts by One Yield Rule -->
+<!-- translation-source-sha256: e80ebfd90bec3cc2dc718b5b4aa27be3ba6c03e86cd60d216bbcd6a54bde774c ## Background -->
+<!-- translation-source-sha256: 070cf7b4b514d6b2555f31935201f0f7a0978347ada91450e79c6146cc480be0 ## Decision -->
+<!-- translation-source-sha256: 9513c938868e48c198fe1b25e37a19a95ab8b7fe8e5727e140a2f229e952136a ## Consequences -->
+<!-- translation-source-sha256: e12a7d97a4d386bbfad4d962d635dfcd319965147926843e725591cb190059f0 ## Amendment (2026-10-29): One Yield Policy Replaces the Separate Service Level and Idle Sleep Settings -->
+<!-- translation-source-sha256: 945be18e11fdba0113ad191e6ccc2a65d7e4d3b3a0577b4c74f2ae8c66c8a044 ## Second Amendment (2026-10-29): The Yield Policy Is the Only Choice -->
+<!-- translation-source-sha256: e70126c50d80c86f3797494b356570440709ea15ddf76e88a5c200a7867bff0a ## Amendment (2026-10-29): A New Deployment as a Waiter for Cards -->
+<!-- translation-source-sha256: 456ced296999780c14e87c0bd61b84ee46853865184ea4b9e1fba7f4d7adcde9 ## Amendment (2026-10-30): A Held Sleep Keeps No Card -->
+<!-- translation-source-sha256: da35bc3cdd89e5ff7f340dad65358d040637ee28663122ea41cbd23b0eb43e60 ## Amendment (2026-10-30): A Held Sleep Is Recorded per Instance -->
+<!-- translation-source-sha256: 9dd5d208cc81067d994b883b7dfedc1a9454afe79389d1db88b3d85fc1bc2422 ## Amendment (2026-11-03): An Operator's Sleep Is Held or Not by Yield Policy -->
+<!-- translation-source-sha256: 7455ca58b590e0a2f79758bc31754190e515c0392187958b9c744a9c02b2382a ## Amendment (2026-11-13): After a Server Restart, Read Back the Scheduling State That Can Be Told -->

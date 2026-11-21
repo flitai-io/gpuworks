@@ -6,4 +6,4 @@ Built-in catalog upgrades and user extensions must coexist under the same origin
 
 This choice avoids two coarser boundaries: isolation by `model_id` would force users to invent a new original model just to add a set of weights, while replacing an entire engine group would delete other user specs for that engine when updating one spec. Explicit selection of a same-named spec requires one additional source field, but this provides predictable upgrade behavior and precise asset ownership.
 
-<!-- translation-source-sha256: ea3f915a46d5ac496deb471539cfce05a86a3c6c05fedb93105724fb7795cca1 -->
+<!-- translation-source-sha256: ea3f915a46d5ac496deb471539cfce05a86a3c6c05fedb93105724fb7795cca1 # ADR 0011: Isolate Spec Identity by Source Within the Same Original Model -->

@@ -28,4 +28,7 @@ The result has three states: verified / unverified / mismatch. A mismatch displa
 
 Rejected alternatives: immutable `@sha256:` references (overturn the tag system and suffer from digest drift across sources); recalculating before every deployment (repeated overhead with no new information).
 
-<!-- translation-source-sha256: a6510eb2e98dba9d784c1596acd0e17ed42dcd27d3b29a988238d275ee128c54 -->
+<!-- translation-source-sha256: dc3d16279ead4526fe8db9f13b3683e8496536c66dfeb7d80d0ac8f4b7362549 # ADR 0001: Verify Images with Tag-Based Pulls and Post-Pull Comparison Instead of Immutable Digest References -->
+<!-- translation-source-sha256: 7788aba67a663535907d6dc4edb350fe4f9938f5df08253c18c41871085a3e3b ## Background -->
+<!-- translation-source-sha256: 7b3136655cbd8173639d7ea07efc327084c354a86a70f4558b833e505cba668d ## Decision -->
+<!-- translation-source-sha256: cef06057273f6ace73507caa9fb1b6c1bc8bd62195bc1852679f0bc9f8d4cab2 ## Consequences -->

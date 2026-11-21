@@ -26,4 +26,4 @@ guaranteed to start. Pin the intended cards and run a card matrix test before
 deployment. Connectivity evidence cannot diagnose every local Mooncake
 initialization failure, and does not replace engine startup validation.
 
-<!-- translation-source-sha256: cc365f7cb34920f2a378004cfae68b401b3120928de30227f63ea03f2ea9c4c0 -->
+<!-- translation-source-sha256: cc365f7cb34920f2a378004cfae68b401b3120928de30227f63ea03f2ea9c4c0 # Accelerator card connectivity in PD evaluation -->

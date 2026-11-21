@@ -88,4 +88,11 @@ A class change applies to the next request on the server that made it; with seve
 - Priority only takes effect inside one replica; the gateway does not consider it when choosing among replicas.
 - Measured on a single NVIDIA card, turning it on changed throughput, time to first token and prefix-cache hit rate for same-priority load by no more than measurement noise.
 
-<!-- translation-source-sha256: 9a75824b27f16f67fb8f4960fe943337398ec68eae84e7cf30b3760fba7ae0b0 -->
+<!-- translation-source-sha256: d7e74375c5cd59bb288240923a8a8f631dac536b5e4f4511c9f8d60b5ba72683 # Request Priority -->
+<!-- translation-source-sha256: 0cbe3098670221077975fb0d59dc1994dd3810d41b38fc6bd0e64f49c655b47b ## The Switch on a Deployment -->
+<!-- translation-source-sha256: e68bb5553e31da8b61d16b83d68a2774087b167273eaee5b406fa2db9bda789c ## Priority Classes -->
+<!-- translation-source-sha256: f0a7820bbc07bf6371c3bca95173ce56cff7911ed57b1fededa72e983b3e3c3f ## Key Binding and Client Choice -->
+<!-- translation-source-sha256: c3e6ec30b3d17ad88cb0201462ebf5a15443cfeae174275ada4509afa8650ba4 ## Playground, Batches and Evaluations -->
+<!-- translation-source-sha256: e5ce1c9b3cd0b85532518a8e55aecaa81fcf16d204bcf6c1051da08931081ed0 ## How the Gateway Writes the Priority -->
+<!-- translation-source-sha256: 42726f4a82d484b9bf3f79eec5c40947a6cefd48ecf588a0ffb986cfec65fd17 ## Observation -->
+<!-- translation-source-sha256: 5e0426da219374b5c19bb1f5d43a757cafcd926fc2a70946b98e34b2372af3ba ## Effects and Limits -->

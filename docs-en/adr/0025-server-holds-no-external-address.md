@@ -42,4 +42,9 @@ There is a similar issue on the serving-network side: `serving_source` requires 
 - [Configure Node Networks](../how-to/configure-networks.md): operating instructions for listen addresses and "how others connect"
 - `artifacts/archive/2026-09-27-server-address-cleanup/plan.md`: the plan and acceptance records for this change
 
-<!-- translation-source-sha256: 03f4d56e1d3d19a88b728df3509ffb0b7c23d0b5a9d8473f718d2be737cf20d2 -->
+<!-- translation-source-sha256: 26c338bb3c4a11f62eee0123a3fb24d977e0b2a61b6ae0fef8aced91a973c704 # ADR 0025: The Server Does Not Manage Its Own External Address -->
+<!-- translation-source-sha256: 1f212d0ff1e6ad0ba795510c119a18019643eb61e76400113043526ac21f467e ## Context -->
+<!-- translation-source-sha256: c97a4877836ea64eeeb947e906462fa84bbbf3607568371a18f5d6022f52ee75 ## Decision -->
+<!-- translation-source-sha256: d18c33c698f0bc096527a28a0536effeb9ef630527bf4786f8029ecda1623cb6 ## Consequences -->
+<!-- translation-source-sha256: 8cca2078babd343e6c5a4aef6a1f54c86109fecf8c3084f35eee971a4bed497f ## Alternatives Considered -->
+<!-- translation-source-sha256: 015f203e03d24d00a6790e8eae63984eda06d0f161e424522a9fbc542f0a375b ## Related -->

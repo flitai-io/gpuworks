@@ -23,4 +23,7 @@ Storage ([ADR 0034](0034-model-files-belong-to-storages.md)) previously held onl
 - Downloads use direct browser links with cookie authentication: the browser streams directly to disk without holding the content in memory. The trade-off is that when a transfer fails midway, the browser shows only a download failure, without the product error message.
 - Symbolic link checks resolve paths before operating, leaving a very short race window between validation and the operation. The threat model covers administrator actions and links that may already exist in storage, rather than an adversary concurrently writing malicious links there, so this is accepted.
 
-<!-- translation-source-sha256: e4f8686b5b2d2bff38ad5d4af11cf5756628070b60c7639009f81543b5b81f42 -->
+<!-- translation-source-sha256: 57cce2889d00d254f2fb5808c877e08a1fa46a787962c5d8bf91a05b853127ad # ADR 0053: Storage Files—Browse All Storage, Write to Only Two Areas, and Transfer Through the Data Channel for the Agent to Save -->
+<!-- translation-source-sha256: 32041dd72a164ca2518a2e791a323f65a1e09fe6cbc3cf3c998befdc6628501f ## Background -->
+<!-- translation-source-sha256: 0c07ee833d8ea4f89aa4ed9afd917a16a2cec6333783e51c6487c47115f013cd ## Decisions -->
+<!-- translation-source-sha256: 94a6490ceb0b62c1cabc5f4e859220b6fb7b4fd15e9636e57f425d92da0a94d2 ## Trade-offs -->

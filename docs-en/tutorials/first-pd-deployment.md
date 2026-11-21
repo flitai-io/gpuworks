@@ -153,5 +153,13 @@ The self-test displays `113 MiB over TCP`. This transfer belongs to the deployme
 
 For more modes, scaling operations, and monitoring information, see the [PD Disaggregation Deployment Guide](../how-to/pd-disaggregation.md).
 
-<!-- translation-source-sha256: 68a85b73db6b96c37c263fd87290548eaf9e30a8ff9d9eb4fa6236811cc904c6 -->
+<!-- translation-source-sha256: f9e5880c7f8274fbe713858c8637ae8a2a6931a3ac7ad34112ff1a656beb3ab9 # Deploy a PD Service and Observe the Request Path -->
+<!-- translation-source-sha256: 63b8f695f287cd087be1438675c5cb350d8efa6636c0306f339304cdd313f5c8 ## Before You Begin -->
+<!-- translation-source-sha256: 99494debcd418c545920d2adeab5b640a627d107f2e420844c1d52b5b5d9d850 ## 1. Register the Model and Import the Example Template -->
+<!-- translation-source-sha256: 3384d2b35cc115c27e296da56fa47cd2701582daddad2cc92d972972c65eb9ba ## 2. Select the Model and Inference Template -->
+<!-- translation-source-sha256: 79a3df3ae8b0a7af560e4e568ef993ef11a2a70597db4396fcfddbc07fa51abd ## 3. Configure P and D Roles and Resources -->
+<!-- translation-source-sha256: ae7fd8dadf3b593aff4eb9ef0d3636330850e9b46a4d6abe934a0a902789dfa3 ## 4. Submit the Deployment and Observe Both Roles -->
+<!-- translation-source-sha256: cff9d1bb49209157ba34a6f434d154126b8118cbdc7b4a948bc7192a831a15ce ## 5. Summarize a Long Document in the Playground -->
+<!-- translation-source-sha256: d4219faf025583a6e404102bf28866bc9fabe87ba83d767d3786d671151d1517 ## 6. Observe Service Status and Locate the Request -->
+<!-- translation-source-sha256: 8e90f4a59648af23e78f7688c14a77b4a37519115b59a79b92a326f3603a2399 ## 7. Check the KV Handoff Self-Test and Logs -->
 <!-- translation-localized-code-block: 72dc08a2a75174c6d9f0be1839d5b681b8b34748cf3a5e06a32101bea03ee597 bc4fd77bfda54157577282ab2c885f548d169abac94ecd1be6323357eefa7009 Translate the natural-language summarization question; the page distinguishes translated practice input from historical screenshot measurements. -->

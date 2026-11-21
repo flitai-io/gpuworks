@@ -152,5 +152,11 @@ When a container fails, it can be shown as the failure reason, hiding the engine
 All PRoot and udocker processes started by the agent, as well as container terminals and
 `gpuworks-agent runveil exec`, now use `/` as their working directory. The working directory inside the container is determined by PRoot's `-w` and is unaffected.
 
-<!-- translation-source-sha256: 7889c630ce0bd74856e2dfedf67b84dd8664a1a922d7ee708012f9931ba5baec -->
+<!-- translation-source-sha256: 76f4145e0c84621f82970f6832aa50774de726168f7cd2a6744549f2bfe07846 # runveil and udocker -->
+<!-- translation-source-sha256: 1ba010abd497d5c5a39d9564faca018b23d07c0c3b7c1aab250751ff03324acb ## Why There Are Two Names -->
+<!-- translation-source-sha256: 6f4931479851585d22a30bd44afe083086e5553b33c9fc423288472e17e172bc ## Which Component Handles Each Step -->
+<!-- translation-source-sha256: 17b84274acb0bbd8347f05d8e15f469e39a1b6e08febdab2d36886f21c32f68b ## Disk Layout -->
+<!-- translation-source-sha256: 86b78398c04ecde2dc81396b53ed4b2db4dd78632addb17d75eed762dfd4cb54 ## Host Paths Visible Inside the Container -->
+<!-- translation-source-sha256: 5916e8a4ee1eac799106f47c129c43844d13ed078695d27efb9d5e0e71055314 ## Runtime Identity -->
+<!-- translation-source-sha256: 2942954722e2ddb1e9c9b46a7dba9d5192cb8e7262a4c1cfaa6d770b442b8cbe ## Workloads with Many Threads -->
 <!-- translation-localized-code-block: a1a0d94ec2610077388e3d35c9bf83e6dcf608f1d833e08ec095d550b15d1f1e b93b87cdbcce4133356e52d054b9d435a0f4bd46ec3689de61494cb7ff8e1877 Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged. -->

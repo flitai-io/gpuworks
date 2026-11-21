@@ -37,4 +37,8 @@ D4 of the inference metrics plan previously decided that the gateway would not i
 - Running vLLM deployments do not need to restart: existing deployments lack this parameter in their startup configuration, and recreating them does not add it. Only new deployments include it by default.
 - Documentation: [Per-Request Statistics in the Inference Metrics Vocabulary](../reference/inference-metrics.md#逐请求统计), [`api.request_stats` Syntax](../reference/inference-catalog-spec.md#apirequest_stats回复里的逐请求统计), [View Metrics and Search Logs](../how-to/monitor-and-logs.md#2-看请求视图与请求分布).
 
-<!-- translation-source-sha256: 7b76d0ca52067f77973b4609ba73a9e41c541b188239e10204e0737d7c91643d -->
+<!-- translation-source-sha256: c69db0f866cadc08e5cd00d96ae74a5cd5880398ab52f9b3de8339cc53f968ab # ADR 0042: The Gateway Requests Usage from vLLM / SGLang for Streaming Requests, Strips the Extra Chunks, and Writes Per-Request Records to a Separate ux.db -->
+<!-- translation-source-sha256: cbcf73d51613e4ccc6b864cad0b348f2080914bbac4befdc1f8914996b8ffd9c ## Context -->
+<!-- translation-source-sha256: 9169f050a154455e20ac815a577cc57e8944cc5bdcc0d24ae7ec5104d7f2cd8a ## Decision -->
+<!-- translation-source-sha256: fe63dcfa3ad032b08e8e68aa0f47dc894fcee7a83cb678d0290ddc532a4086b8 ## Tradeoffs -->
+<!-- translation-source-sha256: 8143ae17c04adc2d22f0c7cbd4596cbc54b7785a45c80f81624d047621393638 ## Consequences -->

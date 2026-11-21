@@ -76,4 +76,11 @@ The image dialog identifies the path used by its connection probe; actual sync s
 
  After a model transfer completes, the file manifest is verified again. An image sync is complete only after the target runtime finishes importing it and confirms that the image exists.
 
-<!-- translation-source-sha256: 30b806dc7264c71c3a898f25db45602827530feec7e354efed2fa320379e8407 -->
+<!-- translation-source-sha256: 9b5d7d3bd17a668de045de2346d4454048bd2f89925f150c353237614a29fad4 # Sync Models and Images Between Nodes -->
+<!-- translation-source-sha256: 82b477fd72a0736a0c4aa514b3834e0fe36b512929e1d8143aeb7b7a6157e15c ## Sync a Model or Image -->
+<!-- translation-source-sha256: 0a2892032bdafea8ccd96c07c071f28f5208e063abb0cfc023925a9e12f7d405 ### Models -->
+<!-- translation-source-sha256: 7f078c6c6591230a56eaff6d9b33d85c579c6e3d8a44f16bee134a1e6384fdbc ### Images -->
+<!-- translation-source-sha256: 54ad756c8192095bb83c44f5c89d6a6f748471d63e683b9620e08ef8683d8345 ## Which Network Is Used -->
+<!-- translation-source-sha256: bb318d750bba6876a314ad087fc90b967100aacb1003a570a42a58b95eb8980d ## Relay Resource Budgets and Observations -->
+<!-- translation-source-sha256: 8bf7c0a05859949483b6bc26697d7ee10c4c3f1ec55b4d63f86d34a5f1371251 ## Sync Images Across Runtimes -->
+<!-- translation-source-sha256: 6522e311515fa66faaa2a8681e06ac78dbd931acb0884e087a58ad4875b87ab6 ## Retry and Recovery -->

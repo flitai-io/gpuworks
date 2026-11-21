@@ -14,6 +14,7 @@ import unicodedata
 from pathlib import Path
 
 import translation_markers
+from markdown_headings import headings
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -172,23 +173,6 @@ def how_to_index(groups: list[dict], language: str = "zh", **metadata) -> str:
 def remove_leading_heading(text: str) -> str:
     """Let OINK render the front matter title once instead of twice."""
     return re.sub(r"\A\s*#\s+[^\n]+\n+", "", text, count=1)
-
-
-def headings(text: str) -> list[tuple[int, str, str]]:
-    result = []
-    fence = ""
-    for index, line in enumerate(text.splitlines()):
-        marker = re.match(r"^\s*(`{3,}|~{3,})", line)
-        if marker:
-            if not fence:
-                fence = marker[1]
-            elif marker[1][0] == fence[0] and len(marker[1]) >= len(fence):
-                fence = ""
-            continue
-        match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
-        if match and not fence:
-            result.append((index, match[1], match[2]))
-    return result
 
 
 def preserve_heading_ids(original: str, translated: str) -> str:

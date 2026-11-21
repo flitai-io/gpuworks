@@ -413,6 +413,24 @@ The following names appear in the code but are not user-configurable settings. D
 - `GPUWORKS_PARTITION_PROBE_BACKEND`, `GPUWORKS_PARTITION_PROBE_QUOTA_MIB`: Inputs injected into the probe program when the agent starts a dGPU probe container; they are not configuration settings read by the agent.
 - `__GPUWORKS_AGENT_PROCESS_OK__`, `__GPUWORKS_AGENT_PROCESS_WARN__`: Marker strings in the output of verification commands after SSH installation on a cloud provider; they are not environment variables.
 
-<!-- translation-source-sha256: 05aa25ab682f5e2e76454c8c008cdfa924ebb0dc9e1bae380b912fcd157ec587 -->
+<!-- translation-source-sha256: ab89d916f53e3adc2e328c60371f3d5c40187b54bc830f11e32f97e91a18943f # Configuration Reference -->
+<!-- translation-source-sha256: e40771fe683d8f4154a6332c64bf7554969a4bdb6abdbc7ddb3e3f3222c19084 ## Server Configuration File server.yaml -->
+<!-- translation-source-sha256: d7dd67b789f8b241cbd8b3967bf492083928fcc82017f21736fd516cd2d4a32f ### Management Sessions -->
+<!-- translation-source-sha256: b4b7537ec834f28badc079be352e1fbbd35c58bfe41c8f0d8b432a738119d30e ### Peer Relay Resource Limits -->
+<!-- translation-source-sha256: 0f9cebe5ca9c73fa634534ea356eeaa3ac27791558b3b42a9065ce31a744e7bc ### Listen Rules -->
+<!-- translation-source-sha256: cfd33528d96b4be5a0ad0895c30ab1f980c106fd779c64a46a84f6ef1a8aa68c ### Change Listen Addresses in the Console -->
+<!-- translation-source-sha256: 38f2a3eb63ce4f3d0029359496132cf591f711703a30563e7c76a9921613b690 ### Command-Line-Only Tuning Arguments -->
+<!-- translation-source-sha256: f8e933bddbacb1864e73c7bd90ecc1da1229c953a296baddf8d4863003201dcf ### Initial Administrator and Keys -->
+<!-- translation-source-sha256: 8395807f1cadf9e74b9ed36e0dd6a06dadf66f3436029ccb338b7615a9c4d127 ### Plugin Trust and Site Policy -->
+<!-- translation-source-sha256: b42ea9a8f10360bca1babf453ffc4c366a45fb89d67e8b04f3870749a6e3b0c1 ## Pull Proxies and Outbound Access -->
+<!-- translation-source-sha256: 1290325d6e81db318ea2c530721200a00935ff53cb7e96f7389d775c5b4d5f8c ### Outbound HTTP Proxy Policy -->
+<!-- translation-source-sha256: 211f27db95ac706484c7a7e5c28ddbbd60014773881d2ff1d10ff0e1b7457389 ## Image Catalog and Image Pulls -->
+<!-- translation-source-sha256: 2a4d017d066acf91fa09c613f3f919254d20a21d66a5d479d8f85e4f8f671e37 ## Deployment Policy -->
+<!-- translation-source-sha256: 3892ea863909dec5e9899a22cdc752e695f91d7dcc2d0ac4e7ea2d238ba47651 ## Environment Variables -->
+<!-- translation-source-sha256: 6bdcaaa9ff0370ab6a8f8108875833921c297dba119f650e005b7752c744c9f0 ### Variables Read by the Server -->
+<!-- translation-source-sha256: 4f2f126bbf1cb3b480ad22f8383f9c389cb71bd49839b4d77d338b2ae1208a76 ### Agent Environment Variables -->
+<!-- translation-source-sha256: 34cf0ae036129e8b3d4ef613c0a4bee6f8a97470499707af5126e256570e5c02 ### Other General-Purpose Variables Read -->
+<!-- translation-source-sha256: eb148b0c641c2132abcda95d460feb5369ebeaf448231429ca82ef7abf4cfef1 ### Variables for Testing and Development Only -->
+<!-- translation-source-sha256: 2ffcca8478f313bc1166e7cc2552185fd88d3151cdff23b5c107d5e570d4a9df ### Internal Implementation Details -->
 <!-- translation-localized-code-block: 86f9f71f25c2b857ad0011486eb8c57eb9996ec1a4417ab035e24d7b4b1f898d dc1d5c5bc85efcc1eb7d1d72bc584329c53e7d9c636c376ad8a7ce5dc1d901cb Reviewed configuration comments; usage_report=false suppresses the daily report and node/GPU counts, while automatic checks retain installation ID and versions. Keys and values unchanged. -->
 <!-- translation-localized-code-block: 2a636013886e3274f9549d011376c48f05c387773ed46b7bf2ba8e5018147ee9 dcf0c95e55438a724e2ae70bef18a40f8ba32a257bab9f5a81a715cb374fc0e3 Reviewed the comments of the plugins example, including max_down_grace; keys and values unchanged. -->

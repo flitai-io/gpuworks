@@ -454,4 +454,21 @@ For the events of node-loss rescheduling after a node is lost and of drain moves
 - A scheduled replica count applies only to single-node deployments and automatically placed multi-node and PD ones, not to multi-node or PD deployments placed by hand; a PD entry changes one role, so changing both takes two entries.
 - The evaluator runs inside the server process; nothing happens automatically while the server is down, and after it recovers only the newest entry within 12 hours is made up.
 
-<!-- translation-source-sha256: e2c51bcbd90ebf3a2eeeb1b90d082a7aeee55f4e4d6f1134696df09300ad5a60 -->
+<!-- translation-source-sha256: 560f54e1f215dbf40d77a934a5fea50cb4083de9c0a66f3094b47f1891ce3ee7 # Use Scheduling Analysis: Schedules, Yield Policies, and Waiting Wakes -->
+<!-- translation-source-sha256: 500b04554c12cb8a4e7ef325340c3f601fcd51e757e700c8cf739af4b1d3b1e3 ## What Scheduling Analysis Does -->
+<!-- translation-source-sha256: 2a95b65b1d3ad7bf38c8d27b9d532d9f9acd880c0587d00ebbf22537b3271987 ## Scheduling Board -->
+<!-- translation-source-sha256: 2395496b044fed593be6c568077b0a0da17a588c04f258fdb603aeae45c8961f ### Residency Timeline -->
+<!-- translation-source-sha256: b4ff2cd8587af216c9ba2a56c301e26225f15e43e3f01ec5e7e80b76880bcb44 ## Scheduling Activity -->
+<!-- translation-source-sha256: b661ace5960bd8c848c3c0feaeaac03458b7ab4f33b5bf524ecd50bd7fd5fd31 ## Schedules -->
+<!-- translation-source-sha256: c2e3eb2ca3dcf9406c41cf38eaddc0af15162ab646087b1ca3faf1950f3fe4b3 ### What Happens When an Occurrence Is Due -->
+<!-- translation-source-sha256: 6d455fa70ba1032c81d59d3731a2d6e35a9f1c3770d95b12d563e3c713db1cd2 ### Validation When Creating -->
+<!-- translation-source-sha256: 009d1319e85e65c0b2575f097bafb6bf48d77a7a846e5cd1cca8fc7839822262 ## Waiting Wakes and Yielding Wakes -->
+<!-- translation-source-sha256: 898c437d118de0d0500eb69e24d9004f62e5bdb3010dfb4c61f9672d368efae7 ## Yield Policy -->
+<!-- translation-source-sha256: 21009b01da4474b4a260d23b7ee23c0503b7e257e0e0b7ee169f4d66c848c91a ### Policies and Parameters -->
+<!-- translation-source-sha256: fd4baf8fef5659e4f85c23cc413714ea3bc6cee42bd73d50437702076e2f93c9 ### Configuring It -->
+<!-- translation-source-sha256: a7d8308a42c446e840b643da43189cb8c861a00bd4cc1ee049913b4d367e2aa2 ### Choosing a Yield Policy -->
+<!-- translation-source-sha256: da93a3add0915700a3486b5c49e3aef7de9319b5d77c22edc3c3c8a829854979 ### How a New Deployment Gets onto a Shared Card -->
+<!-- translation-source-sha256: 83c9d1dd209e8ca9d7a2a9ed7f79490f19ad4bd4feaa2068b0165d3d86fe4fc2 ## 调度记录 -->
+<!-- translation-source-sha256: 89794a190b6707e9fd247eb1e3ee454da99606670f835d5f928be8d781915b15 ## First Placement Nodes -->
+<!-- translation-source-sha256: 9d03cb937a12e96000fd307f260d16d0d0c0f1eb4128623945ed567957ad193d ## Timeline Events -->
+<!-- translation-source-sha256: e9bedbade3cb1769c2334b50d2ed49e70fd308e179c74a5715f105fbcda1fef5 ## Limitations -->

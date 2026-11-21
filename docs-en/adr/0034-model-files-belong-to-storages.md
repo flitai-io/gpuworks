@@ -64,4 +64,7 @@ Deleting one row deleted the directory shared by everyone; two nodes downloading
   [design document](../../artifacts/archive/2026-10-02-shared-storage/design-model-source-per-node.md) for the rationale.
 - Out of scope: deletion locks across control planes, periodic scans, kernel FS-Cache, docker's NFS volume driver, and direct reads from object storage.
 
-<!-- translation-source-sha256: 3e52d25acef16469d0a046750f981c88600219188952c45a17aa8279b5b96dec -->
+<!-- translation-source-sha256: a8656648b2fd6b7842c14203810a2474e16979c37cbea48b9410780a99a865f6 # ADR 0034: Model Files Belong to Storage, With One Row for Model Files on Shared Storage -->
+<!-- translation-source-sha256: 1c102df9476f932dac85e948a07fc96a4d03431ad8e80f6d76b2dd66e7d7b8a6 ## Context -->
+<!-- translation-source-sha256: d009c907e3229b4d031af7424656b389beed143bd2871b33509883b38d488e65 ## Decision -->
+<!-- translation-source-sha256: 8bca6e67c02ab67e84c004c79009ddd8ff197ff9f0b3d89e00ba12f98fe51907 ## Consequences -->

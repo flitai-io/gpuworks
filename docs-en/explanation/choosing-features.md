@@ -318,4 +318,14 @@ Likewise, point model [site rules](../how-to/configure-pull-settings.md#站点�
 
 For combinations not listed here, use the errors and warnings returned by evaluation on the deployment page. Evaluation does not reserve resources, so you can try repeatedly.
 
-<!-- translation-source-sha256: b52576ab04f1bb5cf8c9911e41962d5a4014194753c3d9c729de7cf1b4ecb2aa -->
+<!-- translation-source-sha256: d8e198e71a202a2e4c01a4649f30b12e74a78b52c713b2cfecd010d20e383c9a # Choosing Features: dGPU, Sleep/Wake, Multi-Node, Replicas, and PD -->
+<!-- translation-source-sha256: 3a5a9932c17584c836d231b9178fa93240db692b249966c9db4d88c4127bc0c9 ## Decision Table -->
+<!-- translation-source-sha256: e27ff4e52befc9fda54992dda7e1a179e3a51fa0b6fab891fba79462da39d6a9 ## Exclusive Full GPU (Default) -->
+<!-- translation-source-sha256: 6c69f5f0b9b1798c643cbd33df750dbacdaf54137557454c2ce913033f0b3be7 ## dGPU (GPU Memory Quotas) -->
+<!-- translation-source-sha256: 492f1ac6846d7ff2de71ae3f9d23daf2b9246c5e66adf6253cf9f712e095dcfd ## Sleep/Wake: Models Take Turns on One GPU -->
+<!-- translation-source-sha256: 555b1565b735d6405b9df0bf85c43bb44de7d51b4b5de0ca9ffb0140ff8fa4c4 ## Single-Node Multi-GPU TP and Multi-Node Inference -->
+<!-- translation-source-sha256: 3f861ab1188d62b3a50b2220399276029f6ec59ab2a42b87eae51b68db17a42c ## Replica Count and Gateway Routing Policies -->
+<!-- translation-source-sha256: 885bdb9b938f713a2c331c37674711a5199e34972fcfd5101698bf830dd967c8 ## PD Disaggregation -->
+<!-- translation-source-sha256: 38a7f2d3b09c81fee8d19fa6424ce9e9885382888e8e98aa1075a333a74e5d95 ## Rented Cloud Machines and Your Own Nodes -->
+<!-- translation-source-sha256: 9f314b1d026600aa87f9254b43e1ec5870719260e7bb2197b6b793a3dca4de4e ## Offline Environments -->
+<!-- translation-source-sha256: fbb2f79dea2c6969ef1f85d5381aa2857ea2bb5ba7d1262f989967fa7000cb89 ## Combination Quick Reference -->

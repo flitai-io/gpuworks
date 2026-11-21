@@ -46,4 +46,9 @@ Web terminals are subject to concurrency, idle, and kill-switch policies and gen
 paths an instance exposes. Sleeping instances return 503 instead of sending requests to stale ports. Logs and external commands are redacted, but release acceptance still needs to
 record digests and summaries of commands and environments so that results can be reproduced without exposing secrets.
 
-<!-- translation-source-sha256: 29bc9abf840125835b5fe3009311a2b8ef6baa4715766765bb13fb1bc90f3efe -->
+<!-- translation-source-sha256: d7535388826549d74f0bd75d834c5983a9cde8236e37fa3f581b3bcb3c61eb9a # Security Model and Trust Boundaries -->
+<!-- translation-source-sha256: 6ae8ab57bfefbd36d068f2ff28504484f5c9670a6f4e6473a56c727d1f6e6d73 ## Control Plane and Data Plane -->
+<!-- translation-source-sha256: 144b02bd8c8254751d900162703b7cebbf56cb41be5a9533595948097034f367 ## Reverse Proxy TLS and Forwarded Headers -->
+<!-- translation-source-sha256: dd90038a724192ba43396884d832e438107f66489bad5afeea31efebc59b54b5 ## Credential Visibility -->
+<!-- translation-source-sha256: 50192a02699d5056afb0b33166854160c4041ed457d96dadd9bf58d999079a75 ## Playground HTML Preview -->
+<!-- translation-source-sha256: 3ae11131e03dbefe7d089f09a5fd85940b4fad5ea2c862dc1a6f8b28f59e63e9 ## Terminals and Instances -->

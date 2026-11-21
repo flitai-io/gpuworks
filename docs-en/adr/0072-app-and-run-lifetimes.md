@@ -24,4 +24,8 @@ An App already supports stopping and running again in the same process, and the 
 
 Two real inference HTTP requests across two Runs of one App succeed, both records remain queryable through history and quality endpoints, and a controlled collector receives traces. Final records are flushed on stop. Cover final and repeated Close, Run after Close, concurrent shutdown, construction/listener failure and unfinished handshakes, while retaining accountant-to-metrics drain and loop-exit regressions.
 
-<!-- translation-source-sha256: dd254f8062ad1207c2b79f58943171491754d99eac7e459cebd43d47dd79d30e -->
+<!-- translation-source-sha256: 05e0b593cda7153d3fef60d109f494793b10a7557c2a7d8a19bc56ba921c297d # ADR 0072: App owns resources; each Run stops and drains, and Close releases them -->
+<!-- translation-source-sha256: e18a07bfa6407315af842c0d8a36b9af11353e2face84acc03eb434e4e9cb24a ## Background -->
+<!-- translation-source-sha256: 8812473d8211082c005683f6673b331d90a09f3170a656f09a98865052044236 ## Decision -->
+<!-- translation-source-sha256: 6638d2cca30b8d7d0abf2f68ddb55f77ce8fe5402457b0bf0531d51046f8d2a7 ## Trade-offs -->
+<!-- translation-source-sha256: 0abc155503ed29ebdeabab43faeba964c5b51fccbaf0f8e8d8b72846d9a4f146 ## Verification -->

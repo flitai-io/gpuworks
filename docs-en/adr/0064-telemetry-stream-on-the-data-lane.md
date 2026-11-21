@@ -32,4 +32,8 @@ Under the same measurement, the heavily logging node's RPC p50 is 72 ms at 2 Mbp
 - No extra rate limit on instance logs: with logs off ctrl, a heavily logging node no longer delays its own RPCs, which removes the need for one (GWKS-259).
 - Single-lane nodes (an older server, `--data-lane=false`) still send telemetry on ctrl, with the latency they had; the buffer applies to them as well.
 
-<!-- translation-source-sha256: ceba2d6e3e7fe379d5fd7364138dc06d635c137c143335caaf5f18286d88cd06 -->
+<!-- translation-source-sha256: 70607c002fab55b29a7a200cca6577739af2037fc9897786954f8de0e8599a3e # ADR 0064: Metric and Log Batches Ride a Telemetry Stream on the Data Lane, and Logs Are Buffered on the Agent Within a Bound -->
+<!-- translation-source-sha256: 2d91f50e70aea10949d000317e661b816d5a5c87dd01cafcb2492f7e37aab926 ## Background -->
+<!-- translation-source-sha256: 841e96e798ee83f3a05ce0f6d60b288bfa86d1d97a298153b85ec59164b7afeb ## Decision -->
+<!-- translation-source-sha256: 750ae49a35c455868323e476fba2d0e5334bc97137c26aa1ba1edb503da8da8b ## Result -->
+<!-- translation-source-sha256: aaace0554cc45e0ddf650bcb5a4b3ba6617c9b38fdd22bcfb5eca353beb77a13 ## Costs and Non-Goals -->

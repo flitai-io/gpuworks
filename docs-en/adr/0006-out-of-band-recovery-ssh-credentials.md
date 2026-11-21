@@ -24,4 +24,7 @@ Sensitive files default to owner-only access (`0600`). A Linux systemd installat
 
 New or changed administrator passwords must contain 8–128 Unicode characters and at most 512 bytes. Common guessable values, whole-value repetitions and sequences are rejected; character-class mixtures are not required and passphrases are supported. Without an explicit password, a 24-byte random value is encoded as hexadecimal. Existing accounts can still authenticate with their current passwords.
 
-<!-- translation-source-sha256: 7c853521ad1dbd5fbdf7449512dee256e7e52ed3f9216acd124a88e09b3c9897 -->
+<!-- translation-source-sha256: e416aa150f2a1e23bcd365f12ab9e123a940003c13f97aff371be76462bc20f4 # ADR 0006: Store Encrypted SSH Credentials for Out-of-Band Recovery -->
+<!-- translation-source-sha256: d6bc61c8024109b2d4f0b45320a2e226701bbb5b56da3b298744cd7e833d78d4 ## Trade-Offs and Consequences -->
+<!-- translation-source-sha256: ebc17f8bb32f58082640240fb79236e8519d1e2a3c7897ac2b6514f8b6558cac ## Rejected Alternatives -->
+<!-- translation-source-sha256: b02d5696c156c24faf5e5fce45e74048a3a0bebfdb6485d3cc3d6bbd2c4982a6 ## Revision (2026-11-04): Sensitive File Permissions -->

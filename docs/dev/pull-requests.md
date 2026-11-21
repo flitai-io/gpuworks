@@ -42,7 +42,7 @@ git switch -c fix/agent-reconnect upstream/TARGET_BRANCH
 
 同步更新受影响的文档。中文页面放在 `docs/`，英文译文放在 `docs-en/` 的相同相对路径。
 按[贡献指南](../../CONTRIBUTING.zh-CN.md#文档约定)复核两版内容，用
-`python3 docs-site/check_translations.py --write` 更新英文页末尾记录的原文哈希。
+`python3 docs-site/check_translations.py --write` 更新英文页末尾记录的各小节原文哈希。
 
 运行项目要求的提交前检查；将下面的包路径替换为实际修改的包：
 
