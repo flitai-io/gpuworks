@@ -122,9 +122,9 @@
 
 .template-spec-list {
   overflow: hidden;
-  border: 1px solid #edf0f4;
+  border: 1px solid var(--border-subtle);
   border-radius: 0 0 9px 9px;
-  background: #fff;
+  background: var(--surface-floating);
 }
 
 .template-detail-table-row {
@@ -134,7 +134,7 @@
   gap: 16px;
   min-height: 84px;
   padding: 13px 18px;
-  border-bottom: 1px solid #edf0f4;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .template-detail-table-row:last-child {

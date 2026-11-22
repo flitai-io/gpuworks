@@ -17,10 +17,11 @@ from reduced_motion import BUILD, UI
 FIXTURE = r"""
 const React = require('react');
 const {createRoot} = require('react-dom/client');
-const {MemoryRouter} = require('react-router-dom');
+const {MemoryRouter, Route, Routes} = require('react-router-dom');
 const {I18nextProvider} = require('react-i18next');
 const {api} = require('./src/api');
 const Page = require('./src/pages/InferenceTemplatesPage').default;
+const DetailPage = require('./src/pages/InferenceTemplateDetailPage').default;
 const {SideDrawer} = require('./src/ui-kit/SideDrawer');
 const MonitorPage = require('./src/pages/monitor/MonitorPage').default;
 const {ConfigProvider} = require('antd');
@@ -42,14 +43,25 @@ const models = ['black-forest-labs', 'thinkingmachines', 'deepseek-ai', 'fixture
 api.inferenceTemplates = async () => ({items:models,total:models.length,page:1,page_size:200});
 api.detectedInferenceTemplateChips = async () => ({items:chips});
 api.inferenceTemplateChips = async () => ({items:chips});
+api.inferenceTemplate = async id => {
+  const model = models.find(item => item.model_id === id);
+  return {...model, specs:[...model.specs, {...model.specs[0], name:'MOCK-second-profile'}]};
+};
 const drawer = new URLSearchParams(location.search).has('drawer');
 const monitor = new URLSearchParams(location.search).has('monitor');
 const locale = new URLSearchParams(location.search).get('locale') || 'en';
+const catalogPath = '/inference-templates';
+function fixturePage() {
+  if (drawer) return h(SideDrawer,{open:true,onClose(){},title:'Geometry drawer'},'Drawer body');
+  if (monitor) return h(ConfigProvider,{theme:themeConfig},h(MonitorPage));
+  return h(Routes,null,
+    h(Route,{path:catalogPath, element:h(Page)}),
+    h(Route,{path:catalogPath+'/*', element:h(ConfigProvider,{theme:themeConfig},h(DetailPage))}));
+}
 i18n.init({lng:locale,defaultNS:'inferenceTemplates',interpolation:{escapeValue:false},resources:{en:{
  monitoring:require('./src/i18n/locales/en/monitoring.json'),inferenceTemplates:require('./src/i18n/locales/en/inferenceTemplates.json'),common:require('./src/i18n/locales/en/common.json')
 },zh:{monitoring:require('./src/i18n/locales/zh/monitoring.json'),inferenceTemplates:require('./src/i18n/locales/zh/inferenceTemplates.json'),common:require('./src/i18n/locales/zh/common.json')}}}).then(()=>createRoot(document.getElementById('root')).render(h(I18nextProvider,{i18n},
- h(MemoryRouter,{initialEntries:[monitor ? '/monitor' : '/inference-templates']},h('div',{style:{marginLeft:208,padding:24,minWidth:0}},
- drawer ? h(SideDrawer,{open:true,onClose(){},title:'Geometry drawer'},'Drawer body') : monitor ? h(ConfigProvider,{theme:themeConfig},h(MonitorPage)) : h(Page))))));
+ h(MemoryRouter,{initialEntries:[monitor ? '/monitor' : catalogPath]},h('div',{style:{marginLeft:208,padding:24,minWidth:0}},fixturePage())))));
 """
 
 
@@ -278,6 +290,31 @@ class TemplateCatalogLayout(unittest.TestCase):
             expect(official).to_be_visible()
             page.wait_for_function("() => document.querySelector('img.template-organization-logo[src=\"/model-org-icons/deepseek-ai.webp\"]')?.naturalWidth === 96")
             self.capture(page, f'organization-colors-{dark}.png')
+
+    def test_detail_profile_list_uses_theme_surface_and_dividers(self):
+        for dark in (False, True):
+            with self.subTest(dark=dark):
+                page = self.render_page(1280, dark=dark)
+                page.locator('[data-slot="table-body"] a[href^="/inference-templates/"]').first.click()
+                group = page.locator('.template-spec-vendor-group').filter(has=page.locator('.vendor-logo-nvidia'))
+                profiles = group.locator('.template-spec-list')
+                rows = profiles.locator('article')
+                expect(rows).to_have_count(2)
+                # Resolve semantic colours in the page so palette changes do
+                # not require updating hard-coded RGB values in this test.
+                surface, border = profiles.evaluate("""el => {
+                    const probe = document.createElement('span');
+                    probe.style.cssText = 'background:var(--surface-floating);color:var(--border-subtle)';
+                    el.append(probe);
+                    const style = getComputedStyle(probe);
+                    const colors = [style.backgroundColor, style.color];
+                    probe.remove();
+                    return colors;
+                }""")
+                expect(profiles).to_have_css('background-color', surface)
+                expect(profiles).to_have_css('border-left-color', border)
+                expect(rows.first).to_have_css('border-bottom-color', border)
+                expect(rows.last).to_have_css('border-bottom-style', 'none')
 
     def test_drawer_has_square_corners(self):
         page = self.render_page(1280, drawer=True)
