@@ -867,6 +867,7 @@
     "PEER_TRANSFER_QUERY_INVALID": "请指定一个非空、最多 128 个字符的传输 ID。",
     "PEER_RELAY_BUSY": "管理节点中继暂时繁忙，请稍后重试；已选择的源节点会保留。",
     "PEER_TRANSFER_CANCELED": "节点间传输已取消。可重试原来源或选择下载。",
+    "PEER_DIRECT_CONNECT_FAILED": "源节点连不上该节点，未能复制。原因：{{reason}}",
     "IMAGE_REFETCH_FAILED": "重新获取失败，该节点保留原有镜像。原因：{{reason}}",
     "ACCELERATOR_PARTITION_CONTRACT_INVALID": "{{vendor}} 只接受自身的整卡 dGPU 后端。",
     "LAUNCH_FEATURES_CONTRADICTORY": "启动请求的功能与其拓扑或挂载不一致。",

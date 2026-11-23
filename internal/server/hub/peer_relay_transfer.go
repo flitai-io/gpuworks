@@ -9,6 +9,10 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
+// errDirectPeerConnection is a copy whose source could not connect to the
+// target and that was not relayed.
+var errDirectPeerConnection = errors.New("direct peer connection failed")
+
 func relayEnabled(allowed bool, relays []archiveRelay) bool {
 	return allowed && len(relays) > 0 && relays[0] != nil
 }
@@ -28,7 +32,7 @@ func sendPeerArchive(ctx context.Context, source, method, transferID string, par
 		return raw, "direct", nil
 	}
 	if !relayEnabled(allowed, relays) {
-		return nil, "", fmt.Errorf("direct peer connection failed: %s", result.DirectDialError)
+		return nil, "", fmt.Errorf("%w: %s", errDirectPeerConnection, result.DirectDialError)
 	}
 	raw, err = relays[0](ctx, method, transferID, params)
 	if err != nil {

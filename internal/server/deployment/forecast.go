@@ -76,7 +76,11 @@ func (s *Service) forecastImage(fact *dto.AcquisitionNode, node *store.Node, ima
 	}
 	if row, err := s.d.Store.ResolveImageRef(image); err == nil {
 		if holders := s.imageHolders(row.ID, node); len(holders) > 0 {
-			if peers, err := planning.SyncPeersFor(s.d.Store, resolve, node, holders); err == nil && len(peers) > 0 {
+			peers, err := planning.SyncPeersFor(s.d.Store, resolve, node, holders)
+			if err == nil {
+				peers, err = planning.WithStoragePaths(resolve, node, holders, peers)
+			}
+			if err == nil && len(peers) > 0 {
 				fact.ImagePlan = forecastCopy
 				for i := range holders {
 					if holders[i].ID == peers[0].NodeID {

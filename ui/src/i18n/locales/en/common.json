@@ -867,6 +867,7 @@
     "PEER_TRANSFER_QUERY_INVALID": "Specify one non-empty transfer ID of at most 128 characters.",
     "PEER_RELAY_BUSY": "The management server is busy relaying another transfer. Retry shortly; the selected source is retained.",
     "PEER_TRANSFER_CANCELED": "Peer transfer canceled. Retry from the selected source or choose a download.",
+    "PEER_DIRECT_CONNECT_FAILED": "The source node could not connect to this node, so the copy was not made. Reason: {{reason}}",
     "IMAGE_REFETCH_FAILED": "The re-fetch failed; this node keeps the image it already had. Reason: {{reason}}",
     "ACCELERATOR_PARTITION_CONTRACT_INVALID": "{{vendor}} accepts only its own whole-device partition backend.",
     "LAUNCH_FEATURES_CONTRADICTORY": "The launch's requested features contradict its topology or mounts.",

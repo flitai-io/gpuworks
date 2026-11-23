@@ -7,6 +7,10 @@ const (
 	ErrorPeerTransferQueryInvalid           = "PEER_TRANSFER_QUERY_INVALID"
 	// ErrorPeerTransferCanceled is carried by transfer_error_code on a canceled ledger row.
 	ErrorPeerTransferCanceled = "PEER_TRANSFER_CANCELED"
+	// ErrorPeerDirectConnectFailed is carried by transfer_error_code on a
+	// failed image copy whose source could not connect to the target and that
+	// was not relayed; message holds the dial error.
+	ErrorPeerDirectConnectFailed = "PEER_DIRECT_CONNECT_FAILED"
 	// ErrorImageRefetchFailed is carried by transfer_error_code on a present
 	// image row whose forced re-fetch failed: the node keeps the image it had,
 	// and message holds why the attempt failed.

@@ -10,6 +10,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog/pullref"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/netplan"
+	"gpuworks.ai/gpuworks/internal/server/network"
 	"gpuworks.ai/gpuworks/internal/server/nodelabel"
 	"gpuworks.ai/gpuworks/internal/server/scheduler"
 	"gpuworks.ai/gpuworks/internal/server/sourceurl"
@@ -244,6 +245,54 @@ func URLRules(rules []store.PullSourceRuleSpec) []sourceurl.Rule {
 type SyncPeer struct {
 	NodeID       uint
 	RateLimitKiB int64
+	// Network names the network a copy from this peer takes, once
+	// WithStoragePaths has looked: netplan.ManagementName for the management
+	// network.
+	Network string
+}
+
+// WithStoragePaths keeps the peers target shares a network with that may
+// carry storage sync, each named by that network, those on a storage-sync
+// network of their own first: sharing a sync group says a copy is wanted, not
+// that the two nodes have a way to make it. sources must hold every peer.
+func WithStoragePaths(resolve NodeResolver, target *store.Node, sources []store.Node, peers []SyncPeer) ([]SyncPeer, error) {
+	if resolve == nil || target == nil || len(peers) == 0 {
+		return nil, nil
+	}
+	byID := make(map[uint]*store.Node, len(sources))
+	nodes := make([]store.Node, 0, len(peers)+1)
+	nodes = append(nodes, *target)
+	for i := range sources {
+		byID[sources[i].ID] = &sources[i]
+	}
+	for _, peer := range peers {
+		if node := byID[peer.NodeID]; node != nil {
+			nodes = append(nodes, *node)
+		}
+	}
+	resolved, err := resolve(nodes)
+	if err != nil {
+		return nil, err
+	}
+	to := network.Node(*target)
+	var own, shared []SyncPeer
+	for _, peer := range peers {
+		node := byID[peer.NodeID]
+		if node == nil {
+			continue
+		}
+		path, err := netplan.StoragePathBetween(network.Node(*node), to, resolved)
+		if err != nil {
+			continue
+		}
+		peer.Network = path.Network
+		if path.Network == netplan.ManagementName {
+			shared = append(shared, peer)
+		} else {
+			own = append(own, peer)
+		}
+	}
+	return append(own, shared...), nil
 }
 
 // SyncPeersFor filters sources down to the nodes target shares a sync group

@@ -45,7 +45,8 @@ The server selects the network for each node pair according to the rules in [Con
 - For direct-only operation, disable the management network's **storage sync** permission on either node and configure a shared dedicated storage-sync network. This also denies relay over the management network, preserving network isolation.
 - With **agent-initiated connections**, the agent opens another outbound connection to the same server address. With **server-initiated connections**, the server dials the same fixed agent listening port again. Both directions and mixed pairs need no additional relay port mapping; server-initiated agents do not need outbound access to the server. Upgrade both agents and attach independent data lanes. Older or single-lane agents remain direct-only; the control connection never carries the archive.
 - Relay does not spool to disk. It permits one active relay per node and two per server process. The default **aggregate relay budget is 64 MiB/s**, shared by concurrent transfers; a lower operator or sync-group limit still applies. This bounds encrypted forwarding inside the server, not physical NIC wire speed.
-- During automatic copying, a node pair whose copy ultimately fails enters a 3-hour cooldown in server memory. No further copy attempts are made during that period. Restarting the server clears the cooldown.
+- An image copied automatically for a deployment uses the direct connection only and is never relayed through the management server: if the direct connection cannot be established, the copy fails and the replica pulls the image itself through the source rules. Image relay applies to a sync started manually on the Images page and its retries; an unfinished transfer resumed after a server restart may also be relayed.
+- During automatic copying, a node pair whose copy ultimately fails enters a 3-hour cooldown in server memory. No further copy attempts are made during that period. Restarting the server clears the cooldown. After an image copy fails because the source could not connect to the target over the management network, other holders reachable only over the management network are not tried during the cooldown either; nodes on a shared storage-sync network are unaffected, and a failure for any other reason cools only that pair.
 
 ## Relay Resource Budgets and Observations
 
@@ -80,7 +81,7 @@ The image dialog identifies the path used by its connection probe; actual sync s
 <!-- translation-source-sha256: 82b477fd72a0736a0c4aa514b3834e0fe36b512929e1d8143aeb7b7a6157e15c ## Sync a Model or Image -->
 <!-- translation-source-sha256: 0a2892032bdafea8ccd96c07c071f28f5208e063abb0cfc023925a9e12f7d405 ### Models -->
 <!-- translation-source-sha256: 7f078c6c6591230a56eaff6d9b33d85c579c6e3d8a44f16bee134a1e6384fdbc ### Images -->
-<!-- translation-source-sha256: 54ad756c8192095bb83c44f5c89d6a6f748471d63e683b9620e08ef8683d8345 ## Which Network Is Used -->
+<!-- translation-source-sha256: 5fcf16d7fe0b1b7e59617a0034e7bc059df33937ae719e74704a83a2ab30890c ## Which Network Is Used -->
 <!-- translation-source-sha256: bb318d750bba6876a314ad087fc90b967100aacb1003a570a42a58b95eb8980d ## Relay Resource Budgets and Observations -->
 <!-- translation-source-sha256: 8bf7c0a05859949483b6bc26697d7ee10c4c3f1ec55b4d63f86d34a5f1371251 ## Sync Images Across Runtimes -->
 <!-- translation-source-sha256: 6522e311515fa66faaa2a8681e06ac78dbd931acb0884e087a58ad4875b87ab6 ## Retry and Recovery -->

@@ -10,6 +10,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/netplan"
 	"gpuworks.ai/gpuworks/internal/server/nodelabel"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -157,6 +158,18 @@ func TestForecastImagePlans(t *testing.T) {
 		t.Fatalf("only a failed row holds the image: %+v", f)
 	}
 	rig.holdsImage(holder)
+
+	// A holder the node shares no storage-sync path with is no source: the
+	// launch would not copy from it either.
+	if err := rig.st.SetNodeManagementRolesOff("same-rack", []string{netplan.RoleStorageSync}); err != nil {
+		t.Fatal(err)
+	}
+	if f := rig.forecast("same-rack"); f.ImagePlan != "pull" || f.ImageCopyFrom != "" {
+		t.Fatalf("no storage-sync path to the holder: %+v", f)
+	}
+	if err := rig.st.SetNodeManagementRolesOff("same-rack", nil); err != nil {
+		t.Fatal(err)
+	}
 
 	// With the default group gone nothing is copied automatically.
 	rig.deleteDefaultGroup()

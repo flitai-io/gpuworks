@@ -115,7 +115,7 @@ var routeDocs = map[string]string{
 
 	"/api/v1/images/versions": "镜像版本行列表；每行带 `present_nodes`/`total_nodes` 与 `reference_count`，不带逐节点行（节点行见系列详情）",
 
-	"/api/v1/images/{}": "镜像系列详情；各版本的节点行带 `node_name`、`node_state`、`image_digest_id`、`updated_at`，节点间同步来的行另带 `source_node_name`。`state` 只表示节点运行时里有没有该镜像；上一次获取的结局看 `transfer_error_code` 与 `message`：`present` 且 `transfer_error_code=IMAGE_REFETCH_FAILED` 表示强制重新获取失败、节点保留了原有镜像，`message` 是失败原因，保留到下一次获取；`PEER_TRANSFER_CANCELED` 表示节点间传输被操作员取消",
+	"/api/v1/images/{}": "镜像系列详情；各版本的节点行带 `node_name`、`node_state`、`image_digest_id`、`updated_at`，节点间同步来的行另带 `source_node_name`。`state` 只表示节点运行时里有没有该镜像；上一次获取的结局看 `transfer_error_code` 与 `message`：`present` 且 `transfer_error_code=IMAGE_REFETCH_FAILED` 表示强制重新获取失败、节点保留了原有镜像，`message` 是失败原因，保留到下一次获取；`PEER_TRANSFER_CANCELED` 表示节点间传输被操作员取消；`PEER_DIRECT_CONNECT_FAILED` 表示源节点连不上目标节点且未经中继，`message` 是连接错误",
 
 	"/api/v1/inference-templates": "推理模板列表。在线目录可同时传 `weight_provider`、`weight_repo`、`weight_revision`，仅返回权重来源、仓库 ID 和提交版本均匹配仓库根目录的规格。",
 

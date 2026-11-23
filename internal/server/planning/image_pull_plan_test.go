@@ -1,12 +1,14 @@
 package planning
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/netplan"
 	"gpuworks.ai/gpuworks/internal/server/nodelabel"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -253,5 +255,76 @@ func TestRulesForSelectsOnceAndEachKindReadsItsOwn(t *testing.T) {
 	}
 	if rules, err := RulesFor(st, nil, nil); rules != nil || err != nil {
 		t.Fatalf("no node selects no rule: %#v, %v", rules, err)
+	}
+}
+
+// Sharing a sync group is not a way to copy: a peer the target shares no
+// storage-sync network with is dropped, and a peer on a storage-sync network
+// of their own goes ahead of one reached over the management network.
+func TestWithStoragePathsKeepsReachablePeersOwnNetworkFirst(t *testing.T) {
+	st := testImagePullStore(t, "planning_storage_paths")
+	node := func(uuid, ip string, rolesOff ...string) *store.Node {
+		t.Helper()
+		registerLabelled(t, st, uuid, nil)
+		if ip != "" {
+			if err := st.UpdateNodeStatus(uuid, proto.NodeStatus{Sys: proto.SysInfo{Hostname: uuid}, Network: &proto.NetInventory{
+				Management: &proto.ManagementAddress{Interface: "eth0", IP: ip},
+			}}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if len(rolesOff) > 0 {
+			if err := st.SetNodeManagementRolesOff(uuid, rolesOff); err != nil {
+				t.Fatal(err)
+			}
+		}
+		n, err := st.NodeByUUID(uuid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	target := node("target", "10.0.0.1")
+	mgmt := node("mgmt", "10.0.0.2")
+	fabric := node("fabric", "10.0.0.3")
+	closed := node("closed", "10.0.0.4", netplan.RoleStorageSync)
+	silent := node("silent", "")
+	sources := []store.Node{*mgmt, *fabric, *closed, *silent}
+	peers := []SyncPeer{{NodeID: mgmt.ID, RateLimitKiB: 100}, {NodeID: fabric.ID}, {NodeID: closed.ID}, {NodeID: silent.ID}}
+
+	storage := netplan.Network{ID: 7, Name: "storage"}
+	resolve := func([]store.Node) (netplan.Resolution, error) {
+		return netplan.Resolution{
+			{NodeID: target.ID, Role: netplan.RoleStorageSync, Network: storage, IP: "172.16.0.1"},
+			{NodeID: fabric.ID, Role: netplan.RoleStorageSync, Network: storage, IP: "172.16.0.3"},
+		}, nil
+	}
+	got, err := WithStoragePaths(resolve, target, sources, peers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []SyncPeer{{NodeID: fabric.ID, Network: "storage"}, {NodeID: mgmt.ID, RateLimitKiB: 100, Network: netplan.ManagementName}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("peers = %+v, want %+v (no path to a node that turned storage sync off or reported no address)", got, want)
+	}
+
+	// A target that turned storage sync off on the management network keeps
+	// only the peer on its storage network.
+	if err := st.SetNodeManagementRolesOff("target", []string{netplan.RoleStorageSync}); err != nil {
+		t.Fatal(err)
+	}
+	target, _ = st.NodeByUUID("target")
+	got, err = WithStoragePaths(resolve, target, sources, peers)
+	if err != nil || !reflect.DeepEqual(got, want[:1]) {
+		t.Fatalf("peers = %+v err=%v, want only the storage network peer", got, err)
+	}
+
+	// Networks that cannot be resolved are an error, not an empty answer.
+	failing := func([]store.Node) (netplan.Resolution, error) { return nil, errors.New("catalog unreadable") }
+	if _, err := WithStoragePaths(failing, target, sources, peers); err == nil {
+		t.Fatal("an unreadable network catalog was read as no peers")
+	}
+	if got, err := WithStoragePaths(resolve, target, sources, nil); err != nil || len(got) != 0 {
+		t.Fatalf("no peers in: %+v %v", got, err)
 	}
 }

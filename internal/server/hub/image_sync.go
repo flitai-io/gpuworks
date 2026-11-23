@@ -9,6 +9,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/netplan"
 	"gpuworks.ai/gpuworks/internal/server/network"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -34,7 +35,19 @@ func (h *Hub) SyncImageFromRate(ctx context.Context, imageID uint, targetNodeUUI
 	return h.syncImageDirect(ctx, imageID, targetNodeUUID, sourceNodeUUID, rateLimitKiB, false)
 }
 
+// SyncImageDirectFrom is SyncImageFromRate without the relay: the source
+// connects to the target or the copy fails. A launch copies this way, because
+// its replica pulls the image when the copy fails, and a relay through the
+// management server would keep it waiting on the slowest path there is.
+func (h *Hub) SyncImageDirectFrom(ctx context.Context, imageID uint, targetNodeUUID, sourceNodeUUID string, rateLimitKiB int64) (*store.ImageNode, error) {
+	return h.startImageSync(ctx, imageID, targetNodeUUID, sourceNodeUUID, rateLimitKiB, false, false)
+}
+
 func (h *Hub) syncImageDirect(ctx context.Context, imageID uint, targetNodeUUID, requestedSourceNodeUUID string, rateLimitKiB int64, force bool) (*store.ImageNode, error) {
+	return h.startImageSync(ctx, imageID, targetNodeUUID, requestedSourceNodeUUID, rateLimitKiB, force, true)
+}
+
+func (h *Hub) startImageSync(ctx context.Context, imageID uint, targetNodeUUID, requestedSourceNodeUUID string, rateLimitKiB int64, force, relay bool) (*store.ImageNode, error) {
 	epoch, done, ok := h.sessionWork.begin()
 	if !ok {
 		return nil, errSessionsStopped
@@ -138,7 +151,7 @@ func (h *Hub) syncImageDirect(ctx context.Context, imageID uint, targetNodeUUID,
 	confirmationWait := imageTransferConfirmWait
 	h.trackSessionWork(func() {
 		defer stopEpoch()
-		h.runDirectImageSync(copyCtx, image, target, sourceNode, target.ID, transferID, sizeBytes, rateLimitKiB, confirmationWait)
+		h.runDirectImageSync(copyCtx, image, target, sourceNode, target.ID, transferID, sizeBytes, rateLimitKiB, confirmationWait, relay)
 	})
 	return targetRow, nil
 }
@@ -173,7 +186,18 @@ func (h *Hub) RetryImageSync(ctx context.Context, imageID uint, targetNodeUUID s
 	return h.syncImageDirect(ctx, imageID, targetNodeUUID, source.UUID, row.LastRateLimitKiB, true)
 }
 
-func (h *Hub) runDirectImageSync(ctx context.Context, image *store.Image, target, source *store.Node, nodeID uint, transferID string, sizeBytes, rateLimitKiB int64, confirmationWait time.Duration) {
+// imageCopyRequest is one attempt of a copy between two nodes. It may fall
+// back to the relay only when the copy was started as one that may (relay)
+// and both nodes let the management network carry storage sync.
+func imageCopyRequest(image *store.Image, source, target *store.Node, path netplan.StoragePath, transferID string, sizeBytes, rateLimitKiB int64, relay bool) proto.ImageSyncCopyRequest {
+	return proto.ImageSyncCopyRequest{
+		TransferID: transferID, ImageRef: image.ImageRef, SourceNodeUUID: source.UUID, TargetNodeUUID: target.UUID,
+		SourceIP: path.SourceIP, TargetIP: path.TargetIP, ExpectedBytes: sizeBytes, RateLimitKBs: int(rateLimitKiB),
+		AllowRelay: relay && network.PeerRelayAllowed(source, target),
+	}
+}
+
+func (h *Hub) runDirectImageSync(ctx context.Context, image *store.Image, target, source *store.Node, nodeID uint, transferID string, sizeBytes, rateLimitKiB int64, confirmationWait time.Duration, relay bool) {
 	defer func() {
 		h.imageSyncMu.Lock()
 		cancel := h.imageSyncOwners[transferID]
@@ -190,12 +214,16 @@ func (h *Hub) runDirectImageSync(ctx context.Context, image *store.Image, target
 			_ = h.store.FailImageSyncIfActive(image.ID, nodeID, transferID, err.Error())
 			return
 		}
-		result, err = h.copyImagePath(ctx, proto.ImageSyncCopyRequest{TransferID: transferID, ImageRef: image.ImageRef, SourceNodeUUID: source.UUID, TargetNodeUUID: target.UUID, SourceIP: path.SourceIP, TargetIP: path.TargetIP, ExpectedBytes: sizeBytes, RateLimitKBs: int(rateLimitKiB), AllowRelay: network.PeerRelayAllowed(source, target)}, func() {
+		result, err = h.copyImagePath(ctx, imageCopyRequest(image, source, target, path, transferID, sizeBytes, rateLimitKiB, relay), func() {
 			_, _ = h.store.MarkImageSyncWaiting(image.ID, nodeID, transferID, messages.PeerRelayBusy().Error(), messages.ErrorPeerRelayBusy)
 		})
 		if !errors.Is(err, messages.ErrPeerRelayBusy) {
 			if err != nil {
-				_ = h.store.FailImageSyncIfActive(image.ID, nodeID, transferID, err.Error())
+				code := ""
+				if errors.Is(err, errDirectPeerConnection) {
+					code = messages.ErrorPeerDirectConnectFailed
+				}
+				_ = h.store.FailImageSyncIfActiveCode(image.ID, nodeID, transferID, err.Error(), code)
 				return
 			}
 			break

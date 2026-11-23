@@ -15,9 +15,13 @@ import (
 
 // imagePeerSyncer is the hub's node-to-node image copy, which the controller
 // starts for a node that lacks a deployment's image when a node of its sync
-// group has it.
+// group has it. The copy a launch starts connects the two nodes directly and
+// is never relayed through the management server (SyncImageDirectFrom); a
+// relayed copy a person started and the relay queued is resumed as it was
+// (SyncImageFromRate).
 type imagePeerSyncer interface {
 	SyncImageFromRate(ctx context.Context, imageID uint, targetNodeUUID, sourceNodeUUID string, rateLimitKiB int64) (*store.ImageNode, error)
+	SyncImageDirectFrom(ctx context.Context, imageID uint, targetNodeUUID, sourceNodeUUID string, rateLimitKiB int64) (*store.ImageNode, error)
 }
 
 // peerCooldown is how long a pair of nodes that failed to copy to one another
@@ -27,19 +31,27 @@ type imagePeerSyncer interface {
 const peerCooldown = 3 * time.Hour
 
 // pairCooldown remembers node pairs whose automatic copy failed, in memory: a
-// server restart forgets them, which costs one more failed attempt.
+// server restart forgets them, which costs one more failed attempt. A target
+// paired with managementPeers could not be connected to over the management
+// network.
 type pairCooldown struct {
 	mu    sync.Mutex
 	until map[[2]uint]time.Time
 }
 
-func (p *pairCooldown) cool(source, target uint, now time.Time) {
+// managementPeers stands for every holder a target reaches over the
+// management network. No node has this id.
+const managementPeers uint = 0
+
+// cool rules the pair out for peerCooldown from failedAt, the time the copy
+// failed: a failure read again on a later launch does not start the wait over.
+func (p *pairCooldown) cool(source, target uint, failedAt time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.until == nil {
 		p.until = map[[2]uint]time.Time{}
 	}
-	p.until[[2]uint{source, target}] = now.Add(peerCooldown)
+	p.until[[2]uint{source, target}] = failedAt.Add(peerCooldown)
 }
 
 func (p *pairCooldown) cooling(source, target uint, now time.Time) bool {
@@ -104,8 +116,14 @@ type imageDelivery struct {
 // keyed by catalog row); any other image is always pulled.
 //
 // A copy that fails is not retried with that pair for peerCooldown; the
-// replica then pulls the image itself. Nothing here is the deployment's
-// choice, so nothing is waited for that could not arrive.
+// replica then pulls the image itself. A source that could not connect to the
+// target over the management network rules out the other holders reached
+// over it as well: a node that one of them could not connect to (a cloud
+// container behind its own NAT) is as far from the next, and trying each in
+// turn only delays the pull. A copy that failed any other way (the source
+// went away, the load failed, someone cancelled it) says nothing about the
+// next holder. Nothing here is the deployment's choice, so nothing is waited
+// for that could not arrive.
 func (c *Controller) deploymentImageDelivery(ctx context.Context, dep *store.Deployment, node *store.Node) imageDelivery {
 	if dep == nil || node == nil {
 		return imageDelivery{present: true}
@@ -140,7 +158,12 @@ func (c *Controller) deploymentImageDelivery(ctx context.Context, dep *store.Dep
 				return imageDelivery{}
 			}
 			if row.Source == "peer" && row.SourceNodeID != 0 {
-				c.peerCool.cool(row.SourceNodeID, node.ID, now)
+				c.peerCool.cool(row.SourceNodeID, node.ID, row.UpdatedAt)
+				if row.TransferErrorCode == messages.ErrorPeerDirectConnectFailed {
+					if path, e := c.networks.StoragePath(row.SourceNodeID, node.ID); e == nil && path.Network == netplan.ManagementName {
+						c.peerCool.cool(managementPeers, node.ID, row.UpdatedAt)
+					}
+				}
 			}
 		}
 	}
@@ -150,7 +173,7 @@ func (c *Controller) deploymentImageDelivery(ctx context.Context, dep *store.Dep
 		c.imageWaits.forget(dep.ID)
 		return imageDelivery{present: true}
 	}
-	if _, err := syncer.SyncImageFromRate(ctx, image.ID, node.UUID, source.UUID, rate); err != nil {
+	if _, err := syncer.SyncImageDirectFrom(ctx, image.ID, node.UUID, source.UUID, rate); err != nil {
 		if errors.Is(err, messages.ErrPeerRelayBusy) {
 			c.imageWaits.set(dep.ID, image.ID)
 			return imageDelivery{}
@@ -166,8 +189,10 @@ func (c *Controller) deploymentImageDelivery(ctx context.Context, dep *store.Dep
 }
 
 // imageCopySource picks the node to copy an image to target from: an online
-// node of target's sync groups that has it, preferring one on the same storage
-// sync network, skipping pairs that failed recently.
+// node of target's sync groups that has it and shares a storage-sync path with
+// it, preferring one on the same storage sync network, skipping pairs that
+// failed recently and, after a holder could not connect over it, the
+// management network.
 func (c *Controller) imageCopySource(imageID uint, target *store.Node, now time.Time) (*store.Node, int64) {
 	held, err := c.store.ImageHolders(imageID, target.ID)
 	if err != nil {
@@ -198,32 +223,24 @@ func (c *Controller) imageCopySource(imageID uint, target *store.Node, now time.
 		return nil, 0
 	}
 	peers, err := planning.SyncPeersFor(c.store, c.networks.Resolve, target, holders)
-	if err != nil || len(peers) == 0 {
+	if err == nil {
+		// A peer on a storage sync network it shares with the target goes
+		// first; one it shares no path with is no source at all.
+		peers, err = planning.WithStoragePaths(c.networks.Resolve, target, holders, peers)
+	}
+	if err != nil {
 		return nil, 0
 	}
-	byID := make(map[uint]*store.Node, len(holders))
-	for i := range holders {
-		byID[holders[i].ID] = &holders[i]
-	}
-	best := peers[0]
-	if len(peers) > 1 {
-		// A peer on the target's own storage sync network goes first; the
-		// networks of all of them are resolved in one pass.
-		nodes := make([]store.Node, 0, len(peers)+1)
-		nodes = append(nodes, *target)
-		for _, peer := range peers {
-			nodes = append(nodes, *byID[peer.NodeID])
+	overManagement := !c.peerCool.cooling(managementPeers, target.ID, now)
+	for _, peer := range peers {
+		if peer.Network == netplan.ManagementName && !overManagement {
+			continue
 		}
-		if resolved, err := c.networks.Resolve(nodes); err == nil {
-			if own, ok := resolved.For(target.ID, netplan.RoleStorageSync); ok && !own.IsManagement() {
-				for _, peer := range peers {
-					if theirs, ok := resolved.For(peer.NodeID, netplan.RoleStorageSync); ok && !theirs.IsManagement() && theirs.Network.ID == own.Network.ID {
-						best = peer
-						break
-					}
-				}
+		for i := range holders {
+			if holders[i].ID == peer.NodeID {
+				return &holders[i], peer.RateLimitKiB
 			}
 		}
 	}
-	return byID[best.NodeID], best.RateLimitKiB
+	return nil, 0
 }
