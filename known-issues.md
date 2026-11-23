@@ -7,6 +7,7 @@
 条件变化（真机可用、用户实际踩到、影响面扩大）时迁回 `todo.md`。
 
 | 问题 | 影响 | 搁置理由 |
+| --- | --- | --- |
 | T20：`Model.WeightBytes` 沿用声明值，下载后不回写实际大小 | 目录/元数据声明错误时长期停留，planning 的显存与磁盘估算一直读错误值且无告警 | 声明值只用于调度前粗筛，真正放不下由引擎启动失败兜底；目录 spec 的声明值至今未见错误 |
 | T41：删除节点副本不等待节点间模型同步的接收端结束 | 删除之后被取消的同步仍可能把临时目录改名回来，磁盘上留下 server 已无记录的模型目录 | 未证实、未复现；窗口是删除与 rename 之间，后果是一份孤立目录占盘，不影响正确性 |
 | T40：昇腾 vcann-rt 与分区探针拼 `LD_LIBRARY_PATH` 不去重、不丢空段 | 重复项只是冗余；空段让加载器搜当前目录 | 空段是镜像自带的，不是本仓库引入的；去掉它等于替镜像作者改写环境，需要昇腾机器实测后再决定 |
@@ -24,6 +25,7 @@
 | T107：用量分析按卡型筛选逐卡列出时，漏掉从仍在的节点上拔掉、而该节点已没有这种卡的卡 | 这张卡的历史只在汇总行与总计里，逐卡列表与热力图（按单卡）里没有它，两边差这一张 | 修它要在只按卡型筛选时扫这个卡型全部卡的统计行，规模大时代价高；触发要换卡且换成别的型号，节点删除的情况已覆盖 |
 | T108：agent 状态目录在宿主 `/tmp` 下时，udocker 工作负载找不到宿主路径下的库 | runveil 给容器私有 `/tmp` 的绑定盖住了放在 `ROOT/tmp/...` 下的宿主路径回环链接，引擎按宿主路径打开 `libcudart` 等库时失败 | 只在状态目录装在宿主 `/tmp` 下时触发；安装脚本与各云厂商一键安装都默认 `/opt/gpuworks`，测试夹具也已改用 `/opt` |
 | T109：Strata 的宿主机内存不参与准入 | 低内存节点可能通过每卡 12 GiB 显存检查后，在 setup 阶段失败或产生内存压力 | 本次仅发布目录规格；可先核对可用内存、标记合适节点并在部署时手动选择 |
+| GWKS-186：910C runner 的旧缓存及部署快照 | 升级后，同一 runner 标签仍可能指向上游基础镜像 | 使用发布镜像校正节点缓存，并用更新后的模板重建保留旧来源的部署。见[恢复步骤](#gwks-186-昇腾-910c-runner-镜像缓存与旧部署) |
 
 ## T20. 模型权重字节对账：下载完成后不回写实际大小
 
@@ -369,3 +371,59 @@
 ### 验收条件
 
 - 编辑多机或 PD 部署时，改成无法区分 rank 的命令被拒绝并指向命令字段；命令未变的存量部署照常保存；有对应的 API 测试。
+
+## GWKS-186. 昇腾 910C runner 镜像缓存与旧部署
+
+`v26.11.0` 至 `v26.11.4` 的内置目录，以及自提交 `621391e79` 起、
+尚未合入 GWKS-186 修复的开发版目录，曾将
+`quay.nju.edu.cn/ascend/vllm-ascend:v0.30.0rc2-a3` 列为
+`gpuworks/gpuworks-runner:cann9.2-a3-vllm0.30.0rc2-r1` 的拉取来源。
+如果节点成功从该来源拉取，agent 会将基础镜像打上 runner 标签。
+升级目录后，agent 仍会按标签复用本地缓存。
+
+当前有八个模板的 910C A3 配方使用同一标签。
+
+- 原目录中声明过基础镜像来源的五个模板为
+  `deepseek-ai/deepseek-v4.1-flash-1017`、`deepseek-ai/deepseek-v4.1-flash`、
+  `deepseek-ai/deepseek-v4-flash-0731`、`minimaxai/minimax-m3`
+  和 `qwen/qwen3.5-397b-a17b`。
+- 还会复用同一节点缓存的三个模板为
+  `openai/gpt-oss-20b`、`qwen/qwen3.6-35b-a3b` 和 `qwen/qwq-32b`。
+
+开发版从 `621391e79` 到合入 `1d1b20fc7` 前，`zai-org/glm-5.3-flash` 的
+910C A3 配方也有同样的来源配置。排查时应包含这段期间创建的 GLM 旧部署。
+
+Docker Hub、Quay 和南京大学 Quay 镜像站上的发布镜像 OCI 索引摘要均为
+`sha256:9fa23b63b9058969698f3a6be781e568e7420c714c1362fc408b82c01109db06`。
+
+| 平台 | Config digest | 平台 manifest digest |
+| --- | --- | --- |
+| `linux/amd64` | `sha256:e17ef64bec5d0c03a69cdfa843fb1a7beee066733b773465a4294af1171dae81` | `sha256:48bc61d54d8658c8999ceb205430c53e6a1973f67adc08b2bbb1cb46b25ef984` |
+| `linux/arm64` | `sha256:131f9b344ebb397c46fcc080f0f5fbd0b393aa479cdd3f4bc99d7b260b28fe45` | `sha256:3454fbdf36dcb58715d27d764505dee61df6808d3fbfb6b1ce05f8666961ad67` |
+
+1. 在相关计算节点上，将 `agent_docker_host` 设为 GPUWorks agent 使用的 Docker
+   daemon 端点，然后运行以下命令。
+
+   ```sh
+   runner='gpuworks/gpuworks-runner:cann9.2-a3-vllm0.30.0rc2-r1'
+   docker --host "$agent_docker_host" info --format '{{.DriverStatus}}'
+   docker --host "$agent_docker_host" image inspect --format '{{.Os}}/{{.Architecture}} {{.Id}}' "$runner"
+   ```
+
+   先确认命令显示的平台与目标节点匹配。如果 `DriverStatus` 中包含
+   `io.containerd.snapshotter.v1`，将 `.Id` 与上面的 OCI 索引摘要或表中对应平台的
+   manifest digest 比较。经典镜像存储使用对应平台的 config digest 核对 `.Id`。
+   使用 containerd 镜像存储时，请使用保留发布描述符的已核实归档。导入时若重建
+   manifest 或索引，即使镜像 config 一致，显示的 ID 也可能变化。
+
+2. 标签不存在或无法确认 ID 时，为目标架构准备发布镜像的归档，导出时保留
+   `$runner` 对应的标签。在同一节点上将 `runner_archive` 设为该归档路径，再执行
+   `docker --host "$agent_docker_host" load -i "$runner_archive"`。
+   若通过 GPUWorks 使用已登记在该镜像上的归档 URL，向
+   `POST /api/v1/images/{id}/nodes/{uuid}/sync` 提交
+   `{"source":"url","archive_url":"<已核实的归档 URL>","force":true}` 并等待传输完成。
+   普通归档同步会跳过已标记镜像存在的节点。完成后重复检查镜像 ID。
+
+3. 旧部署保留创建时的镜像来源快照。扩容或迁移到缓存未命中的节点时，
+   仍可能从旧来源拉到基础镜像。用更新后的模板重新创建保留旧来源的部署，
+   并对使用过错误镜像的实例安排切换。
