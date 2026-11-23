@@ -45,7 +45,8 @@ api.detectedInferenceTemplateChips = async () => ({items:chips});
 api.inferenceTemplateChips = async () => ({items:chips});
 api.inferenceTemplate = async id => {
   const model = models.find(item => item.model_id === id);
-  return {...model, specs:[...model.specs, {...model.specs[0], name:'MOCK-second-profile'}]};
+  const kunlun = model.specs.find(spec => spec.gpus.vendor === 'kunlunxin');
+  return {...model, specs:[...model.specs, {...kunlun, id:vendors.length, name:'MOCK-second-profile'}]};
 };
 const drawer = new URLSearchParams(location.search).has('drawer');
 const monitor = new URLSearchParams(location.search).has('monitor');
@@ -77,7 +78,11 @@ class TemplateCatalogLayout(unittest.TestCase):
             raise RuntimeError("Run npm run build in ui first")
         cls.css = "\n".join(path.read_text() for path in css_files)
         cls.playwright = sync_playwright().start()
-        cls.browser = cls.playwright.chromium.launch(headless=True)
+        chrome = os.environ.get("CHROME_PATH")
+        cls.browser = cls.playwright.chromium.launch(
+            headless=True, executable_path=chrome,
+            channel=None if chrome else os.environ.get("UI_BROWSER_CHANNEL"),
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -117,22 +122,23 @@ class TemplateCatalogLayout(unittest.TestCase):
             target.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(target / name), full_page=True)
 
-    def test_vendor_marks_follow_the_theme(self):
+    def assert_kunlun_mark(self, mark, dark):
         transparent = 'rgba(0, 0, 0, 0)'
+        image = mark.locator('img')
+        expect(image).to_be_visible()
+        expect(mark).to_have_css('background-color', transparent)
+        expect(image).to_have_css('background-color', transparent)
+        expect(image).to_have_css('filter', 'none' if dark else 'invert(1) hue-rotate(180deg) brightness(0.8)')
+
+    def test_vendor_marks_follow_the_theme(self):
         for dark in (False, True):
             with self.subTest(dark=dark):
                 page = self.render_page(1280, dark=dark)
                 groups = page.locator('.template-hardware-group')
                 kunlun = groups.locator('.vendor-logo-kunlunxin .vendor-mark')
                 nvidia = groups.locator('.vendor-logo-nvidia .vendor-mark')
-                expect(kunlun.locator('img')).to_be_visible()
-                expect(kunlun).to_have_css('background-color', transparent)
-                expect(kunlun.locator('img')).to_have_css('background-color', transparent)
-                if dark:
-                    expect(kunlun.locator('img')).to_have_css('filter', 'none')
-                else:
-                    expect(kunlun.locator('img')).not_to_have_css('filter', 'none')
-                expect(nvidia).to_have_css('background-color', 'rgb(255, 255, 255)' if dark else transparent)
+                self.assert_kunlun_mark(kunlun, dark)
+                expect(nvidia).to_have_css('background-color', 'rgb(255, 255, 255)' if dark else 'rgba(0, 0, 0, 0)')
                 expect(nvidia.locator('img')).to_have_css('filter', 'none')
 
     def test_dense_catalog_owns_scroll_and_keeps_names_and_logos(self):
@@ -296,21 +302,24 @@ class TemplateCatalogLayout(unittest.TestCase):
             with self.subTest(dark=dark):
                 page = self.render_page(1280, dark=dark)
                 page.locator('[data-slot="table-body"] a[href^="/inference-templates/"]').first.click()
-                group = page.locator('.template-spec-vendor-group').filter(has=page.locator('.vendor-logo-nvidia'))
+                group = page.locator('.template-spec-vendor-group').filter(has=page.locator('.vendor-logo-kunlunxin'))
+                header = group.locator('header')
                 profiles = group.locator('.template-spec-list')
                 rows = profiles.locator('article')
                 expect(rows).to_have_count(2)
                 # Resolve semantic colours in the page so palette changes do
                 # not require updating hard-coded RGB values in this test.
-                surface, border = profiles.evaluate("""el => {
+                raised, surface, border = group.evaluate("""el => {
                     const probe = document.createElement('span');
-                    probe.style.cssText = 'background:var(--surface-floating);color:var(--border-subtle)';
+                    probe.style.cssText = 'color:var(--surface-raised);background:var(--surface-floating);border-color:var(--border-subtle)';
                     el.append(probe);
                     const style = getComputedStyle(probe);
-                    const colors = [style.backgroundColor, style.color];
+                    const colors = [style.color, style.backgroundColor, style.borderLeftColor];
                     probe.remove();
                     return colors;
                 }""")
+                expect(header).to_have_css('background-color', raised)
+                self.assert_kunlun_mark(header.locator('.vendor-mark'), dark)
                 expect(profiles).to_have_css('background-color', surface)
                 expect(profiles).to_have_css('border-left-color', border)
                 expect(rows.first).to_have_css('border-bottom-color', border)

@@ -210,7 +210,7 @@ func bar(c color.NRGBA) *image.NRGBA {
 	return img
 }
 
-var testPlates = vendorPlates{light: rgb{1, 1, 1}, dark: rgb{0x25 / 255.0, 0x2d / 255.0, 0x3c / 255.0}}
+var testPlates = vendorPlates{light: rgb{1, 1, 1}, dark: rgb{0x29 / 255.0, 0x29 / 255.0, 0x29 / 255.0}}
 
 // TestVendorInkCheckRejectsIllegibleMarks: each fixture breaks the rule its
 // message must name, and the message says how to fix it.
@@ -226,11 +226,12 @@ func TestVendorInkCheckRejectsIllegibleMarks(t *testing.T) {
 		data             []byte
 		want             []string
 	}{
-		{"dark mark declared light", "dark.png", "light", encodePNG(t, bar(color.NRGBA{0x10, 0x10, 0x10, 0xff})), []string{`declared "light" ink`, "100% of its ink weight is dark", `declare it "dark"`, "on --vendor-logo-dark"}},
+		{"dark mark declared light", "dark.png", "light", encodePNG(t, bar(color.NRGBA{0x10, 0x10, 0x10, 0xff})), []string{`declared "light" ink`, "100% of its ink weight is dark", `declare it "dark"`, "on .dark --surface-raised"}},
 		{"light mark declared dark", "light.png", "dark", encodePNG(t, bar(color.NRGBA{0xff, 0xff, 0xff, 0xff})), []string{`declared "dark" ink`, "is light", `declare it "light"`, "below 1.5:1 contrast on --vendor-logo-light"}},
 		{"low-contrast grey mark", "grey.png", "dark", encodePNG(t, bar(color.NRGBA{0xa0, 0xa0, 0xa0, 0xff})), []string{"only 0% of its ink weight reaches 3:1 contrast on --vendor-logo-light", "weighted median 2.6"}},
 		{"faint share of a png", "faint.png", "dark", encodePNG(t, faint), []string{"of its ink weight is below 1.5:1", "at most 2% may be"}},
 		{"near-white svg declared dark", "pale.svg", "dark", []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 20"><path fill="#f4f4f4" d="M0 0C50 5 50 5 100 0V20H0Z"/><path fill="#000" d="M10 5l5 5l-5 5z"/></svg>`), []string{`declared "dark" ink`, `fill "#f4f4f4" is 1.10:1`, "every painted colour must reach 1.5:1"}},
+		{"pale svg with a faint filtered accent", "accent.svg", "light", []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect x="0" y="0" width="3" height="10" fill="white"/><rect x="3" y="0" width="7" height="10" fill="#00e000" opacity=".5"/></svg>`), []string{"only 30% of its ink weight reaches 3:1 contrast on --vendor-logo-light after the light-theme filter"}},
 		{"svg gradient fill", "grad.svg", "dark", []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path fill="url(#g)" d="M0 0L9 9H0z"/><path d="M1 1l3 3l-3 3z"/></svg>`), []string{`fill "url(#g)" is not a colour the check can read`}},
 		{"svg text", "text.svg", "dark", []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text>X</text><path d="M1 1l3 3l-3 3z"/></svg>`), []string{"a filled <text>", "outlined paths"}},
 		{"svg with nothing drawn", "empty.svg", "dark", []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><defs><path d="M0 0L9 9H0z"/></defs></svg>`), []string{"no ink the check can measure"}},
@@ -343,13 +344,15 @@ func TestVendorMarkDrawerProblems(t *testing.T) {
 }
 
 func TestParseVendorPlates(t *testing.T) {
-	p, err := parseVendorPlates([]byte(":root {\n  --vendor-logo-light: #fff;\n  --vendor-logo-dark: #252d3c;\n}"))
+	css := []byte(":root { --vendor-logo-light: #fff; }")
+	theme := []byte(":root { --surface-raised: #eee; } .dark { --surface-raised: #292929; }")
+	p, err := parseVendorPlates(css, theme)
 	if err != nil || p != testPlates {
-		t.Fatalf("plates = %v, %v", p, err)
+		t.Fatalf("surface references = %v, %v", p, err)
 	}
-	_, err = parseVendorPlates([]byte(":root { --vendor-logo-light: #fff; --vendor-logo-dark: var(--x); }"))
-	if err == nil || !strings.Contains(err.Error(), "no --vendor-logo-dark") || !strings.Contains(err.Error(), "fix:") {
-		t.Fatalf("missing dark plate: %v", err)
+	_, err = parseVendorPlates(css, []byte(".dark { --surface-raised: var(--x); }"))
+	if err == nil || !strings.Contains(err.Error(), "no opaque hex colour for .dark --surface-raised") {
+		t.Fatalf("missing dark reference surface: %v", err)
 	}
 }
 

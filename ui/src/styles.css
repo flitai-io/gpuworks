@@ -5,7 +5,6 @@
 :root {
   /* Reference surfaces for vendor artwork contrast. */
   --vendor-logo-light: #fff;
-  --vendor-logo-dark: #252d3c;
   --assistant-panel-width: 480px;
   color: var(--fg-muted);
   background: var(--surface-base);

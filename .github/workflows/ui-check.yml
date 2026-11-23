@@ -65,6 +65,9 @@ jobs:
             export UI_CHECK_BASE_REF="origin/$BASE_REF"
             export UI_CHECK_WIDTHS=1024
           fi
+          python3 -m venv "$RUNNER_TEMP/ui-check-python"
+          export UI_BROWSER_PYTHON="$RUNNER_TEMP/ui-check-python/bin/python"
+          "$UI_BROWSER_PYTHON" -m pip install -r ui/tests/browser/requirements.txt
           ./scripts/ui_check_ci.sh
       - uses: actions/upload-artifact@v5
         if: always()

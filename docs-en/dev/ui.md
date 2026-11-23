@@ -117,13 +117,21 @@ report (`ui-check-report/index.html`, a job artifact) is for a reviewer to
 confirm intended changes. Locally:
 
 ```sh
+python3 -m venv "$HOME/.venvs/gpuworks-ui-check"
+export UI_BROWSER_PYTHON="$HOME/.venvs/gpuworks-ui-check/bin/python"
+"$UI_BROWSER_PYTHON" -m pip install -r ui/tests/browser/requirements.txt
 scripts/ui_check_ci.sh                                    # every page
 UI_CHECK_BASE_REF=origin/master UI_CHECK_COMPARE=1 scripts/ui_check_ci.sh
 ```
 
-It needs Go, Node and Chrome (or `CHROME_PATH`), rebuilds the UI when sources
-are newer than the build, and refuses to start when its ports (8899, 8900) are
-taken. A new page, drawer, tab or header dialog is covered without registering
+Local checks require Go, Node, Python Playwright and Chrome or Chromium.
+Create the virtual environment and install its dependencies once. In later shells,
+set `UI_BROWSER_PYTHON` to that interpreter. The template checks and page walk
+share a browser from `PATH`, falling back to the installed stable Chrome channel.
+Set `CHROME_PATH` to an absolute executable path to select a specific browser.
+
+The check rebuilds the UI when sources are newer than the build, and refuses to
+start when its ports (8899, 8900) are taken. A new page, drawer, tab or header dialog is covered without registering
 it; flows behind other buttons (row menus, multi-step forms) are not walked
 yet and still need a person or a dedicated E2E case.
 
@@ -174,8 +182,8 @@ transparent canvas: SVG (preferred) or PNG with an alpha channel, with no
 padding box, plate or background colour of its own.
 
 The `VENDOR_LOGO_INK` entry records the original ink tone. Light artwork
-such as Kunlunxin's white wordmark is transparent on both themes. The
-light theme darkens the ink with a CSS filter. Dark artwork keeps its
+such as Kunlunxin's white wordmark uses no background plate in either theme.
+The light theme darkens the ink with a CSS filter. Dark artwork keeps its
 original colours and uses a light plate on the dark theme. Draw
 a mark only with `VendorMarkImage` from `ui/src/components/VendorLogo.tsx`
 (`VendorLogo` and the dashboard's hardware panel both do): it wraps the image
@@ -201,9 +209,10 @@ that names `VENDOR_ASSETS` or a `/vendor-logos/` path.
 
 `TestVendorLogoInkReadsOnItsSurfaces` measures the original artwork with WCAG 2
 relative luminance and contrast. It checks dark ink against
-`--vendor-logo-light` and light ink against `--vendor-logo-dark`.
-`make test-ui-template-catalog-layout` checks the rendered Kunlunxin and
-NVIDIA marks on both themes in Chromium. A PNG's ink is every pixel at alpha 128/255 or
+`--vendor-logo-light` and pale ink against the dark theme’s `--surface-raised`.
+It also applies the light-theme filter to pale ink and checks the result
+against `--vendor-logo-light`. The UI check job runs the Chromium regression
+for the rendered Kunlunxin and NVIDIA marks in both themes. A PNG's ink is every pixel at alpha 128/255 or
 more, weighted by alpha and composited over the surface; an SVG's ink is each
 drawn, filled shape's colour, weighted by the area of the shape's bounding
 box (for a path, the box around its command end points; curve control points
@@ -393,10 +402,10 @@ Resource names that open a drawer use the native link button variant (`variant="
 <!-- translation-source-sha256: 2f7226da7b426ecd3d1ea5fc1e020126bc9b0c877c2822777495277663eb857b # UI development -->
 <!-- translation-source-sha256: 13c5c07cffc3a9231089d41ecf45a179558c616141e1c57672f4acf10a11c2c6 ## Directories and public APIs -->
 <!-- translation-source-sha256: e1a59e9f1ae0e2db365d11425279f53bad0d4520718a02e31139ee920be91443 ## Pinned source and synchronization -->
-<!-- translation-source-sha256: f8640be0d16881c18586a2f63af485c8f45eb71700b0843173a7a75bfb1b8943 ## Verification -->
+<!-- translation-source-sha256: 4e6ecdfae8ebd5c05e8c7ff1dd34de61dc226b9b89faa8094a0d4a2c60f0c359 ## Verification -->
 <!-- translation-source-sha256: c7b61b2ede38b04e51393df4490c765efbc0d8ea7a17d80b16538e355c3e829e ## Migration close-out checklist -->
 <!-- translation-source-sha256: 1318afa013ade9be7b3751ffcdccc06b442a512cef5b728790ea7adc728bd6d9 ## Page look -->
-<!-- translation-source-sha256: 5b230a631131304ac216124761b67ea8c8bd36c14080539fc43294d3243e8d86 ## Vendor marks -->
+<!-- translation-source-sha256: 4b30836bdd43985503aafd5807e275e3b328f812a2a3038781bd808b5bbeeae8 ## Vendor marks -->
 <!-- translation-source-sha256: fddaafffae7e564494407df1c976f2beec4c1c8827cc55a1fc620c0d00eafb0c ## Copy on the page -->
 <!-- translation-source-sha256: 4f94d2593a004f64b16607597a4142b04e86ca85affe710e12aabd04fffe4721 ### Problems and what to do -->
 <!-- translation-source-sha256: a212225b624adfa8421d2175bc828d4203339d58411493c706eeb3c8afd57cd2 ### Reviewing copy -->

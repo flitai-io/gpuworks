@@ -334,7 +334,7 @@ ui-check:
     - sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
     - mkdir -p .cache/apt/archives/partial && rm -f /etc/apt/apt.conf.d/docker-clean
     - apt-get -qq -o Acquire::http::Timeout=20 -o Acquire::Retries=2 update
-    - apt-get -qq -o Acquire::http::Timeout=20 -o Acquire::Retries=2 -o Dir::Cache::Archives="$CI_PROJECT_DIR/.cache/apt/archives" install -y --no-install-recommends chromium fonts-noto-cjk xz-utils >/dev/null
+    - apt-get -qq -o Acquire::http::Timeout=20 -o Acquire::Retries=2 -o Dir::Cache::Archives="$CI_PROJECT_DIR/.cache/apt/archives" install -y --no-install-recommends chromium fonts-noto-cjk python3-venv xz-utils >/dev/null
     - export CHROME_PATH=$(command -v chromium)
     - |
       node_tar=node-v22.16.0-linux-x64.tar.xz
@@ -351,6 +351,9 @@ ui-check:
         # first and English labels run longest; scheduled runs walk 1440 too.
         export UI_CHECK_WIDTHS=1024
       fi
+    - python3 -m venv "$CI_PROJECT_DIR/.cache/ui-check-python"
+    - export UI_BROWSER_PYTHON="$CI_PROJECT_DIR/.cache/ui-check-python/bin/python"
+    - '"$UI_BROWSER_PYTHON" -m pip install -r ui/tests/browser/requirements.txt'
     - ./scripts/ui_check_ci.sh
   artifacts:
     when: always

@@ -341,8 +341,9 @@ test-ui-agent-upgrade-results-layout:
 
 .PHONY: test-ui-template-catalog-layout
 ## Real Chromium catalog geometry at 1280/1920, both themes; build UI first.
+UI_BROWSER_PYTHON ?= python3
 test-ui-template-catalog-layout:
-	python3 -B ui/tests/browser/template_catalog_layout.py
+	$(UI_BROWSER_PYTHON) -B ui/tests/browser/template_catalog_layout.py $(UI_TEMPLATE_CATALOG_TESTS)
 
 .PHONY: test-ui-storage-image-layout
 ## Real Chromium storage/image drawer geometry with production CSS, both themes.

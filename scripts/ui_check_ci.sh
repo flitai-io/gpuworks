@@ -14,7 +14,8 @@
 #   UI_CHECK_BASE_REF=origin/master scripts/ui_check_ci.sh
 #   UI_CHECK_COMPARE=1 UI_CHECK_BASE_REF=origin/master scripts/ui_check_ci.sh
 #
-# Needs Go, Node and a Chromium (CHROME_PATH, or Chrome found by Playwright).
+# Needs Go, Node, Python Playwright and Chromium. CHROME_PATH can select an
+# existing Chromium for both browser test runners.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -38,6 +39,19 @@ for p in "$port" "$compare_port"; do
   if curl -fsS -o /dev/null --max-time 2 "http://127.0.0.1:$p/" 2>/dev/null; then echo "ui-check: port $p is in use; stop what listens there or set UI_CHECK_PORT" >&2; exit 2; fi
 done
 test -f internal/server/webui/dist/index.html || { echo "ui-check: build the UI first (make ui, or the core-ui artifact)" >&2; exit 2; }
+
+echo "ui-check: checking vendor marks and template detail colours"
+# Use one executable for both runners. Chrome can also be installed outside
+# PATH (for example on macOS), where Playwright resolves the stable channel.
+if [ -z "${CHROME_PATH:-}" ]; then
+  for name in google-chrome google-chrome-stable chromium chromium-browser; do
+    if browser=$(command -v "$name"); then
+      export CHROME_PATH="$browser"
+      break
+    fi
+  done
+fi
+UI_BROWSER_CHANNEL=chrome make test-ui-template-catalog-layout UI_TEMPLATE_CATALOG_TESTS="TemplateCatalogLayout.test_vendor_marks_follow_the_theme TemplateCatalogLayout.test_detail_profile_list_uses_theme_surface_and_dividers"
 
 routes_arg=()
 if [ -n "${UI_CHECK_BASE_REF:-}" ]; then
