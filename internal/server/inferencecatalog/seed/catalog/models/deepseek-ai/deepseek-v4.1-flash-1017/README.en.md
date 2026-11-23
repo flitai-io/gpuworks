@@ -33,10 +33,64 @@ H20 reuses these profiles without changing their spec names. Under the default p
 
 ## Ascend A3 prerequisites and measurements
 
-The A3 profile uses a complete immutable snapshot of
-`Eco-Tech/DeepSeek-V4.1-Flash-1017-w8a8` and the pinned vLLM-Ascend v0.30.0rc2
-A3 image. It declares 512 GiB of `/dev/shm` and `memlock_unlimited` so both
-shared Engram tables can be registered and pinned; the host needs enough free RAM.
+GPUWorks selects `int8-vllm-ascend-a3-tp4-dp4` by default on 910C. This
+profile needs 16 logical 910C NPUs on one node, each with at least 64 GiB.
+It declares 512 GiB of `/dev/shm` and `memlock_unlimited`. Keep enough host
+RAM free to register and pin both shared Engram tables.
+
+For offline deployment, use the published runner for the target node's CPU
+architecture and keep its canonical tag in the archive. Docker Hub, Quay,
+and Nanjing University's Quay mirror were verified against OCI index
+`sha256:9fa23b63b9058969698f3a6be781e568e7420c714c1362fc408b82c01109db06`.
+
+| Platform | Config digest | Platform manifest digest |
+| --- | --- | --- |
+| `linux/amd64` | `sha256:e17ef64bec5d0c03a69cdfa843fb1a7beee066733b773465a4294af1171dae81` | `sha256:48bc61d54d8658c8999ceb205430c53e6a1973f67adc08b2bbb1cb46b25ef984` |
+| `linux/arm64` | `sha256:131f9b344ebb397c46fcc080f0f5fbd0b393aa479cdd3f4bc99d7b260b28fe45` | `sha256:3454fbdf36dcb58715d27d764505dee61df6808d3fbfb6b1ce05f8666961ad67` |
+
+Set `agent_docker_host` to the Docker daemon endpoint used by the GPUWorks
+agent on the target node. Run the following commands.
+
+```sh
+runner='gpuworks/gpuworks-runner:cann9.2-a3-vllm0.30.0rc2-r1'
+docker --host "$agent_docker_host" info --format '{{.DriverStatus}}'
+docker --host "$agent_docker_host" image inspect --format '{{.Os}}/{{.Architecture}} {{.Id}}' "$runner"
+```
+
+Confirm the reported platform matches the target node. If `DriverStatus`
+contains `io.containerd.snapshotter.v1`, compare `.Id` with the OCI index
+digest above or the platform manifest digest in the table. With Docker's
+classic image store, compare `.Id` with the platform's config digest.
+For containerd, use a verified archive that preserves the published
+descriptors. An import that rebuilds the manifest or index can report a
+different ID even when the image config is unchanged.
+
+If the tag is missing or you cannot confirm its ID, set `runner_archive` to
+the verified archive path and run `docker --host "$agent_docker_host" load -i "$runner_archive"`.
+For a verified archive URL already configured on the GPUWorks image, send
+`{"source":"url","archive_url":"<verified archive URL>","force":true}` to
+`POST /api/v1/images/{id}/nodes/{uuid}/sync` and wait for completion.
+Ordinary archive sync skips a node that reports the image as present. Repeat
+the inspection after loading to confirm the ID. Deployments created with the
+old sources can pull the base image again on cache miss, including on a new
+replica node. Recreate those deployments from the updated template before
+scaling them.
+
+Prepare the complete ModelScope snapshot of `Eco-Tech/DeepSeek-V4.1-Flash-1017-w8a8`
+at revision `12b85455a58c7df345c1abc43934624a76bac576`. Attach the target node's
+snapshot directory to an existing ModelScope record only if its repository ID
+and revision both match. In the model actions, choose **Register an existing
+path on a node**. If no record matches, register a ModelScope model at
+that revision and attach the directory, or register the verified directory as a
+local model and set its source ID to the full repository name above.
+Select the registered model and the W8A8 profile. Check that deployment
+evaluation shows the weights are available on the target node, then send a
+chat request once the instance is ready.
+
+The GPUWorks Ascend catalog covers this 910C W8A8 profile. Eco-Tech W4A8
+requires a separately validated image and profile. The latest upstream 910C
+example uses model runner V2 and INT8 Engram.
+[vLLM-Ascend deployment guide](https://docs.vllm.ai/projects/ascend/en/latest/tutorials/models/DeepSeek-V4.1-Flash.html#51-single-node-colocated-deployment)
 
 On 2026-10-23 the profile passed platform health, `/v1/models` and a real chat
 request on 16× 910C with native Docker. That result does not extend to runveil.
