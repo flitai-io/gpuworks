@@ -9,6 +9,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/chipmatch"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
+	"gpuworks.ai/gpuworks/internal/server/imagecatalog/pullref"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -56,6 +57,29 @@ func TestBuiltinAscendSpecsRunReviewedImages(t *testing.T) {
 	}
 	if checked == 0 {
 		t.Fatal("no built-in Ascend spec runs a reviewed upstream image; the check would pass vacuously")
+	}
+}
+
+// Mirror pulls can be tagged as the canonical runner and reused by any spec.
+func TestBuiltinRunnerImageSourcesMatchCanonicalReference(t *testing.T) {
+	catalog, err := Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, model := range catalog.Models {
+		for _, spec := range model.Specs {
+			_, image, _ := strings.Cut(pullref.RefKey(spec.Image), "/")
+			repository, _, _ := strings.Cut(image, "@")
+			repository, _, _ = strings.Cut(repository, ":")
+			if repository != "gpuworks/gpuworks-runner" {
+				continue
+			}
+			for _, source := range spec.ImageSources {
+				if !strings.HasSuffix(pullref.RefKey(source), "/"+image) {
+					t.Errorf("%s/%s source %q must preserve the runner repository and version of %q", model.ModelID, spec.Name, source, spec.Image)
+				}
+			}
+		}
 	}
 }
 
