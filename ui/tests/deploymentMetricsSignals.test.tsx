@@ -96,14 +96,14 @@ test("an engine without token counters still shows token throughput, from the ga
   renderPanel();
   await waitFor(() => assert.equal(statValue("Generation Throughput"), "88.5"));
   assert.ok(screen.getByText("Prompt 12.5 tok/s · Generation 88.5 tok/s"));
-  assert.ok(chartCard("Token Throughput").querySelector("canvas"), "the token chart has data");
+  await waitFor(() => assert.ok(chartCard("Token Throughput").querySelector("canvas"), "the token chart has data"));
   // The signals the engine does report stay the engine's.
   assert.equal(statValue("Running Requests"), "2");
   assert.equal(statValue("Waiting Requests"), "1");
   assert.equal(statValue("Peak GPU Cache"), "25");
-  assert.equal(screen.queryByText("No data"), null);
+  assert.ok(!screen.queryByText("No data"));
   // Some signals are the engine's, so nothing says the engine reports none.
-  assert.equal(screen.queryByText("The engine reports no inference metrics"), null);
+  assert.ok(!screen.queryByText("The engine reports no inference metrics"));
 });
 
 test("an engine that reports tokens keeps its own per-instance lines, and a stopped replica is not part of now", async () => {
