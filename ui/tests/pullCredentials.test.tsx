@@ -82,6 +82,7 @@ test("the password is hidden by default, can be revealed by button or keyboard, 
   await user.click(within(drawer).getByRole("button", { name: text.hideSecret }));
   assert.equal(secret.type, "password");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(rows().length, 1));
   assert.deepEqual(fake.calls.find((call) => call.method === "createCredential")?.args[0], { host: "registry.example", username: "robot", secret: "hunter2" });
   assert.ok(!(document.body.textContent ?? "").includes("hunter2"));
@@ -93,6 +94,7 @@ test("the password is hidden by default, can be revealed by button or keyboard, 
   assert.equal(field.placeholder, text.secretStored);
   assert.ok(within(edit).getByText(text.secretKeepHelp));
   await user.click(within(edit).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
   assert.deepEqual(fake.calls.find((call) => call.method === "updateCredential")?.args[1], { host: "registry.example", username: "robot", secret: "" });
   assert.equal(fake.credentials[0].secret, "hunter2", "the server kept the stored secret");
@@ -106,6 +108,7 @@ test("a missing password on a new credential is refused by the server at the pas
   await user.type(within(drawer).getByLabelText(text.host), "registry.example");
   await user.type(within(drawer).getByLabelText(text.username), "robot");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(fill("pull.invalidField", { ns: "settings", field: locale.settings.pull.fields.secret, detail: i18n.t("pullSettingReason.invalid_value", { ns: "common" }) }));
   assert.equal(fake.credentials.length, 0);
   assert.ok(screen.getByRole("dialog"), "the drawer stays open");
@@ -135,6 +138,7 @@ test("save and test stores the login, then tries it from the server and shows th
   await user.type(within(drawer).getByLabelText(text.username), "robot");
   await user.type(within(drawer).getByLabelText(text.secret), "nope");
   await user.click(within(drawer).getByRole("button", { name: new RegExp(text.saveAndTest) }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(fill(common.CREDENTIAL_LOGIN_REJECTED, { host: "bad.example" }));
   assert.equal(fake.credentials.length, 1, "the login was stored first");
   assert.ok(screen.getByRole("dialog"), "the drawer stays open to fix it");
@@ -143,6 +147,7 @@ test("save and test stores the login, then tries it from the server and shows th
   await user.clear(registry);
   await user.type(registry, "good.example");
   await user.click(within(drawer).getByRole("button", { name: new RegExp(text.saveAndTest) }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(text.testOk);
   assert.equal(fake.credentials.length, 1);
   assert.equal(fake.credentials[0].host, "good.example");
@@ -196,6 +201,7 @@ test("a model site token is created with only a host and a token, and an empty u
   await user.type(host, " huggingface.co ");
   await user.type(within(drawer).getByLabelText(text.token), "hf_abc");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(rows().length, 1));
   assert.deepEqual(fake.calls.find((call) => call.method === "createCredential")?.args[0], { host: "huggingface.co", username: "", secret: "hf_abc" });
   assert.ok(rowText(rows()[0]).includes(text.typeSite));
@@ -210,6 +216,7 @@ test("a registry login needs a user name before anything is sent", async () => {
   await user.type(within(drawer).getByLabelText(text.host), "ghcr.io");
   await user.type(within(drawer).getByLabelText(text.secret), "pw");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(text.usernameRequired);
   assert.equal(fake.calls.filter((call) => call.method === "createCredential").length, 0);
 });
@@ -223,6 +230,7 @@ test("a refused host is shown at the host field", async () => {
   await user.type(within(drawer).getByLabelText(text.username), "robot");
   await user.type(within(drawer).getByLabelText(text.secret), "pw");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(fill("pull.invalidField", { ns: "settings", field: locale.settings.pull.fields.host, detail: i18n.t("pullSettingReason.invalid_value", { ns: "common" }) }));
   assert.equal(fake.credentials.length, 1);
 });
@@ -237,6 +245,7 @@ test("editing a token keeps its type and, left blank, its stored token", async (
   assert.ok(within(drawer).getByText(text.tokenKeepHelp));
   assert.equal((within(drawer).getByLabelText(text.token) as HTMLInputElement).value, "");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
   assert.deepEqual(fake.calls.find((call) => call.method === "updateCredential")?.args, [5, { host: "huggingface.co", username: "", secret: "" }]);
   assert.equal(fake.credentials[4].secret, "hf_good");
@@ -250,6 +259,7 @@ test("editing a registry login keeps its user name", async () => {
   assert.equal((within(drawer).getByLabelText(text.username) as HTMLInputElement).value, "ci-pull");
   assert.equal(within(drawer).queryByRole("radio"), null);
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
   assert.deepEqual(fake.calls.find((call) => call.method === "updateCredential")?.args, [1, { host: "harbor.corp.example", username: "ci-pull", secret: "" }]);
 });
@@ -273,6 +283,7 @@ test("save and test of a token shows the token result in the drawer", async () =
   await user.type(within(drawer).getByLabelText(text.host), "huggingface.co");
   await user.type(within(drawer).getByLabelText(text.token), "hf_ok");
   await user.click(within(drawer).getByRole("button", { name: new RegExp(text.saveAndTest) }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(text.testOkToken);
   assert.equal(fake.credentials[0].username, "");
 });

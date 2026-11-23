@@ -121,6 +121,7 @@ test("editing registry credentials can explicitly allow the login-test host whil
   const user = userEvent.setup();
   await user.click(await screen.findByRole("checkbox", { name: /registry\.internal/ }));
   await user.click(screen.getByRole("button", { name: locale.settings.pull.credentials.saveAndTest }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await screen.findByText(locale.settings.pull.credentials.testOk);
   assert.deepEqual(fixture.policy().allow_private_hosts, ["existing.internal", "registry.internal"]);
   const checks = fixture.calls.filter((call) => call.path.endsWith("/check"));
@@ -142,10 +143,12 @@ test("Docker Hub registry aliases request permission for the actual registry API
   fireEvent.change(screen.getByLabelText(locale.settings.pull.credentials.secret), { target: { value: "synthetic-password" } });
   await user.click(await screen.findByRole("checkbox", { name: /registry-1\.docker\.io/ }));
   await user.click(screen.getByRole("button", { name: locale.settings.pull.credentials.saveAndTest }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await screen.findByText(locale.settings.pull.credentials.testOk);
   assert.equal(fixture.calls.find((call) => call.path === "/api/v1/pull/credentials" && call.method === "POST")?.body?.host, "INDEX.DOCKER.IO");
   fireEvent.change(screen.getByLabelText(locale.settings.pull.credentials.host), { target: { value: " DoCkEr.Io " } });
   await user.click(screen.getByRole("button", { name: locale.settings.pull.credentials.saveAndTest }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.ok(fixture.calls.some((call) => call.path === "/api/v1/pull/credentials/13" && call.method === "PUT")));
   assert.equal(fixture.calls.find((call) => call.path === "/api/v1/pull/credentials/13" && call.method === "PUT")?.body?.host, "DoCkEr.Io");
   assert.deepEqual(fixture.policy().allow_private_hosts, ["existing.internal", "registry-1.docker.io"]);
@@ -163,6 +166,7 @@ test("a site token for Docker Hub keeps the original site host instead of using 
   await waitFor(() => assert.ok(fixture.calls.some((call) => call.path.endsWith("/check"))));
   assert.equal(screen.queryByRole("checkbox", { name: /registry-1\.docker\.io/ }), null);
   await user.click(screen.getByRole("button", { name: locale.settings.pull.action.save, exact: true }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.ok(fixture.calls.some((call) => call.path === "/api/v1/pull/credentials/14" && call.method === "PUT")));
   for (const call of fixture.calls.filter((call) => call.path.endsWith("/check"))) assert.deepEqual(call.body, { hosts: ["docker.io"] });
   assert.deepEqual(fixture.policy().allow_private_hosts, ["existing.internal"]);
@@ -184,6 +188,7 @@ for (const enteredHost of ["https://docker.io/", "https://index.docker.io/", "re
       fireEvent.change(screen.getByLabelText(site ? locale.settings.pull.credentials.token : locale.settings.pull.credentials.secret), { target: { value: "synthetic-secret" } });
       await user.click(await screen.findByRole("checkbox", { name: new RegExp(target.replaceAll(".", "\\.")) }));
       await user.click(screen.getByRole("button", { name: locale.settings.pull.action.save, exact: true }));
+      await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
       await waitFor(() => assert.ok(fixture.calls.some((call) => call.path === "/api/v1/pull/credentials" && call.method === "POST")));
       assert.deepEqual(fixture.policy().allow_private_hosts, ["existing.internal", target]);
       assert.deepEqual(fixture.calls.find((call) => call.path === "/api/v1/pull/credentials" && call.method === "POST")?.body, { host: enteredHost.trim(), username: site ? "" : "reader", secret: "synthetic-secret" });
@@ -205,6 +210,7 @@ test("a management-node site rule can allow only the selected candidate when its
   assert.ok(screen.getByRole("checkbox", { name: /source\.internal/ }));
   await user.click(allowMirror);
   await user.click(screen.getByRole("button", { name: locale.settings.pull.action.save }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.ok(fixture.calls.some((call) => call.path === "/api/v1/pull/source-rules/4" && call.method === "PUT")));
   assert.deepEqual(fixture.policy().allow_private_hosts, ["existing.internal", "mirror.internal"]);
   assert.deepEqual(fixture.calls.find((call) => call.path === "/api/v1/pull/source-rules/4")?.body, {
@@ -268,6 +274,7 @@ test("a newly created credential can allow its current host on save without leak
   fireEvent.change(screen.getByLabelText(locale.settings.pull.credentials.secret), { target: { value: "synthetic-password" } });
   await user.click(await screen.findByRole("checkbox", { name: /new-registry\.internal/ }));
   await user.click(screen.getByRole("button", { name: locale.settings.pull.action.save, exact: true }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.ok(fixture.calls.some((call) => call.path === "/api/v1/pull/credentials" && call.method === "POST")));
   assert.deepEqual(fixture.policy().allow_private_hosts, ["existing.internal", "new-registry.internal"]);
   assert.deepEqual(fixture.calls.find((call) => call.path === "/api/v1/pull/credentials")?.body, { host: "new-registry.internal:5000", username: "reader", secret: "synthetic-password" });
@@ -287,6 +294,7 @@ test("a node-only site rule creation does not modify management-node permissions
   fireEvent.change(screen.getByLabelText(locale.settings.pull.rules.endpointN.replace("{{n}}", "1")), { target: { value: "https://mirror.internal/models" } });
   await user.click(screen.getByRole("checkbox", { name: locale.settings.pull.rules.controlPlane, exact: true }));
   await user.click(screen.getByRole("button", { name: locale.settings.pull.action.save, exact: true }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.ok(fixture.calls.some((call) => call.path === "/api/v1/pull/source-rules" && call.method === "POST")));
   assert.equal(fixture.calls.find((call) => call.path === "/api/v1/pull/source-rules")?.body?.control_plane, false);
   assert.equal(fixture.calls.filter((call) => call.path === "/api/v1/server/outbound-policy" && call.method === "PUT").length, 0);
@@ -304,6 +312,7 @@ test("saving a collector configuration can allow its endpoint before the exporte
   const user = userEvent.setup();
   await user.click(await screen.findByRole("checkbox", { name: /collector\.internal/ }));
   await user.click(screen.getByRole("button", { name: locale.settings.common.save, exact: true }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await screen.findByText(locale.settings.telemetry.saved);
   assert.deepEqual(fixture.policy().allow_private_hosts, ["existing.internal", "collector.internal"]);
   assert.equal(fixture.calls.find((call) => call.path === "/api/v1/telemetry/export" && call.method === "PUT")?.body?.enabled, false);

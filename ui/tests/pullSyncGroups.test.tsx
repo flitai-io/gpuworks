@@ -116,6 +116,7 @@ test("a new group converts the MB/s the form speaks into the KiB/s the API store
   await user.click(within(drawer).getByRole("switch", { name: text.rateLimit }));
   await user.type(value, "200");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(rows().length, 3));
   assert.deepEqual(fake.calls.find((call) => call.method === "createSyncGroup")?.args[0], {
     name: "Cloud", node_requirements: { "gpuworks.ai/provider": ["runpod"] }, rate_limit_kib_s: 204800,
@@ -130,6 +131,7 @@ test("a limit that is switched on but empty is refused before any request", asyn
   await user.type(within(drawer).getByLabelText(text.name), "Cloud");
   await user.click(within(drawer).getByRole("switch", { name: text.rateLimit }));
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(text.rateRequired);
   assert.equal(fake.calls.filter((call) => call.method === "createSyncGroup").length, 0);
 });
@@ -145,6 +147,7 @@ test("a new sync group refuses zero after the rate input loses focus without sen
   await user.type(value, "0");
   await user.tab();
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   const writes = requests.filter((request) => request.method !== "GET");
   assert.deepEqual(writes, [], "a zero limit must not be replaced with a positive rate and saved");
   assert.equal(value.value, "0");
@@ -163,6 +166,7 @@ test("editing a sync group cannot save its old limit or a clamped limit when rep
   await user.keyboard("{Control>}a{/Control}0");
   await user.tab();
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   assert.deepEqual(requests.filter((request) => request.method !== "GET"), []);
   assert.equal(value.value, "0");
   await within(drawer).findByText(text.rateRequired);
@@ -180,6 +184,7 @@ test("a negative sync rate remains invalid after blur instead of becoming a save
   await user.type(value, "-5");
   await user.tab();
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   assert.deepEqual(requests.filter((request) => request.method !== "GET"), []);
   assert.equal(value.value, "-5");
   await within(drawer).findByText(text.rateRequired);
@@ -197,11 +202,13 @@ test("turning the rate limit off after an invalid zero saves an unlimited group"
   await user.type(value, "0");
   await user.tab();
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(text.rateRequired);
   assert.deepEqual(requests.filter((request) => request.method !== "GET"), []);
   await user.click(toggle);
   assert.equal(value.disabled, true);
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(rows().length, 3));
   assert.deepEqual(requests.filter((request) => request.method !== "GET"), [{
     method: "POST", path: "/api/v1/pull/sync-groups",
@@ -220,10 +227,12 @@ test("Enter rejects zero and saves a corrected small positive rate that remains 
   await user.click(within(drawer).getByRole("switch", { name: text.rateLimit }));
   const value = within(drawer).getByRole("spinbutton", { name: text.rateValue });
   await user.type(value, "0{Enter}");
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(text.rateRequired);
   assert.deepEqual(requests.filter((request) => request.method !== "GET"), []);
   await user.clear(value);
   await user.type(value, "0.005{Enter}");
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(rows().length, 3));
   assert.deepEqual(requests.filter((request) => request.method !== "GET"), [{
     method: "POST", path: "/api/v1/pull/sync-groups",
@@ -235,6 +244,7 @@ test("Enter rejects zero and saves a corrected small positive rate that remains 
   const reopened = await screen.findByRole("dialog");
   assert.equal((within(reopened).getByRole("spinbutton", { name: text.rateValue }) as HTMLInputElement).value, "0.0048828125");
   await user.click(within(reopened).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
   assert.deepEqual(requests.filter((request) => request.method !== "GET"), [{
     method: "POST", path: "/api/v1/pull/sync-groups",
@@ -253,6 +263,7 @@ test("an existing minimum positive KiB rate displays as positive and saves uncha
   const drawer = await screen.findByRole("dialog");
   assert.equal((within(drawer).getByRole("spinbutton", { name: text.rateValue }) as HTMLInputElement).value, "0.0009765625");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
   assert.deepEqual(requests.filter((request) => request.method !== "GET"), [{
     method: "PUT", path: "/api/v1/pull/sync-groups/2",
@@ -266,6 +277,7 @@ test("the server's refusal of an empty name shows at the name field", async () =
   await user.click(screen.getByRole("button", { name: new RegExp(text.new) }));
   const drawer = await screen.findByRole("dialog");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(fill("pull.invalidField", { ns: "settings", field: locale.settings.pull.fields.name, detail: locale.common.pullSettingReason.name_required }));
 });
 
@@ -276,6 +288,7 @@ test("duplicate create and rename remain at the localized name field without cha
   let drawer = await screen.findByRole("dialog");
   await user.type(within(drawer).getByLabelText(text.name), " Site B ");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   const refusal = fill("pull.invalidField", { ns: "settings", field: locale.settings.pull.fields.name, detail: locale.common.pullSettingReason.name_duplicate });
   await within(drawer).findByText(refusal);
   assert.equal(fake.groups.length, 2);
@@ -287,6 +300,7 @@ test("duplicate create and rename remain at the localized name field without cha
   await user.clear(input);
   await user.type(input, "Site B");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(refusal);
   assert.equal(fake.groups[0].name, "default-all-nodes");
 });
@@ -315,6 +329,7 @@ test("editing the seeded group keeps its name, and an untouched limit round-trip
   const name = within(drawer).getByLabelText(text.name) as HTMLInputElement;
   assert.equal(name.value, "default-all-nodes");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
   assert.deepEqual(fake.calls.find((call) => call.method === "updateSyncGroup")?.args, [1, { name: "default-all-nodes", node_requirements: {}, rate_limit_kib_s: 0 }]);
 
@@ -322,6 +337,7 @@ test("editing the seeded group keeps its name, and an untouched limit round-trip
   drawer = await screen.findByRole("dialog");
   assert.equal((within(drawer).getByLabelText(text.rateValue) as HTMLInputElement).value, "0.49");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(fake.calls.filter((call) => call.method === "updateSyncGroup").length, 2));
   assert.equal((fake.calls.filter((call) => call.method === "updateSyncGroup")[1].args[1] as { rate_limit_kib_s: number }).rate_limit_kib_s, 500);
 });
@@ -353,5 +369,6 @@ test("Escape closes the drawer and Enter in the name field saves", async () => {
   await user.click(screen.getByRole("button", { name: new RegExp(text.new) }));
   drawer = await screen.findByRole("dialog");
   await user.type(within(drawer).getByLabelText(text.name), "Lab{Enter}");
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(fake.calls.filter((call) => call.method === "createSyncGroup").length, 1));
 });

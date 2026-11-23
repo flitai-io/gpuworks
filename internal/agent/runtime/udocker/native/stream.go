@@ -26,12 +26,15 @@ type streamHandle struct {
 func (d *Downloader) startStream(ctx context.Context, desc Descriptor, path string, growth *growingFile) *streamHandle {
 	streamCtx, cancel := context.WithCancel(ctx)
 	handle := &streamHandle{cancel: cancel, done: make(chan struct{})}
+	// Pin the file before returning: a fast pull may rename it to its digest
+	// before the consumer goroutine is scheduled.
+	file, err := os.Open(path)
+	if err != nil {
+		close(handle.done)
+		return handle
+	}
 	go func() {
 		defer close(handle.done)
-		file, err := os.Open(path)
-		if err != nil {
-			return
-		}
 		defer file.Close()
 		commit, err := d.Stream(streamCtx, desc, newPrefixReader(file, growth))
 		if err != nil {

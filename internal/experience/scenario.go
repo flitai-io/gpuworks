@@ -35,7 +35,7 @@ var scenario = []node{
 		Models: []string{"Qwen/Qwen3-8B", "Qwen/Qwen3-32B", "Qwen/Qwen3.8-27B"}},
 	{Spec: server("gpu-a100-01", "10.20.0.12", nvidia("NVIDIA A100-SXM4-80GB", 8, 81920, "8.0", 400),
 		"AMD EPYC 7763 64-Core Processor", 128, 1024, "amd64"),
-		Models: []string{"Qwen/Qwen3-8B", "Qwen/Qwen3-32B", "Qwen/Qwen3.8-27B"}},
+		Models: []string{"Qwen/Qwen3-8B", "Qwen/Qwen3-32B", "Qwen/Qwen3.8-27B", "Qwen/Qwen3-0.6B", "Qwen/Qwen3-1.7B"}},
 	{Spec: server("gpu-4090-01", "10.20.0.13", nvidia("NVIDIA GeForce RTX 4090", 4, 24564, "8.9", 450),
 		"Intel(R) Xeon(R) Gold 6430", 64, 512, "amd64"),
 		Models: []string{"Qwen/Qwen3-8B"}},

@@ -111,6 +111,7 @@ test("creating a rule sends the drawer's fields and shows the live node match", 
   await waitFor(() => within(drawer).getByText(i18n.t("pull.selector.matches", { ns: "settings", count: 3, total: 6 })));
   await user.type(within(drawer).getByLabelText(text.note), "github mirror");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(rows().length, 4));
   const create = fake.calls.find((call) => call.method === "createPullSourceRule");
   assert.deepEqual(create?.args[0], {
@@ -129,12 +130,14 @@ test("a refusal from the server is shown at its field and the drawer stays open 
   await user.click(screen.getByRole("button", { name: text.new }));
   const drawer = await screen.findByRole("dialog");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   const field = i18n.t("pull.fields.match", { ns: "settings" });
   await within(drawer).findByText(i18n.t("pull.invalidField", { ns: "settings", field, detail: i18n.t("pullSettingReason.invalid_value", { ns: "common" }) }));
   assert.equal(fake.rules.length, 3, "nothing was created");
   await user.type(within(drawer).getByLabelText(text.match), "ghcr.io");
   await user.type(within(drawer).getByLabelText(fill(text.endpointN, { n: 1 })), "bad address");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(i18n.t("pull.invalidField", { ns: "settings", field: i18n.t("pull.fields.endpoints", { ns: "settings" }), detail: i18n.t("pullSettingReason.invalid_value", { ns: "common" }) }));
   assert.ok(screen.getByRole("dialog"), "still open");
 });
@@ -150,6 +153,7 @@ test("an edit starts from the stored rule and replaces it", async () => {
   await user.click(within(drawer).getByRole("button", { name: fill(text.endpointRemove, { n: 2 }) }));
   await user.click(within(drawer).getByRole("switch", { name: text.allowUpstream }));
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
   const update = fake.calls.find((call) => call.method === "updatePullSourceRule");
   assert.equal(update?.args[0], 2);
@@ -210,6 +214,8 @@ test("Escape closes the drawer without saving and Enter in the match field saves
   await user.click(screen.getByRole("button", { name: text.new }));
   drawer = await screen.findByRole("dialog");
   await user.type(within(drawer).getByLabelText(text.match), "ghcr.io{Enter}");
+  assert.equal(fake.calls.filter((call) => call.method === "createPullSourceRule").length, 0);
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(fake.calls.filter((call) => call.method === "createPullSourceRule").length, 1));
   await waitFor(() => assert.equal(rows().length, 4));
 });
@@ -263,6 +269,7 @@ test("a new rule chooses its type first: image has no management option, a model
   await user.type(within(drawer).getByLabelText(text.match), "https://huggingface.co");
   await user.type(within(drawer).getByLabelText(fill(text.endpointN, { n: 1 })), "https://hf-mirror.com");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(rows().length, 1));
   assert.deepEqual(fake.calls.find((call) => call.method === "createPullSourceRule")?.args[0], {
     match: "https://huggingface.co", endpoints: ["https://hf-mirror.com"], allow_upstream: true, control_plane: true, note: "", node_requirements: {},
@@ -283,6 +290,7 @@ test("a site rule narrowed to some nodes starts without the management mark, and
   await user.type(within(drawer).getByLabelText(text.match), "https://huggingface.co");
   await user.type(within(drawer).getByLabelText(fill(text.endpointN, { n: 1 })), "https://hf-mirror.com");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(rows().length, 1));
   assert.equal((fake.calls.find((call) => call.method === "createPullSourceRule")?.args[0] as { control_plane: boolean }).control_plane, false);
 });
@@ -298,6 +306,7 @@ test("editing a rule keeps its type fixed and starts from the stored management 
   assert.equal((within(drawer).getByRole("checkbox", { name: text.controlPlane }) as HTMLInputElement).checked, false, "an edit never re-applies the new-rule default");
   await user.click(within(drawer).getByRole("checkbox", { name: text.controlPlane }));
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
   assert.equal((fake.calls.find((call) => call.method === "updatePullSourceRule")?.args[1] as { control_plane: boolean }).control_plane, true);
 
@@ -316,6 +325,7 @@ test("a refused control_plane is shown at its checkbox", async () => {
   await user.click(within(drawer).getByRole("radio", { name: text.kindUrl }));
   await user.type(within(drawer).getByLabelText(text.match), "https://huggingface.co");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(i18n.t("pull.invalidField", { ns: "settings", field: i18n.t("pull.fields.control_plane", { ns: "settings" }), detail: i18n.t("pullSettingReason.invalid_value", { ns: "common" }) }));
   assert.ok(screen.getByRole("dialog"));
 });

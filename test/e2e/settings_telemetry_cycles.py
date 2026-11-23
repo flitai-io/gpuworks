@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import expect
+from settings_confirm import confirm_setting
 from platform_token_read_revoke import check
 
 TELEMETRY = "/api/v1/telemetry/export"
@@ -39,7 +40,7 @@ def _save(page, card, base, save_name, body):
     expect(save).to_be_enabled()
     with page.expect_response(lambda response: urlsplit(response.url).path == TELEMETRY
                               and response.request.method == "PUT") as saved:
-        save.click()
+        confirm_setting(page, save)
     check(saved.value.status == 200, f"telemetry cycle save HTTP {saved.value.status}")
     check(saved.value.request.post_data_json == body,
           f"telemetry cycle body {saved.value.request.post_data_json}")
@@ -58,7 +59,7 @@ def _save(page, card, base, save_name, body):
 def exercise_telemetry_minimum(page, card, telemetry, base, save_name, tab_name):
     """Save the untouched defaults. No optional field is filled."""
     label = re.compile("^" + _accessible(save_name) + "$")
-    expect(card.locator("button.ant-btn-primary").filter(has_text=label)).to_have_count(1)
+    expect(card.get_by_role("button", name=label)).to_have_count(1)
     switch = card.get_by_role("switch", name=telemetry["enabled"], exact=True)
     endpoint = card.get_by_label(telemetry["endpoint"], exact=True)
     ratio = card.get_by_label(telemetry["sampleRatio"], exact=True)
@@ -71,7 +72,7 @@ def exercise_telemetry_minimum(page, card, telemetry, base, save_name, tab_name)
     save = card.get_by_role("button", name=label).first
     with page.expect_response(lambda response: urlsplit(response.url).path == TELEMETRY
                               and response.request.method == "PUT") as saved:
-        save.click()
+        confirm_setting(page, save)
     check(saved.value.status == 200, f"minimum telemetry save HTTP {saved.value.status}")
     check(saved.value.request.post_data_json == _DEFAULTS,
           f"minimum telemetry body {saved.value.request.post_data_json}")

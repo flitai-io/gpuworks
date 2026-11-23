@@ -15,7 +15,7 @@ func seedBenchmark(ctx context.Context, c *apiClient, marker string, log *slog.L
 	if _, err := os.Stat(marker); err == nil {
 		return
 	}
-	id, err := waitRunning(ctx, c, evaluated.Name)
+	target, err := waitRunning(ctx, c, sampleDeployment.Name)
 	if err != nil {
 		log.Warn("sample evaluation skipped", "err", err)
 		return
@@ -24,7 +24,7 @@ func seedBenchmark(ctx context.Context, c *apiClient, marker string, log *slog.L
 		ID uint `json:"id"`
 	}
 	if err := c.post(ctx, "/api/v1/benchmarks", map[string]any{
-		"name": "示例：吞吐与延迟评测", "target_kind": "instance", "deployment_id": id,
+		"name": "示例：吞吐与延迟评测", "target_kind": "instance", "deployment_id": target.ID,
 		"load_origin": "server", "mode": "grid", "tokenizer_source": "auto",
 		"dataset": map[string]any{"kind": "random", "input_tokens": 512, "output_tokens": 128},
 		"search":  map[string]any{"concurrency": []int{1, 2, 4, 8}, "isl": []int{512}, "osl": []int{128}, "requests_per_point_multiplier": 3},

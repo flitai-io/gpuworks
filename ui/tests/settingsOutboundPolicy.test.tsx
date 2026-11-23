@@ -61,6 +61,7 @@ test("an admin keeps the allowlist when switching off and submits exact wire fie
   const save = screen.getByRole("button", { name: "Save" });
   save.focus();
   await user.keyboard("{Enter}");
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await screen.findByText("Outbound policy saved and applied.");
   assert.deepEqual(calls.filter((c) => c.method === "PUT"), [{ method: "PUT", body: {
     restrict_private_hosts: false, allow_private_hosts: ["models.internal", "10.2.0.0/16", "127.0.0.1"], revision: "r1",
@@ -99,6 +100,7 @@ for (const [status, code] of [[400, "SERVER_OUTBOUND_POLICY_INVALID"], [409, "SE
     const textarea = await screen.findByRole("textbox", { name: "Allowed private hosts" });
     await user.type(textarea, "{Enter}custom.internal");
     await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
     await screen.findByRole("button", { name: "Reload and discard draft" });
     assert.equal((screen.getByRole("textbox") as HTMLTextAreaElement).value, "models.internal\ncustom.internal");
     assert.equal(screen.queryByText("raw private config error"), null);
@@ -114,6 +116,7 @@ test("a revision conflict preserves the draft and blocks stale saves until expli
   const textarea = await screen.findByRole("textbox");
   await user.type(textarea, "{Enter}draft.internal");
   await user.click(screen.getByRole("button", { name: "Save" }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await screen.findByText(/policy changed elsewhere/);
   assert.equal((screen.getByRole("textbox") as HTMLTextAreaElement).value, "models.internal\ndraft.internal");
   assert.equal((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled, true);
@@ -122,6 +125,7 @@ test("a revision conflict preserves the draft and blocks stale saves until expli
   await waitFor(() => assert.equal((screen.getByRole("textbox") as HTMLTextAreaElement).value, "other.internal"));
   await user.type(screen.getByRole("textbox"), "{Enter}second.internal");
   await user.click(screen.getByRole("button", { name: "Save" }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(calls.filter((call) => call.method === "PUT").length, 2));
   assert.equal((calls.filter((call) => call.method === "PUT")[1].body as { revision: string }).revision, "r3");
 });

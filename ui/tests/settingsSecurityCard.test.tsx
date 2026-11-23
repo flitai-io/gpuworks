@@ -54,6 +54,7 @@ const savedToasts = () => screen.queryAllByText(s.saved).length;
 async function saveAndExpectNewSavedToast(user: ReturnType<typeof userEvent.setup>) {
   const before = savedToasts();
   await user.click(saveButton());
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(savedToasts(), before + 1));
 }
 
@@ -115,6 +116,7 @@ test("changing both switches patches both fields in one request", async () => {
   await user.click(toggle());
   await user.click(openAccessToggle());
   await user.click(saveButton());
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.deepEqual(api.updates, [{ playground_preview_network: true, inference_open_access: true }]));
 });
 
@@ -158,6 +160,7 @@ test("a refused save reports the server's reason", async () => {
   await waitFor(() => assert.equal((toggle() as HTMLButtonElement).disabled, false));
   await user.click(toggle());
   await user.click(saveButton());
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(api.updates.length, 1));
   assert.ok(await screen.findByText(/Failed to save/));
 });
@@ -169,12 +172,12 @@ test("a failed save of the keyless switch keeps the change pending", async () =>
   await waitFor(() => assert.equal((openAccessToggle() as HTMLButtonElement).disabled, false));
   await user.click(openAccessToggle());
   await user.click(saveButton());
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(api.updates.length, 1));
   assert.ok(await screen.findByText(/storage unavailable/));
   assert.equal(openAccessToggle().getAttribute("aria-checked"), "true", "the unconfirmed change stays visible");
-  // antd keeps the loading icon's label on the button while it animates out, so
-  // match the Save button loosely and let the retry prove it still works.
-  await user.click(screen.getByRole("button", { name: /Save/ }));
+  await user.click(saveButton());
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.deepEqual(api.updates, [{ inference_open_access: true }, { inference_open_access: true }],
     "the pending change can be saved again"));
 });

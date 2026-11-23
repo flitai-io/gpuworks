@@ -141,6 +141,7 @@ test("editing a service prefills it and changes only what was edited", async () 
   await user.clear(name);
   await user.type(name, "renamed");
   await user.click(within(dialog).getByRole("button", { name: common.save }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(fake.calls.updated.length, 1));
   const { id, body } = fake.calls.updated[0];
   assert.equal(id, 1);
@@ -160,6 +161,7 @@ test("a new key typed on an edit is sent, and the row follows it", async () => {
   const dialog = await screen.findByRole("dialog");
   await user.type(within(dialog).getByLabelText(ai.upstreamKey), "sk-replaced");
   await user.click(within(dialog).getByRole("button", { name: common.save }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(fake.calls.updated.length, 1));
   assert.equal(fake.calls.updated[0].body.api_key, "sk-replaced");
 });
@@ -327,6 +329,7 @@ test("a service that is not in use can still be made the default", async () => {
   // And the save carries it, so the move happens as the switch says it will.
   await user.click(toggle);
   await user.click(within(dialog).getByRole("button", { name: common.save }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(fake.calls.updated.length, 1));
   assert.equal(fake.calls.updated[0].body.is_default, true);
 });
@@ -480,6 +483,7 @@ test("editing a service with a custom proxy keeps the stored proxy unless one is
   assert.equal(proxy.value, "");
   assert.ok(within(dialog).getByText(ai.proxyUrlStored.replace("{{url}}", "http://xxxxx:xxxxx@proxy.example:3128")));
   await user.click(within(dialog).getByRole("button", { name: common.save }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(fake.calls.updated.length, 1));
   assert.equal(fake.calls.updated[0].body.proxy_mode, "custom");
   assert.ok(!("proxy_url" in fake.calls.updated[0].body), JSON.stringify(fake.calls.updated[0].body));
@@ -535,6 +539,7 @@ test("the image check sets the switch from what the model answered", async () =>
   // The operator still has the last word, and the save carries it.
   await user.click(image);
   await user.click(within(dialog).getByRole("button", { name: common.save }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(fake.calls.updated.length, 1));
   assert.equal(fake.calls.updated[0].body.image_input, true);
 });

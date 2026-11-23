@@ -22,7 +22,7 @@ func TestModelEndpointBecomesSiteRulesOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
-		if err := ensureModelEndpointRules(st, " http://127.0.0.1:8090/ "); err != nil {
+		if err := ensureModelEndpointRules(st, " http://127.0.0.1:8090/ ", false); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -37,7 +37,29 @@ func TestModelEndpointBecomesSiteRulesOnce(t *testing.T) {
 	if hf.Match != "https://huggingface.co" || !reflect.DeepEqual(hf.Endpoints, []string{"http://127.0.0.1:8090"}) || hf.AllowUpstream || !hf.ControlPlane || len(hf.Requirements) != 0 {
 		t.Fatalf("hugging face rule = %+v", hf)
 	}
-	if err := ensureModelEndpointRules(st, "hf-mirror.example"); err == nil {
+	// An ordinary server preserves even its original generated rule. Only the
+	// experience console rewires it to the next offline hub's listening port.
+	const next = "http://127.0.0.1:8091"
+	for _, experience := range []bool{false, true} {
+		if err := ensureModelEndpointRules(st, next, experience); err != nil {
+			t.Fatal(err)
+		}
+		nextRules, err := st.PullSourceRules()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(nextRules) != 2 || !reflect.DeepEqual(nextRules[0], rules[0]) {
+			t.Fatalf("operator rule or count changed: %+v", nextRules)
+		}
+		want := hf
+		if experience {
+			want.Endpoints = []string{next}
+		}
+		if !reflect.DeepEqual(nextRules[1], want) {
+			t.Fatalf("experience %t, got %+v, want %+v", experience, nextRules[1], want)
+		}
+	}
+	if err := ensureModelEndpointRules(st, "hf-mirror.example", false); err == nil {
 		t.Fatal("an endpoint that is not a URL was accepted")
 	}
 }

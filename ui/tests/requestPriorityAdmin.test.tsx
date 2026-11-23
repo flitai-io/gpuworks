@@ -1,25 +1,19 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { after, afterEach, test } from "node:test";
-import { JSDOM } from "jsdom";
+import { dom } from "./helpers/dom.ts";
 import React from "react";
 import { createInstance } from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
 
 const closeChannels = trackMessageChannels();
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
 dom.window.HTMLElement.prototype.setPointerCapture = () => {};
 dom.window.HTMLElement.prototype.hasPointerCapture = () => false;
 dom.window.HTMLElement.prototype.scrollIntoView = () => {};
-for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "KeyboardEvent", "PointerEvent", "MouseEvent"] as const) {
+for (const name of ["KeyboardEvent", "PointerEvent", "MouseEvent"] as const) {
   if (dom.window[name]) Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
-Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
-Object.defineProperty(dom.window, "matchMedia", { configurable: true, value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }) });
-class ResizeObserverStub { observe() {} unobserve() {} disconnect() {} }
-Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, configurable: true });
-
 const read = (lang: string, ns: string) => JSON.parse(fs.readFileSync(new URL(`../src/i18n/locales/${lang}/${ns}.json`, import.meta.url), "utf8"));
 const i18n = createInstance();
 await i18n.use(initReactI18next).init({
@@ -95,6 +89,8 @@ test("the settings card lists the classes, and an administrator adds one, makes 
   await user.clear(value);
   await user.type(value, "10");
   await user.click(screen.getByRole("button", { name: "Save" }));
+  assert.deepEqual(calls, []);
+  await user.click(await screen.findByRole("button", { name: "Confirm" }));
   await waitFor(() => assert.deepEqual(calls, ["create silver 10 Silver"]));
 
   await user.click(within(screen.getByTestId("priority-class-gold")).getByRole("button", { name: "Make default" }));

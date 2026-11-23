@@ -1,3 +1,4 @@
+import SettingsSaveButton from "./SettingsSaveButton";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -104,7 +105,7 @@ function ClassDialog({ open, editing, bounds, onClose, onSaved }: {
         </div>
         <DialogFooter>
           <Button variant="secondary" onClick={onClose}>{tc("actions.cancel")}</Button>
-          <Button variant="primary" loading={saving} onClick={save}>{t("priority.save")}</Button>
+          <SettingsSaveButton loading={saving} onSave={save} />
         </DialogFooter>
       </DialogContent>
     </Dialog>

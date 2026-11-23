@@ -140,6 +140,9 @@
   },
   "page": { "title": "Settings", "description": "Manage branding, updates, where images and models are pulled from, node and deployment policy, security and access, and integrations such as AI services", "breadcrumb": { "platform": "Platform", "settings": "Settings" }, "tabs": { "general": "General", "pull": "Image & model pulls", "nodes": "Nodes & deployments", "access": "Security & access", "integrations": "Integrations", "data": "Data retention", "diagnostics": "Diagnostics" } },
   "branding": {
+    "confirmRestoreAll": "Restore the default logo, product name, header title and sign-in introduction?",
+    "confirmRestoreLogo": "Restore the default logo?",
+    "restoreAll": "Restore brand defaults",
     "title": "Branding",
     "description": "Customize the logo, product name, header title and sign-in page text. Fields left empty use the built-in defaults, shown in the viewer's language; custom text is shown exactly as written, without translation.",
     "adminOnly": "Only administrators can change the branding.",
@@ -172,7 +175,8 @@
       "tooLarge": "The image is still larger than {{max}} KiB after compression; choose a simpler image"
     }
   },
-  "common": { "save": "Save", "saved": "Saved", "delete": "Delete", "add": "Add", "edit": "Edit", "cancel": "Cancel" },
+  "common": {
+    "confirmSave": "Save changes?", "save": "Save", "saved": "Saved", "delete": "Delete", "add": "Add", "edit": "Edit", "cancel": "Cancel" },
   "error": { "save": "Failed to save: {{detail}}", "update": "Failed to update: {{detail}}", "import": "Failed to import: {{detail}}", "delete": "Failed to delete: {{detail}}", "add": "Failed to add: {{detail}}" },
   "pull": {
     "title": "Pull settings",

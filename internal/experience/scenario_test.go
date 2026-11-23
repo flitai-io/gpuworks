@@ -63,6 +63,30 @@ func TestScenarioIsConsistent(t *testing.T) {
 	}
 }
 
+// The model list needs at least two preloaded models that can be selected
+// together and removed without deleting any of the starter deployments.
+func TestScenarioHasUnusedModels(t *testing.T) {
+	shapes, err := catalogShapes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	unused := map[string]bool{}
+	for _, n := range scenario {
+		for _, repo := range n.Models {
+			if _, ok := shapes[strings.ToLower(repo)]; !ok {
+				t.Fatalf("no catalog shape for %s", repo)
+			}
+			unused[repo] = true
+		}
+	}
+	for _, st := range starters {
+		delete(unused, st.Repo)
+	}
+	if len(unused) < 2 {
+		t.Fatalf("only %d unused model(s): %v", len(unused), unused)
+	}
+}
+
 func TestCatalogImage(t *testing.T) {
 	image, err := catalogImage("Qwen/Qwen3-32B", "sglang", "ascend")
 	if err != nil || !strings.Contains(image, "910b") {

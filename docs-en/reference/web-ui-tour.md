@@ -13,7 +13,9 @@ Conventions:
 
 ## Global Shell
 
-By default, the top bar title combines the product name with “Cluster Management Platform”; the screenshots show “GPUWorks Cluster Management Platform”. You can customize it under **Settings → General → Branding**. “Overview” sits at the top of the left menu, above five groups: “Monitoring & Analytics”, “Compute”, “Models”, “Inference”, and “Administration”.
+By default, the top bar shows the built-in logo with an empty title. You can customize it under **Settings → General → Branding**. “Overview” sits at the top of the left menu, above five groups: “Monitoring & Analytics”, “Compute”, “Models”, “Inference”, and “Administration”.
+
+Use the refresh button in the upper-right corner of Overview to reload its metrics immediately.
 
 Monitoring and analytics come first, then the compute and models that inference depends on, then inference, with administration last. New features are added at the end of their group, so existing entries keep their place. “Collapse menu” at the bottom folds the menu into an icon bar; the choice is saved in the browser.
 
@@ -125,10 +127,10 @@ Path: `/settings`. The page has six tabs. URL fragments `#general`, `#pull`, `#n
 
 #### General
 
-- **Branding**: Set the logo, product name, top bar title, and sign-in page introduction. Leave fields empty to use the built-in defaults. Only administrators can change these settings.
+- **Branding**: Set the logo, product name, top bar title, and sign-in page introduction. Leave fields empty to use the built-in defaults. Only administrators can change these settings. Choose **Restore brand defaults** to see which four fields will change. Confirm to update the draft, then choose **Save** and confirm to apply it. Restoring just the logo also asks for confirmation. Settings save actions ask for confirmation.
   - Selecting an image opens a cropping page with the whole image selected by default. Drag, zoom, or select a new crop; select “Crop to a square” to lock a 1:1 ratio and preview the actual sidebar appearance.
   - After confirmation, the browser resizes the image to within 256 pixels and compresses it. Small, uncropped SVG files are kept unchanged.
-  - **Display locations**: The product name (default `GPUWorks`) appears beside the sidebar logo. The top bar title appears at the upper left (defaults to the product name followed by “Cluster Management Platform”, localized to the interface language). The browser tab title and icon also follow the product name and logo. The left side of the sign-in page displays the logo, product name, and introduction. Custom text appears unchanged and is not translated when the interface language changes.
+  - **Display locations**: The logo appears at the upper left of the top bar, with the title beside it when configured. The browser tab title and icon also follow the product name and logo. The left side of the sign-in page displays the logo, product name, and introduction. Custom text appears unchanged and is not translated when the interface language changes.
 - **Version and updates**: View and update the server, system image catalog, and inference template catalog.
   - Choose the stable release or rolling preview update channel.
   - “Check for new versions automatically” controls whether the server checks automatically. When enabled, checks report the installation identifier, server version, and agent version distribution to the publisher. They additionally report the node count and GPU models only when the User Experience Improvement Program is enabled. Disabling automatic checks stops these checks and their associated reporting; the program's daily reports are controlled separately.
@@ -178,12 +180,12 @@ Further reading: [Install and Upgrade the Control Plane](../how-to/install-serve
 Every action on a page uses a REST endpoint under `/api/v1`. See [Complete REST API Routes](api.md) for the full route list. For the fields and decision logic behind upgrade-related UI elements (the “Agent” column and “Upgrade available” badge on the node page), see [Upgrades and Version Compatibility](../how-to/upgrade-and-compatibility.md).
 
 <!-- translation-source-sha256: 51be00e2cf1828f7059e5da7d7937dda2ecf5e47a7f0f1227e7bfe3bf6bf7709 # Console Page Tour -->
-<!-- translation-source-sha256: 87efe12f7f9b671894475976658c18e3947f2ffccff5887469b7158f759be866 ## Global Shell -->
+<!-- translation-source-sha256: 34bb70e3c943659dd3233ae138e5e2e49c0f3d54648be12572cc5a45665e3248 ## Global Shell -->
 <!-- translation-source-sha256: 18ce2e47a8708fa1ce477375ce9e19a373111511b9c6702440a2c1592072d012 ## Overview -->
 <!-- translation-source-sha256: c8ab7add5fc324741e85b2c819d5ab53e08dfb62527d8e2b6eee70b22c5b7386 ## Monitoring & Analytics -->
 <!-- translation-source-sha256: e428a3d24a6caed618dd5ff8b810bcff7f98311652acb2096388fd9046fef295 ## Compute -->
 <!-- translation-source-sha256: 697de00dc77ec5e4a1280bcabb8d14a7c4cfed223bb81451917c06b7b633a819 ## Models -->
 <!-- translation-source-sha256: 43a21fd64582a6b7cad1a84707be5e6dd89e527c08aa90db6e23858f23633b31 ## Inference -->
 <!-- translation-source-sha256: eddceb7ecf3e155e1388d7fbcb530b0d399f331fccbaa412c3c40024593447f4 ## Administration -->
-<!-- translation-source-sha256: 0fa92768ce99a49401b297fd04c27d19575dd8bc999ad9f220a3be504424d086 ### Settings -->
+<!-- translation-source-sha256: 0adba10c6cd30f4abaad68fc32a78a5b61f1b27c73330d94dab829edb3510418 ### Settings -->
 <!-- translation-source-sha256: 04542ee877955cacdd78f381a1d9c1a5386c2a3213b4b8eee639a716d0049038 ## Mapping to the API -->

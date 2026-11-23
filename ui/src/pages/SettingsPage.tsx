@@ -1,7 +1,7 @@
+import SettingsSaveButton from "./settings/SettingsSaveButton";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  Button,
   Card,
   Form,
   InputNumber,
@@ -155,7 +155,7 @@ function TerminalCard() {
     </Form.Item>
   );
   return (
-    <Card title={t("terminal.title")} extra={<Button type="primary" loading={saving} onClick={save}>{t("common.save")}</Button>}>
+    <Card title={t("terminal.title")} extra={<SettingsSaveButton loading={saving} onSave={save} />}>
       <Space direction="vertical" size={4} style={{ width: "100%", maxWidth: 720 }}>
         <Text type="secondary">{t("terminal.description")} <Text strong>{t("terminal.privacy")}</Text> <HelpTip content={t("terminal.auditHelp")} /></Text>
         <Form layout="vertical" style={{ marginTop: 8 }}>
@@ -195,7 +195,7 @@ function OrphanCleanupCard() {
     }
   };
   return (
-    <Card title={t("orphanCleanup.title")} extra={<Button type="primary" loading={saving} onClick={save}>{t("common.save")}</Button>}>
+    <Card title={t("orphanCleanup.title")} extra={<SettingsSaveButton loading={saving} onSave={save} />}>
       <Space direction="vertical" size={4} style={{ width: "100%", maxWidth: 720 }}>
         <Text type="secondary">{t("orphanCleanup.description")}</Text>
         <Form layout="vertical" style={{ marginTop: 8 }}>

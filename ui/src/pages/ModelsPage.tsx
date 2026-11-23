@@ -8,7 +8,7 @@ import type { Provider } from "./models/discovery/hubs";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsList, TabItem } from "../components/ui/tabs";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Card, Dropdown, Input, Modal, Pagination, Select, Space, Tooltip, Typography, message } from "antd";
+import { Alert, Button, Card, Dropdown, Input, Pagination, Select, Space, Tooltip, Typography, message } from "antd";
 import { FilterChips } from "../ui-kit/FilterChips";
 import {
   CloudDownloadOutlined,
@@ -38,6 +38,8 @@ import {
   modelPublishedAt,
   RegisterPathModal,
 } from "./ModelsPageParts";
+import { Checkbox } from "../components/ui/checkbox";
+import { ModelDeleteDialog } from "./models/ModelDeleteDialog";
 import { ModelCopyModal } from "./models/ModelCopyModal";
 import { ModelPresenceSummary } from "./models/ModelPresenceSummary";
 import { RegisterModal } from "./models/RegisterModelModal";
@@ -161,25 +163,14 @@ export default function ModelsPage() {
   const [registerOpen, setRegisterOpen] = useState(false);
   const [downloadFor, setDownloadFor] = useState<Model | null>(null);
   const [pathFor, setPathFor] = useState<Model | null>(null);
-  const [deleting, setDeleting] = useState<ModelCore | null>(null);
+  const [deleting, setDeleting] = useState<ModelCore[]>([]);
+  const selectionScope = JSON.stringify([pagination.current, pagination.pageSize, search, source, modelOperation, sort, browsing]);
+  const [selection, setSelection] = useState<{scope: string; ids: number[]}>({scope: selectionScope, ids: []});
+  if (selection.scope !== selectionScope) setSelection({scope: selectionScope, ids: []});
+  const select = (ids: number[]) => setSelection({scope: selectionScope, ids});
   const [focusFiles, setFocusFiles] = useState(false);
   const [copyFor, setCopyFor] = useState<Model | null>(null);
   const [view, setView] = useState<"grid" | "list">(() => localStorage.getItem("gpuworks-model-view") === "list" ? "list" : "grid");
-	const removeModel = async (model: ModelCore) => {
-		try {
-			await api.deleteModel(model.id);
-			message.success(t("message.deleted"));
-			// Deleting the page's last row empties it; step back one page instead
-			// of refetching an empty page above a non-empty list.
-			if (rows.length === 1 && pagination.current > 1) {
-				pagination.onChange(pagination.current - 1, pagination.pageSize);
-			} else {
-				refetch();
-			}
-		} catch (e) {
-			message.error(t("message.deleteFailed", { detail: (e as Error).message }));
-		}
-	};
   // A list row has no per-location presence; the download, copy and
   // register-path dialogs choose among locations, so they open on the full model.
   const withModel = (row: ModelCore, open: (model: Model) => void) => {
@@ -188,6 +179,17 @@ export default function ModelsPage() {
 
   const rows = useMemo(() => (data?.items ?? []).map((m) => livePresence.page === data && livePresence.values[m.id]
     ? { ...m, presence: livePresence.values[m.id] } : m), [data, livePresence]);
+  const selected = rows.filter((model) => selection.ids.includes(model.id));
+  const afterDelete = (ids: number[]) => {
+    if (ids.length === deleting.length) message.success(ids.length === 1 ? t("message.deleted") : t("delete.done", {count: ids.length}));
+    select(selected.filter((model) => !ids.includes(model.id)).map((model) => model.id));
+    const lastPage = Math.max(1, Math.ceil((pagination.total - ids.length) / pagination.pageSize));
+    if (ids.length && pagination.current > lastPage) {
+      pagination.onChange(lastPage, pagination.pageSize);
+    } else {
+      refetch();
+    }
+  };
   const summary = data?.summary;
   const filtering = search !== "" || source !== "all" || modelOperation !== "all";
   const openDetail = (model: ModelCore) => {
@@ -284,7 +286,7 @@ export default function ModelsPage() {
               ],
               onClick: ({ key }) => {
                 if (key === "path") withModel(m, setPathFor);
-                if (key === "delete") setDeleting(m);
+                if (key === "delete") setDeleting([m]);
               },
             }}
           >
@@ -339,6 +341,18 @@ export default function ModelsPage() {
           ]}
         />
       </div>
+      {view === "grid" && rows.length > 0 && (
+        <label className="inline-flex shrink-0 items-center gap-2 text-label text-fg-muted">
+          <Checkbox checked={selected.length === rows.length} indeterminate={selected.length > 0 && selected.length < rows.length}
+            onCheckedChange={(checked) => select(checked ? rows.map((model) => model.id) : [])} />
+          {tCommon("resourceTable.selectPage")}
+        </label>
+      )}
+      {selected.length > 0 && (
+        <ZeronButton variant="secondary" size="sm" leadingIcon={ConsoleIcon.delete} onClick={() => setDeleting(selected)}>
+          {t("delete.selected", {count: selected.length})}
+        </ZeronButton>
+      )}
       {filtering && data && (
         <Typography.Text type="secondary" className="model-filter-result">{t("summary.filteredCount", { count: data.total })}</Typography.Text>
       )}
@@ -397,7 +411,10 @@ export default function ModelsPage() {
                       onDownload={() => withModel(model, setDownloadFor)}
                       onCopy={() => withModel(model, setCopyFor)}
                       onRegisterPath={() => withModel(model, setPathFor)}
-                      onDelete={() => removeModel(model)}
+                      onDelete={() => setDeleting([model])}
+                      selection={<Checkbox className="z-action" aria-label={tCommon("resourceTable.selectRow", {name: model.name || model.source_id})}
+                        checked={selection.ids.includes(model.id)} onCheckedChange={(checked) =>
+                          select(checked ? [...selection.ids, model.id] : selection.ids.filter((id) => id !== model.id))} />}
                     />
                   ))}
                 </div>
@@ -432,6 +449,8 @@ export default function ModelsPage() {
             pagination={pagination}
             sort={sort}
             onSortChange={setSort}
+            rowSelection={{selectedRowKeys: selected.map((model) => model.id), onChange: (_keys, models) => select(models.map((model) => model.id)),
+              getCheckboxProps: (model) => ({"aria-label": tCommon("resourceTable.selectRow", {name: model.name || model.source_id})})}}
             toolbar={filterBar}
             toolbarExtra={refreshButton}
             emptyDescription={t(filtering ? "empty.filtered" : "empty.all")}
@@ -479,17 +498,7 @@ export default function ModelsPage() {
 					refetch();
 				}}
 			/>
-        <Modal
-          open={!!deleting}
-          title={t("delete.confirm", { name: deleting?.name || deleting?.source_id || "" })}
-          okText={t("action.delete")}
-          cancelText={t("action.cancel")}
-          okButtonProps={{ danger: true }}
-          onOk={() => deleting && removeModel(deleting).finally(() => setDeleting(null))}
-          onCancel={() => setDeleting(null)}
-        >
-          {t("delete.listDescription")}
-        </Modal>
+        {deleting.length > 0 && <ModelDeleteDialog targets={deleting} onClose={() => setDeleting([])} onDeleted={afterDelete} />}
         <RegisterPathModal
         model={pathFor}
         onClose={() => setPathFor(null)}

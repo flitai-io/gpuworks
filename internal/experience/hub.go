@@ -2,11 +2,14 @@ package experience
 
 import (
 	"encoding/json"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/webui"
 )
 
 // hub is an offline stand-in for the HuggingFace repository API, answering
@@ -15,6 +18,7 @@ import (
 // architecture, context length and size without network access.
 type hub struct {
 	shapes map[string]modelShape
+	assets fs.FS
 }
 
 // startHub serves the hub on a loopback port of its own.
@@ -23,7 +27,7 @@ func startHub(shapes map[string]modelShape) (string, func(), error) {
 	if err != nil {
 		return "", nil, err
 	}
-	srv := &http.Server{Handler: &hub{shapes: shapes}, ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Handler: &hub{shapes: shapes, assets: webui.FS()}, ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = srv.Serve(ln) }()
 	return "http://" + ln.Addr().String(), func() { _ = srv.Close() }, nil
 }
@@ -50,6 +54,31 @@ func (h *hub) files(repo string) []repoFile {
 
 func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
+	// Mirror the HF organization API using the avatars already packaged for
+	// the console's inference catalog. Only expose files in that directory.
+	if rest, ok := strings.CutPrefix(path, "/api/organizations/"); ok {
+		org, ok := strings.CutSuffix(rest, "/avatar")
+		if !ok || !fs.ValidPath(org) || strings.Contains(org, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		file := "model-org-icons/" + strings.ToLower(org) + ".webp"
+		if _, err := fs.Stat(h.assets, file); err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"avatarUrl": "/" + file})
+		return
+	}
+	if file, ok := strings.CutPrefix(path, "/model-org-icons/"); ok {
+		if !fs.ValidPath(file) || strings.Contains(file, "/") || !strings.HasSuffix(file, ".webp") {
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFileFS(w, r, h.assets, "model-org-icons/"+file)
+		return
+	}
 	if rest, ok := strings.CutPrefix(path, "/api/v1/models/"); ok {
 		h.modelscope(w, r, rest)
 		return
@@ -62,6 +91,12 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rest, ok := strings.CutPrefix(path, "/api/models/"); ok {
 		repo, _, found := strings.Cut(rest, "/tree/")
 		if !found {
+			owner, name, ok := strings.Cut(rest, "/")
+			if ok && name != "" && !strings.Contains(name, "/") && owner != "" {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]string{"author": owner})
+				return
+			}
 			http.NotFound(w, r)
 			return
 		}

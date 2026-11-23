@@ -55,8 +55,8 @@ var starters = []starter{
 		Days: 9, Share: 0.08, TTFT: 520, TPOT: 29},
 }
 
-// evaluated is the deployment the sample evaluation runs on.
-var evaluated = starters[0]
+// The sample batch and evaluation run on this chat deployment.
+var sampleDeployment = starters[0]
 
 // createStarters deploys each starter with the catalog's own spec for its
 // vendor and engine, as the deploy form would.
@@ -169,22 +169,22 @@ func listDeployments(ctx context.Context, c *apiClient) ([]deployment, error) {
 	return list.Items, err
 }
 
-// waitRunning returns the id of the named deployment once it is running.
-func waitRunning(ctx context.Context, c *apiClient, name string) (uint, error) {
+// waitRunning returns the named deployment once it is running.
+func waitRunning(ctx context.Context, c *apiClient, name string) (deployment, error) {
 	deadline := time.Now().Add(5 * time.Minute)
 	for time.Now().Before(deadline) {
 		if list, err := listDeployments(ctx, c); err == nil {
 			for _, d := range list {
 				if d.Name == name && d.RuntimeState == "running" {
-					return d.ID, nil
+					return d, nil
 				}
 			}
 		}
 		select {
 		case <-ctx.Done():
-			return 0, ctx.Err()
+			return deployment{}, ctx.Err()
 		case <-time.After(2 * time.Second):
 		}
 	}
-	return 0, fmt.Errorf("deployment %s is not running", name)
+	return deployment{}, fmt.Errorf("deployment %s is not running", name)
 }

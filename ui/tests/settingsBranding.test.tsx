@@ -68,6 +68,7 @@ test("an admin sets a product name and header title; the shell follows the save"
   await user.type(screen.getByPlaceholderText(locale.common.branding.defaultLoginDescription), "first{Enter}second");
   assert.equal(api.updates.length, 0, "typing alone does not save");
   await user.click(saveButton());
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.deepEqual(api.updates, [{ product_name: "Acme AI", console_title: "Acme 算力平台", login_description: "first\nsecond", logo: "" }]));
   assert.ok(await screen.findByText(b.saved));
   assert.equal(screen.getByRole("status", { name: "shell" }).textContent, "Acme AI|Acme 算力平台");
@@ -82,10 +83,45 @@ test("a stored logo shows in the preview and restoring the default clears it", a
   assert.equal(productInput().value, "Acme");
   await waitFor(() => assert.equal(saveButton().disabled, false));
   await user.click(screen.getByRole("button", { name: b.restoreDefault }));
+  const popup = await screen.findByRole("dialog");
+  assert.ok(within(popup).getByText(b.confirmRestoreLogo));
+  assert.equal(container.querySelector(".branding-logo-preview img")?.getAttribute("src"), logo);
+  await user.click(within(popup).getByRole("button", { name: "Confirm" }));
   assert.equal(container.querySelector(".branding-logo-preview img")?.getAttribute("src"), branding.DEFAULT_LOGO);
   assert.equal(screen.queryByRole("button", { name: b.restoreDefault }), null);
   await user.click(saveButton());
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(api.updates[0]?.logo, ""));
+  assert.equal(productInput().value, "Acme");
+});
+
+test("restoring all branding is a draft until the administrator confirms the save", async () => {
+  const stored = { product_name: "Acme", console_title: "Console", login_description: "Welcome", logo: "data:image/png;base64,AA==" };
+  const api = stub({ load: async () => stored });
+  const user = renderCard();
+  const restore = screen.getByRole("button", { name: b.restoreAll }) as HTMLButtonElement;
+  await waitFor(() => assert.equal(restore.disabled, false));
+  await user.click(restore);
+  const popup = await screen.findByRole("dialog");
+  assert.ok(within(popup).getByText(b.confirmRestoreAll));
+  await user.click(within(popup).getByRole("button", { name: "Cancel" }));
+  assert.equal(productInput().value, "Acme");
+  assert.deepEqual(api.updates, []);
+  await user.click(restore);
+  await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Confirm" }));
+  assert.equal(productInput().value, "");
+  assert.equal((screen.getByPlaceholderText(b.consoleTitlePlaceholder) as HTMLInputElement).value, "");
+  assert.equal((screen.getByPlaceholderText(locale.common.branding.defaultLoginDescription) as HTMLTextAreaElement).value, "");
+  assert.equal(screen.queryByRole("button", { name: b.restoreDefault }), null);
+  assert.equal(restore.disabled, true);
+  await user.click(saveButton());
+  await user.click(await screen.findByRole("button", { name: "Cancel", exact: true }));
+  assert.deepEqual(api.updates, []);
+  assert.equal(screen.getByRole("status", { name: "shell" }).textContent, "Acme|Console");
+  await user.click(saveButton());
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
+  await waitFor(() => assert.deepEqual(api.updates, [EMPTY]));
+  await waitFor(() => assert.equal(screen.getByRole("status", { name: "shell" }).textContent, "GPUWorks|"));
 });
 
 test("a non-admin sees the branding read-only", async () => {
@@ -95,6 +131,7 @@ test("a non-admin sees the branding read-only", async () => {
   await waitFor(() => assert.equal(productInput().value, "Acme"));
   assert.equal(saveButton().disabled, true);
   assert.equal(productInput().disabled, true);
+  assert.equal((screen.getByRole("button", { name: b.restoreAll }) as HTMLButtonElement).disabled, true);
   assert.equal(api.updates.length, 0);
 });
 
@@ -111,6 +148,7 @@ test("a load failure offers a retry and a refused save keeps the draft", async (
   api.failSaveWith(new APIError("FIELD_INVALID", { field: "logo", detail: "logo: image is larger than 128 KiB" }, "logo: image is larger than 128 KiB", 400));
   await user.type(productInput(), "Acme");
   await user.click(saveButton());
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   assert.ok(await screen.findByText(/image is larger than 128 KiB/));
   assert.equal(productInput().value, "Acme");
   assert.equal(screen.getByRole("status", { name: "shell" }).textContent?.startsWith("GPUWorks|"), true, "a refused save does not change the shell");

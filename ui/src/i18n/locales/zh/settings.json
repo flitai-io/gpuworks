@@ -140,6 +140,9 @@
   },
   "page": { "title": "设置", "description": "管理品牌外观、版本更新、镜像和模型从哪里拉取、节点与部署策略、安全与访问，以及 AI 服务等外部集成", "breadcrumb": { "platform": "平台", "settings": "设置" }, "tabs": { "general": "通用", "pull": "镜像与模型拉取", "nodes": "节点与部署", "access": "安全与访问", "integrations": "集成", "data": "数据保留", "diagnostics": "诊断" } },
   "branding": {
+    "confirmRestoreAll": "恢复默认 Logo、产品名称、顶栏标题和登录页介绍？",
+    "confirmRestoreLogo": "恢复默认 Logo？",
+    "restoreAll": "恢复品牌默认值",
     "title": "品牌外观",
     "description": "自定义 Logo、产品名称、顶栏标题和登录页介绍文字。留空的项使用内置默认值，默认文案会跟随界面语言；自定义的文字原样显示，不做翻译。",
     "adminOnly": "只有管理员可以修改品牌外观。",
@@ -172,7 +175,8 @@
       "tooLarge": "图片压缩后仍超过 {{max}} KiB，请换一张更简单的图片"
     }
   },
-  "common": { "save": "保存", "saved": "已保存", "delete": "删除", "add": "添加", "edit": "编辑", "cancel": "取消" },
+  "common": {
+    "confirmSave": "确认保存更改？", "save": "保存", "saved": "已保存", "delete": "删除", "add": "添加", "edit": "编辑", "cancel": "取消" },
   "error": { "save": "保存失败：{{detail}}", "update": "更新失败：{{detail}}", "import": "导入失败：{{detail}}", "delete": "删除失败：{{detail}}", "add": "添加失败：{{detail}}" },
   "pull": {
     "title": "拉取设置",

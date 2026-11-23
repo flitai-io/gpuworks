@@ -1,5 +1,6 @@
+import SettingsSaveButton from "./SettingsSaveButton";
 import { useEffect, useState } from "react";
-import { Alert, Button, Card, Form, InputNumber, Space, Typography, message } from "antd";
+import { Alert, Card, Form, InputNumber, Space, Typography, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { api } from "../../api";
 import { apiErrorText } from "../../apiError";
@@ -83,7 +84,7 @@ export default function DeploymentPolicyCard() {
   return (
     <Card
       title={t("deployment.title")}
-      extra={<Button type="primary" loading={saving} disabled={!valid} onClick={save}>{t("common.save")}</Button>}
+      extra={<SettingsSaveButton loading={saving} disabled={!valid} onSave={save} />}
     >
       <Space direction="vertical" size={4} style={{ width: "100%", maxWidth: 720 }}>
         <Text type="secondary">{t("deployment.description")}</Text>

@@ -1,3 +1,4 @@
+import SettingsSaveButton from "./SettingsSaveButton";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Button, Card, Form, Space, Switch, Typography, message } from "antd";
 import { useTranslation } from "react-i18next";
@@ -99,7 +100,7 @@ export default function SecurityCard() {
     <div id={SECURITY_ANCHOR} ref={cardRef}>
       <Card
         title={t("security.title")}
-        extra={<Button type="primary" loading={saving} disabled={!isAdmin || !loaded || !dirty} onClick={() => void save()}>{t("common.save")}</Button>}
+        extra={<SettingsSaveButton loading={saving} disabled={!isAdmin || !loaded || !dirty} onSave={save} />}
       >
         <Space direction="vertical" size={8} style={{ width: "100%", maxWidth: 720 }}>
           <Text type="secondary">{t("security.description")}</Text>

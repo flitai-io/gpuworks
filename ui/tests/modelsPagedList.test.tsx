@@ -163,3 +163,74 @@ test("deleting the last row of a page steps back to the previous page instead of
     api.deleteModel = originalDelete;
   }
 });
+
+test("deleting the middle page keeps its page number while more models remain", async () => {
+  const originalDelete = api.deleteModel;
+  const deleted = new Set<number>();
+  const readPage = api.modelsPage;
+  api.modelsPage = async (query) => {
+    const result = await readPage(query);
+    const live = fleet.filter((model) => !deleted.has(model.id));
+    const start = (query.page - 1) * query.page_size;
+    return { ...result, items: live.slice(start, start + query.page_size), total: live.length };
+  };
+  api.deleteModel = async (id) => { deleted.add(id); };
+  try {
+    renderPage("list");
+    const user = userEvent.setup({document});
+    await screen.findByText("model-45");
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    await screen.findByText("model-25");
+    await user.click(screen.getByRole("checkbox", {name: "Select this page"}));
+    await user.click(screen.getByRole("button", {name: "Delete selected (20)"}));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", {name: "Delete"}));
+    await screen.findByText("model-5");
+    assert.equal(deleted.size, 20);
+    assert.equal(queries.at(-1)?.page, 2);
+  } finally {
+    api.deleteModel = originalDelete;
+  }
+});
+
+test("bulk delete confirms the selected names, continues after rejection and keeps failed models selected", async () => {
+  const calls: number[] = [];
+  const original = api.deleteModel;
+  api.deleteModel = async (id: number) => {
+    calls.push(id);
+    if (id === 45) throw new Error("Model is used by a deployment");
+  };
+  try {
+    renderPage("grid");
+    const user = userEvent.setup({document});
+    await user.click(await screen.findByRole("checkbox", {name: "Select model-45"}));
+    await user.click(screen.getByRole("checkbox", {name: "Select model-44"}));
+    await user.click(screen.getByRole("button", {name: "Delete selected (2)"}));
+    let dialog = await screen.findByRole("dialog");
+    assert.ok(within(dialog).getByText("model-44"));
+    assert.ok(within(dialog).getByText("model-45"));
+    await user.click(within(dialog).getByRole("button", {name: "Cancel"}));
+    assert.deepEqual(calls, []);
+    await user.click(screen.getByRole("button", {name: "Delete selected (2)"}));
+    dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", {name: "Delete"}));
+    await within(dialog).findByText("Model is used by a deployment");
+    assert.deepEqual(calls, [45, 44]);
+    assert.ok(within(dialog).getByText("Deleted 1 · Failed 1"));
+    assert.equal(within(dialog).queryByText("model-44"), null);
+    await user.click(within(dialog).getByRole("button", {name: "Close"}));
+    assert.ok(screen.getByRole("button", {name: "Delete selected (1)"}));
+  } finally {
+    api.deleteModel = original;
+  }
+});
+
+test("list select all targets the visible page and paging clears the selection", async () => {
+  renderPage("list");
+  await screen.findByText("model-45");
+  const user = userEvent.setup({document});
+  await user.click(screen.getByRole("checkbox", {name: "Select this page"}));
+  assert.ok(screen.getByRole("button", {name: "Delete selected (20)"}));
+  await user.click(screen.getByRole("button", {name: "Last page"}));
+  await screen.findByText("model-5");
+  assert.equal(screen.queryByRole("button", {name: /Delete selected/}), null);
+});

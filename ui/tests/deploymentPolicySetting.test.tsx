@@ -1,30 +1,11 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import { afterEach, test } from "node:test";
-import { JSDOM } from "jsdom";
+import { createI18n, dom } from "./helpers/dom.ts";
 import React from "react";
-import { createInstance } from "i18next";
-import { I18nextProvider, initReactI18next } from "react-i18next";
+import { I18nextProvider } from "react-i18next";
 
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot"] as const) {
-  Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
-}
-Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
-Object.defineProperty(dom.window, "matchMedia", { configurable: true, value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }) });
-class ResizeObserverStub { observe() {} unobserve() {} disconnect() {} }
-Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, configurable: true });
-
-const settingsLocale = JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/settings.json", import.meta.url), "utf8"));
-const commonLocale = JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/common.json", import.meta.url), "utf8"));
-const i18n = createInstance();
-await i18n.use(initReactI18next).init({
-  lng: "en",
-  fallbackLng: "en",
-  resources: { en: { settings: settingsLocale, common: commonLocale } },
-  defaultNS: "settings",
-  interpolation: { escapeValue: false },
-});
+const { i18n, locale } = await createI18n(["settings"]);
+const settingsLocale = locale.settings;
 
 const { cleanup, render, screen, waitFor } = await import("@testing-library/react");
 const userEventModule = await import("@testing-library/user-event");
@@ -79,6 +60,7 @@ test("shows the stored start timeout and saves only that field", async () => {
     await user.clear(card.input());
     await user.type(card.input(), "3600");
     await user.click(card.save());
+    await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
     await waitFor(() => assert.equal(stub.puts.length, 1));
     // The server overlays the body on the stored policy, so the card names
     // only the field it edits and cannot reset the pending timeout.
@@ -110,6 +92,7 @@ for (const value of ["30", "86401", "60.5"]) {
       assert.equal(card.save().disabled, false);
       await waitFor(() => assert.ok(screen.queryByText("Enter a whole number between 60 and 86400 seconds.") === null, "correcting the value clears the validation message"));
       await user.click(card.save());
+      await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
       await waitFor(() => assert.deepEqual(stub.puts, [{ key: "deployment", value: { start_timeout_sec: 3600 } }]));
     } finally {
       stub.restore();
@@ -136,6 +119,7 @@ test("a rejected save reports the server's reason", async () => {
     await waitFor(() => assert.equal(card.input().value, "1800"));
     const user = userEvent.setup({ document: dom.window.document });
     await user.click(card.save());
+    await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
     await waitFor(() => assert.ok(screen.getByText(/must be between 60 and 86400/)));
   } finally {
     stub.restore();
@@ -167,6 +151,8 @@ test("shows the stored headroom and saves it beside the start timeout", async ()
     await user.clear(headroomInputs().floor);
     await user.type(headroomInputs().floor, "2.5");
     await user.click(card.save());
+    assert.equal(stub.puts.length, 0);
+    await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
     await waitFor(() => assert.equal(stub.puts.length, 1));
     assert.deepEqual(stub.puts[0], { key: "deployment", value: { start_timeout_sec: 1800, foreign_headroom_pct: 10, foreign_headroom_min_bytes: 2.5 * 2 ** 30 } });
   } finally {
@@ -189,6 +175,8 @@ test("keeping no headroom is allowed, warned about, and stored as zeros", async 
     assert.ok(await screen.findByText(settingsLocale.deployment.warning.noForeignHeadroom));
     assert.equal(card.save().disabled, false);
     await user.click(card.save());
+    assert.equal(stub.puts.length, 0);
+    await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
     await waitFor(() => assert.deepEqual(stub.puts, [{ key: "deployment", value: { start_timeout_sec: 1800, foreign_headroom_pct: 0, foreign_headroom_min_bytes: 0 } }]));
   } finally {
     stub.restore();
@@ -223,6 +211,8 @@ test("a server that serves no headroom is not asked to store one", async () => {
     assert.equal(screen.queryByText(text("foreignHeadroom")), null);
     const user = userEvent.setup({ document: dom.window.document });
     await user.click(card.save());
+    assert.equal(stub.puts.length, 0);
+    await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
     await waitFor(() => assert.deepEqual(stub.puts, [{ key: "deployment", value: { start_timeout_sec: 1800 } }]));
   } finally {
     stub.restore();

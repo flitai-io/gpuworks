@@ -100,6 +100,11 @@ Platform marks live in ui/public/provider-logos/; among them:
                logos at https://slurm.net/branding/, licensed under the GNU
                General Public License; Slurm is a trademark of SchedMD LLC.
 
+The Qwen model organization mark (ui/public/model-org-icons/qwen.webp)
+depicts the Qwen publisher avatar from https://huggingface.co/Qwen
+(https://huggingface.co/api/organizations/Qwen/avatar). The experience hub
+serves the same offline image when identifying models from that organization.
+
 Vendor, cloud provider and model organization names and logos shown in the UI
 are trademarks of their respective owners and are used only to identify
 compatible hardware and services.

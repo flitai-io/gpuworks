@@ -25,6 +25,7 @@ import uuid
 
 from playwright.sync_api import expect, sync_playwright
 from local_browser_fixture import Artifacts, LocalServer, ROOT, digest
+from settings_confirm import confirm_setting
 from platform_token_read_revoke import button, check
 
 CONTRACT = "gpuworks/settings/deployment-start-timeout"
@@ -234,7 +235,7 @@ def test_deployment_start_timeout(page, context, server, artifacts, report, loca
     expect(field).to_have_value(str(MAX_SECONDS))
     with page.expect_response(lambda r: urlsplit(r.url).path == SETTINGS_PATH
                               and r.request.method == "PUT") as kept_draft:
-        save.click()
+        confirm_setting(page, save)
     check(kept_draft.value.status == 200, f"draft save HTTP {kept_draft.value.status}")
     check(kept_draft.value.request.post_data_json == {"start_timeout_sec": MAX_SECONDS},
           f"draft save body {kept_draft.value.request.post_data_json}")
@@ -261,10 +262,10 @@ def test_deployment_start_timeout(page, context, server, artifacts, report, loca
 
         if value == MIN_SECONDS:
             page.route("**" + SETTINGS_PATH, hold_put)
-            save.click()
-            inflight = card.locator("button.ant-btn-primary")
-            expect(inflight).to_have_class(re.compile(r"\bant-btn-loading\b"))
-            inflight.click()
+            confirm_setting(page, save)
+            inflight = save
+            expect(inflight).to_be_disabled()
+            inflight.evaluate("(button) => button.click()")
             field.press("Enter")
             check(len(held) == 1, "duplicate create from a second click or Enter while the first request is held")
             check(held[0].request.post_data_json == {"start_timeout_sec": value}, "held policy body differs")
@@ -275,7 +276,7 @@ def test_deployment_start_timeout(page, context, server, artifacts, report, loca
         else:
             with page.expect_response(lambda r: urlsplit(r.url).path == SETTINGS_PATH
                                       and r.request.method == "PUT") as saved:
-                save.click()
+                confirm_setting(page, save)
         check(saved.value.status == 200, f"save HTTP {saved.value.status}")
         check(saved.value.request.post_data_json == {"start_timeout_sec": value},
               f"save body differs: {saved.value.request.post_data_json}")
@@ -301,7 +302,7 @@ def test_deployment_start_timeout(page, context, server, artifacts, report, loca
     field.fill(str(initial))
     with page.expect_response(lambda r: urlsplit(r.url).path == SETTINGS_PATH
                               and r.request.method == "PUT") as restored:
-        save.click()
+        confirm_setting(page, save)
     check(restored.value.status == 200, f"restore HTTP {restored.value.status}")
     page.reload()
     expect(page.get_by_role("tab", name=ui["page"]["tabs"]["nodes"], exact=True)

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import SettingsSaveButton from "../SettingsSaveButton";
+import { useRef, useState } from "react";
 import { Alert, Button, Drawer, Form, Input, Radio, Space, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { api, type Credential } from "../../../api";
@@ -37,6 +38,7 @@ export default function CredentialDrawer({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const saveTrigger = useRef<HTMLButtonElement>(null);
   const { t } = useTranslation("settings");
   const { t: tCommon } = useTranslation("common");
   const [savedId, setSavedId] = useState<number | null>(credential?.id ?? null);
@@ -108,8 +110,8 @@ export default function CredentialDrawer({
       footer={
         <Space style={{ display: "flex", justifyContent: "flex-end" }}>
           <Button onClick={onClose} disabled={busy}>{t("pull.action.cancel")}</Button>
-          <Button loading={busy && testing} disabled={busy} onClick={() => void saveAndTest()}>{t("pull.credentials.saveAndTest")}</Button>
-          <Button type="primary" loading={busy && !testing} disabled={busy} onClick={() => void save()}>{t("pull.action.save")}</Button>
+          <SettingsSaveButton secondary loading={busy && testing} disabled={busy} label={t("pull.credentials.saveAndTest")} onSave={saveAndTest} />
+          <SettingsSaveButton triggerRef={saveTrigger} loading={busy && !testing} disabled={busy} onSave={save} />
         </Space>
       }
     >
@@ -142,7 +144,7 @@ export default function CredentialDrawer({
             value={host}
             placeholder={t(site ? "pull.credentials.hostPlaceholderSite" : "pull.credentials.hostPlaceholderRegistry")}
             onChange={(event) => setHost(event.target.value)}
-            onPressEnter={() => void save()}
+            onPressEnter={(event) => { event.preventDefault(); saveTrigger.current?.click(); }}
           />
         </Form.Item>
         <OutboundHostAccess access={outboundAccess} />
@@ -153,7 +155,7 @@ export default function CredentialDrawer({
               autoComplete="off"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              onPressEnter={() => void save()}
+              onPressEnter={(event) => { event.preventDefault(); saveTrigger.current?.click(); }}
             />
           </Form.Item>
         )}
@@ -172,7 +174,7 @@ export default function CredentialDrawer({
               value={secret}
               placeholder={hadSecret ? t("pull.credentials.secretStored") : undefined}
               onChange={(event) => setSecret(event.target.value)}
-              onPressEnter={() => void save()}
+              onPressEnter={(event) => { event.preventDefault(); saveTrigger.current?.click(); }}
             />
             <Button aria-pressed={revealed} onClick={() => setRevealed((current) => !current)}>
               {revealed ? t("pull.credentials.hideSecret") : t("pull.credentials.showSecret")}

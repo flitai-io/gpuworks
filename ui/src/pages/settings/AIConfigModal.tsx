@@ -1,3 +1,4 @@
+import SettingsSaveButton from "./SettingsSaveButton";
 import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
@@ -262,6 +263,7 @@ export default function AIConfigModal({
       open={open}
       onCancel={onClose}
       onOk={submit}
+      footer={editing ? (_, { CancelBtn }) => <Space><CancelBtn /><SettingsSaveButton loading={submitting} disabled={!dictionary} onSave={submit} /></Space> : undefined}
       confirmLoading={submitting}
       okButtonProps={{ disabled: !dictionary }}
       okText={editing ? t("common.save") : t("common.add")}

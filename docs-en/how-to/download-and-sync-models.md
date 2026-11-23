@@ -21,6 +21,8 @@ In the model repository, open the online catalog, choose ModelScope or Hugging F
 
 During downloads, progress events update presence summaries and percentages for the current model page without repeatedly loading the full model list. Terminal states and model creation, changes or deletion still refresh the list. Background progress does not overwrite model fields being edited.
 
+Administrators can select multiple registered models in the grid or list, or select the entire current page. Click **Delete selected**, review the names, and confirm. Each deletion is independent. A deployment reference or pending cache deletion prevents removal of the affected model. The result dialog lists each failed model and its reason. Removing a model clears its registration and replica records. Use the file actions in model details to remove files from disk.
+
 A revision belongs to the selected source platform; a Hugging Face commit may not exist on ModelScope. Use a revision verified on that platform when pinning a version. Catalog updates do not rewrite a registered model's source or revision. If an existing model has an invalid revision, register the correct version and select that model when deploying.
 
 When you register a Hugging Face / ModelScope model, a metadata read failure may produce only a notice; registration does not mean the weights have been downloaded. **Download to…** explicitly downloads from the registered source. To use complete files on another node, use **Copy to…**.
@@ -102,7 +104,7 @@ Failed peer sync operations can be retried, and ongoing sync operations can be c
 `DELETE /api/v1/models/{id}/nodes/{uuid}`; a model used by an active deployment returns 409.
 
 <!-- translation-source-sha256: be802f17d54419589d946b41d34d6f6efa28dbd46629ab0618951e517f53ab15 # Download, Cache, and Sync Models Between Nodes -->
-<!-- translation-source-sha256: b4bb6daf1101da7f2991534c5cde775de3541061b80d50596bc7747e4e2e68ae ## Register and Download a Model -->
+<!-- translation-source-sha256: 6b7bd45bb6cc7aa89c6a43ecf79a838eb1619beb84082c26fb448f5dac34cd75 ## Register and Download a Model -->
 <!-- translation-source-sha256: 397b32440860c469f5888dcb6011a0b1c69b027939806a0c4b774ca8ade916ab ## Register an Existing Directory on a Node -->
 <!-- translation-source-sha256: 28b1888ec62c94266959f5c23d9e648b5668be41b23905e7a30f134f55ad20af ## How Deployments Obtain Models and Images -->
 <!-- translation-source-sha256: 660859b5dcc2384df47e115e52fb5c8d9dafd666fd7506738302da05c7603fe3 ## Peer Sync -->

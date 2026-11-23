@@ -1,30 +1,12 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import { afterEach, test } from "node:test";
-import { JSDOM } from "jsdom";
+import { createI18n } from "./helpers/dom.ts";
 import React from "react";
-import { createInstance } from "i18next";
-import { I18nextProvider, initReactI18next } from "react-i18next";
+import { I18nextProvider } from "react-i18next";
 import { list } from "./helpers/listPage.ts";
 
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot"] as const) {
-  Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
-}
-Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
-Object.defineProperty(dom.window, "matchMedia", { configurable: true, value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }) });
-class ResizeObserverStub { observe() {} unobserve() {} disconnect() {} }
-Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, configurable: true });
-
-const settingsLocale = JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/settings.json", import.meta.url), "utf8"));
-const i18n = createInstance();
-await i18n.use(initReactI18next).init({
-  lng: "en",
-  fallbackLng: "en",
-  resources: { en: { settings: settingsLocale } },
-  defaultNS: "settings",
-  interpolation: { escapeValue: false },
-});
+const { i18n, locale } = await createI18n(["settings"]);
+const settingsLocale = locale.settings;
 
 const { MemoryRouter, Route, Routes } = await import("react-router-dom");
 const { cleanup, render, screen, waitFor, within } = await import("@testing-library/react");
@@ -93,6 +75,7 @@ test("shows the orphan cleanup toggle unchecked by default and saves the enabled
     await userEvent.click(toggle);
     const card = toggle.closest("div.ant-card") as HTMLElement;
     await userEvent.click(within(card).getByRole("button", { name: settingsLocale.common.save as string }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
     await waitFor(() => assert.equal(stub.puts.length, 1));
     assert.equal(stub.puts[0].key, "orphan_cleanup");
     assert.equal(stub.puts[0].value, true);

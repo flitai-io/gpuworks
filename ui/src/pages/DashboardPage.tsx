@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Button } from "../components/ui/button";
 import { Tooltip } from "../components/ui/tooltip";
+import { ConsoleIcon } from "../ui-kit/consoleIcons";
 import { Notice } from "../ui-kit/Notice";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -97,6 +98,17 @@ export default function DashboardPage() {
   useEvents("node", () => { void health.refresh(); void summary.refresh(); void gpus.refresh(); void offlineNodes.refresh(); void storageUsage.refresh(); });
   useEvents("deployment", () => { summary.refetch(); monitor.refetch(); });
   useEvents("provider", () => providers.refetch());
+
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      // Storage detail follows the fresh inventory and usage through its polling dependencies.
+      await Promise.all([health, summary, providers, gpus, models, offlineNodes, monitor, storages, storageUsage, usage].map((source) => source.refresh()));
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const fleet = summary.data;
   const cloudList = providers.data?.items ?? [];
@@ -255,6 +267,7 @@ export default function DashboardPage() {
         // A light green pill with a bright dot: the dark success text alone read as black.
         ? <Badge status="success" size="sm" leadingIcon={<span className="size-1.5 rounded-full bg-success-strong" />}>{t("overview.normal")}</Badge>
         : <b>{controlStatus ?? "—"}</b>}</span>
+      <Tooltip content={t("common:dataTable.refresh")}><Button variant="ghost" size="sm" iconOnly aria-label={t("common:dataTable.refresh")} loading={refreshing} onClick={() => void refresh()}><ConsoleIcon.refresh /></Button></Tooltip>
     </div>} />
     {attentionEntries.length > 0 && <AttentionBanner entries={attentionEntries} grouped={groupedAttention} count={groupedAttention ? attentionGroups.length : attentionCount} />}
     {partial && <Notice tone="warning" title={t("overview.unavailable")} />}

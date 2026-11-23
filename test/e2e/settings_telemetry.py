@@ -27,6 +27,7 @@ import uuid
 from playwright.sync_api import expect, sync_playwright
 from local_browser_fixture import Artifacts, LocalServer, ROOT, digest
 from otlp_fixture import OTLPEndpoint
+from settings_confirm import confirm_setting
 from platform_token_read_revoke import button, check
 from settings_telemetry_cycles import (
     exercise_telemetry_conflict, exercise_telemetry_field_cycles, exercise_telemetry_keyboard,
@@ -253,7 +254,8 @@ def test_telemetry_export(page, context, server, artifacts, report, locale, fixt
 
     def click_step(target):
         card.locator(".ant-input-number-affix-wrapper").hover()
-        target.click(force=True)
+        if target.get_attribute("aria-disabled") != "true":
+            target.click()
 
     click_step(decrease)
     expect(ratio).to_have_value(str(stepped_from - 1))
@@ -409,10 +411,10 @@ def test_telemetry_export(page, context, server, artifacts, report, locale, fixt
         held.append(route)
 
     page.route("**" + TELEMETRY, hold_put)
-    save_button.click()
-    inflight = card.locator("button.ant-btn-primary")
-    expect(inflight).to_have_class(re.compile(r"\bant-btn-loading\b"))
-    inflight.click()
+    confirm_setting(page, save_button)
+    inflight = save_button
+    expect(inflight).to_be_disabled()
+    inflight.evaluate("(button) => button.click()")
     endpoint.press("Enter")
     check(len(held) == 1, "duplicate create from a second click or Enter while the first request is held")
     check(held[0].request.post_data_json == expected_put, "held telemetry body differs")
@@ -468,7 +470,7 @@ def test_telemetry_export(page, context, server, artifacts, report, locale, fixt
     expect(save_button).to_be_enabled()
     with page.expect_response(lambda r: urlsplit(r.url).path == TELEMETRY
                               and r.request.method == "PUT") as kept:
-        save_button.click()
+        confirm_setting(page, save_button)
     check(kept.value.status == 200, f"kept-header save HTTP {kept.value.status}")
     kept_body = kept.value.request.post_data_json
     check(kept_body["headers"] == [{"name": "X-E2E-Token", "value": None}],
@@ -496,7 +498,7 @@ def test_telemetry_export(page, context, server, artifacts, report, locale, fixt
     expect(save_button).to_be_enabled()
     with page.expect_response(lambda r: urlsplit(r.url).path == TELEMETRY
                               and r.request.method == "PUT") as cleared:
-        save_button.click()
+        confirm_setting(page, save_button)
     check(cleared.value.status == 200, f"telemetry clear HTTP {cleared.value.status}")
     cleared_doc = page.request.get(server.base + TELEMETRY).json()
     check(cleared_doc["enabled"] is False and cleared_doc["endpoint"] == ""

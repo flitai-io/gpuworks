@@ -17,11 +17,11 @@ export const LOGO_BOX = { width: 160, height: 24 };
 /** BRANDING_LOGO_MAX_BYTES mirrors the server's logo limit (decoded bytes). */
 export const BRANDING_LOGO_MAX_BYTES = 128 << 10;
 
-const EMPTY: Branding = { product_name: "", console_title: "", login_description: "", logo: "" };
+export const DEFAULT_BRANDING: Branding = { product_name: "", console_title: "", login_description: "", logo: "" };
 
 // One copy for the whole page: the sign-in page, the shell and the settings
 // card read it, and a save replaces it so every place updates at once.
-let current: Branding = EMPTY;
+let current: Branding = DEFAULT_BRANDING;
 let loading: Promise<void> | undefined;
 const listeners = new Set<() => void>();
 
@@ -36,7 +36,7 @@ function subscribe(listener: () => void) {
 
 /** setBranding replaces the shared branding, e.g. with a save's response. */
 export function setBranding(next: Branding) {
-  current = { ...EMPTY, ...next };
+  current = { ...DEFAULT_BRANDING, ...next };
   emit();
 }
 
@@ -51,7 +51,7 @@ export function loadBranding(): Promise<void> {
 
 /** resetBrandingForTest forgets the loaded branding. */
 export function resetBrandingForTest() {
-  current = EMPTY;
+  current = DEFAULT_BRANDING;
   loading = undefined;
   emit();
 }

@@ -1,5 +1,6 @@
+import SettingsSaveButton from "./SettingsSaveButton";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Button, Card, Form, InputNumber, Modal, Select, Skeleton, Space, Switch, Tag, Typography, message } from "antd";
+import { Alert, Button, Card, Form, InputNumber, Select, Skeleton, Space, Switch, Tag, Typography, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { api, type DataRetention, type DataRetentionStatus, type DataRetentionStore, type DataRetentionView } from "../../api";
 import { apiErrorText } from "../../apiError";
@@ -99,22 +100,7 @@ export default function DataRetentionCard() {
       setSaving(false);
     }
   };
-  const save = () => {
-    if (!view || !draft || invalid.length > 0) return;
-    const less = shortened(view.value, draft);
-    if (less.length === 0) {
-      void submit(draft);
-      return;
-    }
-    Modal.confirm({
-      title: t("dataRetention.shrinkTitle"),
-      content: t("dataRetention.shrinkBody", { fields: less.map((f) => t(`dataRetention.fields.${f}`)).join(t("dataRetention.listSeparator")) }),
-      okText: t("dataRetention.shrinkOk"),
-      okButtonProps: { danger: true },
-      cancelText: t("common.cancel"),
-      onOk: () => submit(draft),
-    });
-  };
+  const less = view && draft ? shortened(view.value, draft) : [];
 
   const field = (f: NumericField) => {
     const limit = view?.limits[f];
@@ -157,8 +143,14 @@ export default function DataRetentionCard() {
       title={t("dataRetention.title")}
       extra={
         <Space>
-          <Button disabled={!dirty || saving} onClick={() => view && setDraft(view.value)}>{t("dataRetention.reset")}</Button>
-          <Button type="primary" loading={saving} disabled={!dirty || invalid.length > 0} onClick={save}>{t("common.save")}</Button>
+          <Button size="small" disabled={!dirty || saving} onClick={() => view && setDraft(view.value)}>{t("dataRetention.reset")}</Button>
+          <SettingsSaveButton loading={saving} disabled={!dirty || invalid.length > 0}
+            onSave={() => { if (draft) return submit(draft); }}
+            title={less.length ? t("dataRetention.shrinkTitle") : undefined}
+            destructive={less.length > 0}
+            description={less.length ? t("dataRetention.shrinkBody", { fields: less.map((f) => t(`dataRetention.fields.${f}`)).join(t("dataRetention.listSeparator")) }) : undefined}
+            confirmText={less.length ? t("dataRetention.shrinkOk") : undefined}
+          />
         </Space>
       }
     >

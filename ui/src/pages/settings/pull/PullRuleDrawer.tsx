@@ -1,4 +1,5 @@
-import { useState } from "react";
+import SettingsSaveButton from "../SettingsSaveButton";
+import { useRef, useState } from "react";
 import { Alert, Button, Checkbox, Drawer, Form, Input, Radio, Space, Switch, Typography } from "antd";
 import { ArrowDownOutlined, ArrowUpOutlined, CloseOutlined, PlusOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
@@ -27,6 +28,7 @@ export default function PullRuleDrawer({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const saveTrigger = useRef<HTMLButtonElement>(null);
   const { t } = useTranslation("settings");
   const { t: tCommon } = useTranslation("common");
   const [kind, setKind] = useState<"image" | "url">(rule?.kind ?? "image");
@@ -80,7 +82,7 @@ export default function PullRuleDrawer({
       footer={
         <Space style={{ display: "flex", justifyContent: "flex-end" }}>
           <Button onClick={onClose} disabled={saving}>{t("pull.action.cancel")}</Button>
-          <Button type="primary" loading={saving} onClick={() => void save()}>{t("pull.action.save")}</Button>
+          <SettingsSaveButton triggerRef={saveTrigger} loading={saving} onSave={save} />
         </Space>
       }
     >
@@ -113,7 +115,7 @@ export default function PullRuleDrawer({
             value={match}
             placeholder={t(`pull.rules.matchPlaceholder${suffix}`)}
             onChange={(event) => setMatch(event.target.value)}
-            onPressEnter={() => void save()}
+            onPressEnter={(event) => { event.preventDefault(); saveTrigger.current?.click(); }}
           />
         </Form.Item>
 
@@ -133,7 +135,7 @@ export default function PullRuleDrawer({
                   value={endpoint}
                   placeholder={t(`pull.rules.endpointPlaceholder${suffix}`)}
                   onChange={(event) => setEndpoints((list) => list.map((item, i) => (i === index ? event.target.value : item)))}
-                  onPressEnter={() => void save()}
+                  onPressEnter={(event) => { event.preventDefault(); saveTrigger.current?.click(); }}
                 />
                 <Button
                   aria-label={t("pull.rules.endpointUp", { n: index + 1 })}

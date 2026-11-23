@@ -47,7 +47,7 @@ func applyStartupState(cfg Config, st *store.Store, catalogPackages *packages.St
 	// node's download addresses come from, so node downloads stay hermetic
 	// without a second, implicit endpoint setting.
 	if endpoint := strings.TrimSpace(cfg.ModelEndpoint); endpoint != "" {
-		return ensureModelEndpointRules(st, endpoint)
+		return ensureModelEndpointRules(st, endpoint, cfg.Experience != nil)
 	}
 	return nil
 }

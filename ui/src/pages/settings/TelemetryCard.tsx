@@ -1,3 +1,4 @@
+import SettingsSaveButton from "./SettingsSaveButton";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Space, Switch, Tag, Typography, message } from "antd";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
@@ -144,9 +145,7 @@ export default function TelemetryCard() {
         extra={
           <Space>
             {current && state}
-            <Button type="primary" loading={saving} disabled={!editable} onClick={() => void save()}>
-              {t("common.save")}
-            </Button>
+            <SettingsSaveButton loading={saving} disabled={!editable} onSave={save} />
           </Space>
         }
       >

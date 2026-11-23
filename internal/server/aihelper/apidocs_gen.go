@@ -99,7 +99,7 @@ var routeDocs = map[string]string{
 
 	"/api/v1/events": "SSE 变更事件流",
 
-	"/api/v1/experience": "功能体验模式状态 `{enabled, ready, port, user, password?, error?}`：体验环境是否在运行、控制台是否已应答、端口（控制台端口 +10）、账号，运行时附密码；自行退出时 `error` 为原因。体验环境是独立进程与数据目录，只含模拟数据；体验环境自身的控制台与无数据目录的服务端 404 `EXPERIENCE_UNAVAILABLE`",
+	"/api/v1/experience": "功能体验模式状态 `{enabled, ready, port, user, password?, error?}`：体验环境是否在运行、控制台是否已应答、端口（控制台端口 +10）、账号，运行时附密码；自行退出时 `error` 为原因。体验环境是独立进程与数据目录，只含模拟数据。模型页离线显示预置模型的发布组织头像。体验环境重启时会为缺少头像的预置模型补齐缓存。模型页预置了未被部署引用的 Qwen3-0.6B 和 Qwen3-1.7B，可用于体验模型删除。推理模板页的自定义副本 `experience/qwen3-8b` 可用于体验删除模板或档位。批处理列表为空时，体验环境会向已运行的模拟聊天部署提交两条 JSONL 请求，可在任务详情查看完成数并下载结果；体验环境自身的控制台与无数据目录的服务端 404 `EXPERIENCE_UNAVAILABLE`",
 
 	"/api/v1/gpus": "集群 GPU 清单及最新指标，至多 20 秒的快照；实例、部署或节点（卡健康、停用卡、上下线）变化后，过 2 秒刷新下限即重建。支持 `page`/`page_size`、`q`、`node`、`vendor`、`model`；`allocation_state` 为 `available/partial/allocated/unusable/unknown`，与健康等级不同。`q` 匹配节点名/UUID、卡型号、GPU UUID、PCIe 地址子串，其余筛选可用逗号分隔。`unusable` 原因见 `schedulable/health_status/ownership/foreign_processes`。`sort` 为 `node/model/vendor/allocation_state/occupants/utilization/memory/temperature/power/fan/bdf/numa`；分页含全量 `overview`、`facets`。见[GPU 筛选与分配状态](#gpu-筛选与分配状态)",
 

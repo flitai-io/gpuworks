@@ -83,6 +83,7 @@ test("lengthening saves the whole setting at once", async () => {
   await user.type(input, "730");
   await user.click(screen.getByRole("switch", { name: d.switches.gpu }));
   await user.click(screen.getByRole("button", { name: locale.settings.common.save }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(puts.length, 1));
   assert.deepEqual(puts[0], { ...value, usage_daily_days: 730, gpu: false });
   assert.ok(await screen.findByText(d.saved));
@@ -110,9 +111,7 @@ test("shortening asks first, names what shrinks, and cancelling saves nothing", 
   await user.click(within(dialog).getAllByRole("button", { name: locale.settings.common.cancel }).at(-1)!);
   assert.equal(puts.length, 0);
   await user.click(screen.getByRole("button", { name: locale.settings.common.save }));
-  // antd keeps a closing dialog in the page through its exit animation.
-  await waitFor(() => assert.ok(screen.getAllByRole("button", { name: d.shrinkOk }).length > 0));
-  await user.click(screen.getAllByRole("button", { name: d.shrinkOk }).at(-1)!);
+  await user.click(await screen.findByRole("button", { name: d.shrinkOk }));
   await waitFor(() => assert.equal(puts.length, 1));
   assert.equal(puts[0].logs_hours, 48);
 });

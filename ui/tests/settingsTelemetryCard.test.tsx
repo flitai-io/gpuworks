@@ -92,6 +92,7 @@ test("an admin turns export on with a collector and a token, and saves it", asyn
   await user.type(screen.getByRole("textbox", { name: tl.traceLink }), "https://grafana/t/{{trace_id}");
   assert.equal(api.updates.length, 0, "editing alone does not save");
   await user.click(saveButton());
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(api.updates.length, 1));
   assert.deepEqual(api.updates[0], {
     enabled: true, endpoint: "http://otel-collector:4318", sample_ratio: 0.25, trace_link: "https://grafana/t/{trace_id}",
@@ -111,6 +112,7 @@ test("a stored header left empty is kept, a removed one is dropped", async () =>
   await waitFor(() => assert.equal(endpoint().value, "http://c:4318"));
   await user.click(screen.getByRole("button", { name: "Remove header 2" }));
   await user.click(saveButton());
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(api.updates.length, 1));
   assert.deepEqual(api.updates[0].headers, [{ name: "Authorization", value: null }]);
 });
@@ -148,6 +150,7 @@ test("a refused save names the field from the server's code", async () => {
   const user = renderCard();
   await waitFor(() => assert.equal(endpoint().disabled, false));
   await user.click(saveButton());
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   assert.ok(await screen.findByText(/Header X-Token has no value yet/));
 });
 
@@ -203,6 +206,7 @@ test("the switch and the save work from the keyboard", async () => {
   await user.keyboard(" ");
   saveButton().focus();
   await user.keyboard("{Enter}");
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(api.updates.length, 1));
   assert.equal(api.updates[0].enabled, true);
 });

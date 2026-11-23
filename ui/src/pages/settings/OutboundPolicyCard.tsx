@@ -1,3 +1,4 @@
+import SettingsSaveButton from "./SettingsSaveButton";
 import { useEffect, useState } from "react";
 import { Alert, Button, Card, Form, Input, Skeleton, Space, Switch, Typography } from "antd";
 import { useTranslation } from "react-i18next";
@@ -76,7 +77,7 @@ export default function OutboundPolicyCard() {
           } />}
           {view && <>
             {!view.editable && <Alert type="warning" showIcon message={t("outboundPolicy.readOnly")} />}
-            <Form layout="vertical" onFinish={() => void save()}>
+            <Form layout="vertical">
               <Form.Item label={t("outboundPolicy.restrict")} htmlFor="outbound-restrict" extra={t("outboundPolicy.restrictHelp")}>
                 <Switch id="outbound-restrict" checked={restrict} disabled={!editable} onChange={(value) => { setRestrict(value); setSaved(false); }} />
               </Form.Item>
@@ -85,7 +86,7 @@ export default function OutboundPolicyCard() {
                   onChange={(event) => { setHosts(event.target.value); setSaved(false); }} />
               </Form.Item>
               <Typography.Paragraph type="secondary">{t("outboundPolicy.persisted")}</Typography.Paragraph>
-              <Button type="primary" htmlType="submit" loading={saving} disabled={!editable || !dirty || conflict}>{t("common.save")}</Button>
+              <SettingsSaveButton loading={saving} disabled={!editable || !dirty || conflict} onSave={save} />
             </Form>
           </>}
           {saved && <Alert type="success" showIcon message={t("outboundPolicy.saved")} />}

@@ -27,6 +27,7 @@ import uuid
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeout, expect, sync_playwright
 from local_browser_fixture import Artifacts, LocalServer, ROOT, digest
+from settings_confirm import confirm_setting
 from platform_token_read_revoke import button, check
 from settings_branding_fixture import watch_public_page
 from settings_branding_inventory import exercise_branding_conflict, exercise_branding_field_inventory
@@ -177,7 +178,7 @@ def exercise_branding_single_field(page, card, branding, field_input, click_save
     expect(name).to_have_value(name_b)
     expect(title).to_have_value("")
     expect(sign_in).to_have_value("")
-    button(card, branding["restoreDefault"]).click()
+    confirm_setting(page, button(card, branding["restoreDefault"]))
     # BrandMark always renders an <img> and falls back to the built-in wordmark,
     # so "restored" is the fallback src rather than a missing element.
     expect(card.locator("img.app-brand-logo")).to_have_attribute(
@@ -271,7 +272,7 @@ def test_branding(page, context, browser, server, artifacts, report, locale):
     expect(general).to_have_attribute("aria-selected", "true")
     report["last_step"] = "settings-general"
     card = page.locator("#branding")
-    save_button = card.locator("button.ant-btn-primary")
+    save_button = button(card, settings["common"]["save"])
     expect(save_button).to_be_disabled()
     check(card.locator("input[type='password']").count() == 0, "branding card echoes a secret")
     for _ in range(50):
@@ -325,13 +326,7 @@ def test_branding(page, context, browser, server, artifacts, report, locale):
         }, initial)
 
     def click_save():
-        # Role clicks flake while a control character is in the field or while
-        # the button re-renders into its loading state.
-        target = card.locator("button.ant-btn-primary")
-        expect(target).to_be_enabled()
-        box = target.bounding_box()
-        check(box is not None, "branding save button has no box")
-        page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        confirm_setting(page, save_button)
 
     report["last_step"] = "branding-conflict"
     report["branding_conflict"] = exercise_branding_conflict(
@@ -447,9 +442,9 @@ def test_branding(page, context, browser, server, artifacts, report, locale):
     patches_before_edit = len(patches)
     page.evaluate("(text) => navigator.clipboard.writeText(text)", pasted)
     description_input.click()
-    description_input.press("Control+V")
+    description_input.press("ControlOrMeta+V")
     expect(description_input).to_have_value(pasted)
-    description_input.press("Control+A")
+    description_input.press("ControlOrMeta+A")
     description_input.press("Backspace")
     expect(description_input).to_have_value("")
     first_line, second_line = login_description.split("\n", 1)
@@ -478,9 +473,9 @@ def test_branding(page, context, browser, server, artifacts, report, locale):
 
     page.route("**" + BRANDING, hold_patch)
     click_save()
-    inflight = card.locator("button.ant-btn-primary")
-    expect(inflight).to_have_class(re.compile(r"\bant-btn-loading\b"))
-    inflight.click()
+    inflight = button(card, settings["common"]["save"])
+    expect(inflight).to_be_disabled()
+    inflight.evaluate("(button) => button.click()")
     product_input.press("Enter")
     check(len(held) == 1, "duplicate create from a second click or Enter while the first request is held")
     check(held[0].request.post_data_json == expected_body, "held branding body differs")
@@ -539,7 +534,7 @@ def test_branding(page, context, browser, server, artifacts, report, locale):
           "the saved login description did not keep its newline")
     report["last_step"] = "branding-reloaded"
 
-    button(card, branding["restoreDefault"]).click()
+    confirm_setting(page, button(card, branding["restoreDefault"]))
     field_input(branding["productName"]).fill("")
     field_input(branding["consoleTitle"]).fill("")
     field_input(branding["loginDescription"], "textarea").fill("")

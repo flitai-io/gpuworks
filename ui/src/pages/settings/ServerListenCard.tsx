@@ -1,3 +1,4 @@
+import SettingsSaveButton from "./SettingsSaveButton";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Button, Card, Collapse, Form, Input, Space, Tag, Typography, message } from "antd";
 import { useTranslation } from "react-i18next";
@@ -109,7 +110,7 @@ export default function ServerListenCard() {
   return (
     <Card
       title={t("listen.title")}
-      extra={<Button type="primary" loading={saving} disabled={!editable} onClick={() => void save()}>{t("common.save")}</Button>}
+      extra={<SettingsSaveButton loading={saving} disabled={!editable} onSave={save} />}
     >
       <Space direction="vertical" size={12} style={{ width: "100%", maxWidth: 860 }}>
         <Text type="secondary">{t("listen.description")} <HelpTip content={t("listen.descriptionHelp")} /></Text>

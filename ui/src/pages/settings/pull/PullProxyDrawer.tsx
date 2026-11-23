@@ -1,3 +1,4 @@
+import SettingsSaveButton from "../SettingsSaveButton";
 import { useState } from "react";
 import { Alert, Button, Checkbox, Drawer, Form, Input, Space } from "antd";
 import { useTranslation } from "react-i18next";
@@ -78,7 +79,7 @@ export default function PullProxyDrawer({
       footer={
         <Space style={{ display: "flex", justifyContent: "flex-end" }}>
           <Button onClick={onClose} disabled={saving}>{t("pull.action.cancel")}</Button>
-          <Button type="primary" loading={saving} onClick={() => void save()}>{t("pull.action.save")}</Button>
+          <SettingsSaveButton loading={saving} onSave={save} />
         </Space>
       }
     >

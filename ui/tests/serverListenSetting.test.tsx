@@ -1,32 +1,11 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import { after, afterEach, test } from "node:test";
-import { JSDOM } from "jsdom";
+import { afterEach, test } from "node:test";
+import { createI18n } from "./helpers/dom.ts";
 import React from "react";
-import { createInstance } from "i18next";
-import { I18nextProvider, initReactI18next } from "react-i18next";
-import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
+import { I18nextProvider } from "react-i18next";
 
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot"] as const) {
-  Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
-}
-Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
-Object.defineProperty(dom.window, "matchMedia", { configurable: true, value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }) });
-class ResizeObserverStub { observe() {} unobserve() {} disconnect() {} }
-Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, configurable: true });
-const closeChannels = trackMessageChannels();
-
-const settingsLocale = JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/settings.json", import.meta.url), "utf8"));
-const commonLocale = JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/common.json", import.meta.url), "utf8"));
-const i18n = createInstance();
-await i18n.use(initReactI18next).init({
-  lng: "en",
-  fallbackLng: "en",
-  resources: { en: { settings: settingsLocale, common: commonLocale } },
-  defaultNS: "settings",
-  interpolation: { escapeValue: false },
-});
+const { i18n, locale } = await createI18n(["settings"]);
+const settingsLocale = locale.settings;
 
 const { cleanup, render, screen, waitFor } = await import("@testing-library/react");
 const userEventModule = await import("@testing-library/user-event");
@@ -36,7 +15,6 @@ const { APIError } = await import("../src/apiError.ts");
 const ServerListenCard = (await import("../src/pages/settings/ServerListenCard.tsx")).default;
 
 afterEach(() => cleanup());
-after(() => closeChannels());
 
 const l = settingsLocale.listen;
 
@@ -105,6 +83,7 @@ test("saves the addresses of every function and offers a restart", async () => {
     await userEvent.click(screen.getByText(l.advanced));
     await userEvent.type(await screen.findByLabelText(l.gateway), "10.20.0.5:8800, 10.20.0.5:443");
     await userEvent.click(screen.getByRole("button", { name: settingsLocale.common.save }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
     await waitFor(() => assert.equal(s.updates.length, 1));
     assert.deepEqual(s.updates[0], { console: ["192.0.2.156:8800"], agent: [], gateway: ["10.20.0.5:8800", "10.20.0.5:443"] });
     await waitFor(() => assert.ok(screen.getByText(l.pending)));
@@ -122,12 +101,14 @@ test("requires a console address and shows a rejected save in the reader's words
     await waitFor(() => assert.equal((input as HTMLInputElement).value, "192.0.2.156:8800"));
     await userEvent.clear(input);
     await userEvent.click(screen.getByRole("button", { name: settingsLocale.common.save }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
     await waitFor(() => assert.ok(screen.getByText(l.consoleRequired)));
     assert.equal(s.updates.length, 0);
 
     s.failSaveWith(new APIError("SERVER_LISTEN_LOCKOUT", { address: "192.0.2.156:8800" }, "lockout", 400));
     await userEvent.type(input, "10.20.0.5:8800");
     await userEvent.click(screen.getByRole("button", { name: settingsLocale.common.save }));
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
     await waitFor(() => assert.ok(screen.getByText(/You are connected through 192\.0\.2\.156:8800/)));
   } finally {
     s.restore();

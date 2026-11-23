@@ -9,7 +9,6 @@ import {
   Form,
   Input,
   Modal,
-  Popconfirm,
   Select,
   Space,
   Table,
@@ -121,6 +120,7 @@ export function ModelLogo({ model, size = "default" }: { model: ModelCore; size?
 export function ModelTile({
   model,
   onOpen,
+  selection,
   onDownload,
   onCopy,
   onRegisterPath,
@@ -128,20 +128,21 @@ export function ModelTile({
 }: {
   model: ModelCore;
   onOpen: () => void;
+  selection?: ReactNode;
   onDownload: () => void;
   onCopy: () => void;
   onRegisterPath: () => void;
 	onDelete: () => void;
 }) {
   const { t } = useTranslation("models");
-  return <ModelTileFrame onOpen={onOpen} name={model.name || model.source_id} logo={<ModelLogo model={model} />}
+  return <ModelTileFrame onOpen={onOpen} name={model.name || model.source_id} logo={<>{selection}<ModelLogo model={model} /></>}
     tags={<>{operationTypesOf(model.operations).slice(0, 2).map((value) => <Badge size="sm" color="blue" key={value}>{t(operationLabelKey[value])}</Badge>)}
             {inputModalitiesOf(model.input_modalities).slice(0, 2).map((value) => <Badge size="sm" key={value}>{modalityLabel[value] ? t(modalityLabel[value].labelKey) : value}</Badge>)}</>}
     actions={<><Tooltip title={t("action.deployInferenceTemplate")}><Button type="text" icon={<RocketOutlined />} onClick={() => location.assign(`/deploy?model=${model.id}`)} aria-label={t("action.deployInferenceTemplate")} /></Tooltip>
           {model.source !== "local" && <Tooltip title={t("action.downloadToNode")}><Button type="text" icon={<CloudDownloadOutlined />} onClick={onDownload} aria-label={t("action.downloadToNode")} /></Tooltip>}
           <Tooltip title={t("action.copyTo")}><Button type="text" icon={<CopyOutlined />} onClick={onCopy} aria-label={t("action.copyTo")} /></Tooltip>
           <Tooltip title={t("action.registerExistingPath")}><Button type="text" icon={<FolderAddOutlined />} onClick={onRegisterPath} aria-label={t("action.registerNodePath")} /></Tooltip>
-		  <Popconfirm title={t("delete.confirm", { name: model.name || model.source_id })} description={t("delete.tileDescription")} okText={t("action.delete")} cancelText={t("action.cancel")} okButtonProps={{ danger: true }} onConfirm={onDelete}><Tooltip title={t("action.deleteModel")}><Button danger type="text" icon={<DeleteOutlined />} aria-label={t("action.deleteModel")} /></Tooltip></Popconfirm>
+		  <Tooltip title={t("action.deleteModel")}><Button danger type="text" icon={<DeleteOutlined />} onClick={onDelete} aria-label={t("action.deleteModel")} /></Tooltip>
           <AIAssistant task="model.fit" subject={{ kind: "model", id: model.id, label: model.name || model.source_id }} buttonText="" buttonType="link" buttonSize="small" /></>}
     footer={<><ModelSourceTag source={model.source} badge />
         <span className="model-tile-divider" />

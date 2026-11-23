@@ -119,6 +119,10 @@
     "deleteFailed": "删除失败：{{detail}}"
   },
   "delete": {
+    "selected": "删除所选（{{count}}）",
+    "confirmSelected": "删除所选的 {{count}} 个模型？",
+    "done": "已删除 {{count}} 个模型",
+    "result": "已删除 {{done}} 个，失败 {{failed}} 个",
     "confirm": "删除模型“{{name}}”？",
     "listDescription": "节点副本记录也会一并清理；被部署引用的模型不能删除。",
     "tileDescription": "被部署引用的模型不能删除。"

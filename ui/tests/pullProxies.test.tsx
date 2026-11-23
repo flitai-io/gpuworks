@@ -96,6 +96,7 @@ test("creating an entry sends the drawer's fields with the password and defaults
   assert.equal((within(drawer).getByLabelText(text.password) as HTMLInputElement).type, "password");
   await user.type(within(drawer).getByLabelText(text.note), "main proxy");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(rows().length, 1));
   assert.deepEqual(fake.calls.find((call) => call.method === "createPullProxy")?.args[0], {
     http_proxy: "http://proxy.corp:3128", https_proxy: "", no_proxy: "localhost,.corp", username: "svc", password: "pw1",
@@ -111,10 +112,12 @@ test("a refusal is shown at its field and the drawer stays open", async () => {
   await user.click(screen.getByRole("button", { name: text.new }));
   const drawer = await screen.findByRole("dialog");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   const field = i18n.t("pull.fields.http_proxy", { ns: "settings" });
   await within(drawer).findByText(i18n.t("pull.invalidField", { ns: "settings", field, detail: i18n.t("pullSettingReason.invalid_value", { ns: "common" }) }));
   await user.type(within(drawer).getByLabelText(text.httpProxy), "http://u:p@proxy.corp:3128");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await within(drawer).findByText(i18n.t("pull.invalidField", { ns: "settings", field: i18n.t("pull.fields.http_proxy", { ns: "settings" }), detail: i18n.t("pullSettingReason.invalid_value", { ns: "common" }) }));
   assert.equal(fake.proxies.length, 0, "nothing was created");
   assert.ok(screen.getByRole("dialog"), "still open");
@@ -131,6 +134,7 @@ test("editing keeps the stored password when the field stays empty", async () =>
   await user.clear(within(drawer).getByLabelText(text.note));
   await user.type(within(drawer).getByLabelText(text.note), "changed");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
   const update = fake.calls.find((call) => call.method === "updatePullProxy");
   assert.equal(update?.args[0], 1);
@@ -147,6 +151,7 @@ test("clearing the stored password sends an empty password", async () => {
   await user.click(checkbox(drawer, text.clearPassword));
   assert.ok(within(drawer).getByText(text.passwordClearedHelp));
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
   assert.equal((fake.calls.find((call) => call.method === "updatePullProxy")?.args[1] as { password?: string }).password, "");
   assert.equal(fake.proxies[0].password, "");
@@ -160,6 +165,7 @@ test("setting a new password replaces the stored one", async () => {
   const drawer = await screen.findByRole("dialog");
   await user.type(within(drawer).getByLabelText(text.password), "newpw");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
   assert.equal(fake.proxies[0].password, "newpw");
 });
@@ -242,6 +248,7 @@ test("the node selector in the drawer narrows an entry and clears the default ma
   await waitFor(() => assert.equal(checkbox(drawer, text.controlPlaneLabel).checked, false), { timeout: 2000 });
   await user.type(within(drawer).getByLabelText(text.httpsProxy), "http://p:1");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
+  await user.click(await screen.findByRole("button", { name: "Confirm", exact: true }));
   await waitFor(() => assert.equal(rows().length, 1));
   const body = fake.calls.find((call) => call.method === "createPullProxy")?.args[0] as { control_plane: boolean; node_requirements: unknown };
   assert.deepEqual(body.node_requirements, { site: ["idc-a"] });

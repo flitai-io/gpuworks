@@ -119,6 +119,10 @@
     "deleteFailed": "Failed to delete model: {{detail}}"
   },
   "delete": {
+    "selected": "Delete selected ({{count}})",
+    "confirmSelected": "Delete {{count}} selected models?",
+    "done": "Deleted {{count}} models",
+    "result": "Deleted {{done}} · Failed {{failed}}",
     "confirm": "Delete model “{{name}}”?",
     "listDescription": "Node copy records will also be removed. Models referenced by a deployment cannot be deleted.",
     "tileDescription": "Models referenced by a deployment cannot be deleted."

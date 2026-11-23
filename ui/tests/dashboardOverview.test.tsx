@@ -107,6 +107,8 @@ test("the page reads hardware first: compute, then platform services, then stora
   ok(document.querySelector(".dashboard-header-meta")?.textContent?.includes("Normal"));
   assert.deepEqual([...document.querySelectorAll(".dashboard-block > .dashboard-block-head h2")].map((title) => title.textContent), ["Compute resources", "Platform services", "Storage and connections"]);
   assert.deepEqual(summaryRequests, [[]]);
+  fireEvent.click(screen.getByRole("button", { name: "Refresh data" }));
+  await waitFor(() => assert.deepEqual(summaryRequests, [[], []]));
   assert.equal(document.querySelectorAll(".dashboard-overview-label-key").length, 0);
   ok(!document.body.textContent?.includes("by node label"));
 });

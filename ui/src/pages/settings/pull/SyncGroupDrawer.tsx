@@ -1,4 +1,5 @@
-import { useState } from "react";
+import SettingsSaveButton from "../SettingsSaveButton";
+import { useRef, useState } from "react";
 import { Alert, Button, Drawer, Form, Input, InputNumber, Space, Switch } from "antd";
 import { useTranslation } from "react-i18next";
 import { api, type NodeRequirementsMap, type SyncGroup } from "../../../api";
@@ -19,6 +20,7 @@ export default function SyncGroupDrawer({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const saveTrigger = useRef<HTMLButtonElement>(null);
   const { t } = useTranslation("settings");
   const { t: tCommon } = useTranslation("common");
   const [name, setName] = useState(group?.name ?? "");
@@ -64,7 +66,7 @@ export default function SyncGroupDrawer({
       footer={
         <Space style={{ display: "flex", justifyContent: "flex-end" }}>
           <Button onClick={onClose} disabled={saving}>{t("pull.action.cancel")}</Button>
-          <Button type="primary" loading={saving} onClick={() => void save()}>{t("pull.action.save")}</Button>
+          <SettingsSaveButton triggerRef={saveTrigger} loading={saving} onSave={save} />
         </Space>
       }
     >
@@ -81,7 +83,7 @@ export default function SyncGroupDrawer({
             autoComplete="off"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            onPressEnter={() => void save()}
+            onPressEnter={(event) => { event.preventDefault(); saveTrigger.current?.click(); }}
           />
         </Form.Item>
         <Form.Item
@@ -107,7 +109,7 @@ export default function SyncGroupDrawer({
               disabled={!limited}
               value={rate}
               onChange={(value) => setRate(value == null ? null : Number(value))}
-              onPressEnter={() => void save()}
+              onPressEnter={(event) => { event.preventDefault(); saveTrigger.current?.click(); }}
             />
             <span>{t("pull.groups.rateUnit")}</span>
           </Space>
