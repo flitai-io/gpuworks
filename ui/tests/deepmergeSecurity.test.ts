@@ -70,6 +70,7 @@ test("production bundler uses the patched merge and retains YAML validation and 
       load: (id) => id === entry ? `
         export { EditorState } from "@codemirror/state";
         export { CompletionContext } from "@codemirror/autocomplete";
+        export { ensureSyntaxTree } from "@codemirror/language";
         export { yamlSchema, yamlSchemaLinter, yamlCompletion } from "codemirror-json-schema/yaml";
         export { default as schemaMerge } from "json-schema-library/dist/module/lib/utils/merge.js";
       ` : undefined,
@@ -95,7 +96,17 @@ test("production bundler uses the patched merge and retains YAML validation and 
   assertSafe(bundled.schemaMerge({ session: null }, { session: payload() }).session);
 
   const schema = { type: "object", properties: { engine: { type: "string", enum: ["vllm", "sglang"] } } };
-  const stateFor = (doc: string) => bundled.EditorState.create({ doc, extensions: bundled.yamlSchema(schema) });
+  // CodeMirror parses a new state under a 20 ms wall-clock budget and keeps an
+  // unfinished tree if it is exceeded. A runner stalled mid-parse (GC, CPU
+  // contention) then leaves the linter and completion reading a partial tree,
+  // so completion came back with no options. Finish the parse, then take the
+  // state forward one empty transaction, which is what publishes the finished
+  // tree to syntaxTree(state) (ensureSyntaxTree only advances the context).
+  const stateFor = (doc: string) => {
+    const created = bundled.EditorState.create({ doc, extensions: bundled.yamlSchema(schema) });
+    assert.ok(bundled.ensureSyntaxTree(created, created.doc.length, 10_000), "YAML syntax tree did not finish parsing");
+    return created.update({}).state;
+  };
   assert.deepEqual(bundled.yamlSchemaLinter()({ state: stateFor("engine: vllm") }), []);
   const invalid = bundled.yamlSchemaLinter()({ state: stateFor("engine: unknown") });
   assert.ok(invalid.some((error: { severity: string }) => error.severity === "error"));
