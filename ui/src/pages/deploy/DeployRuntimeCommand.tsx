@@ -18,6 +18,7 @@ import { launchCommand } from "./launchCommand";
 import CopyButton from "../../components/CopyButton";
 import DeployMountPreview, { mountClipboardText } from "./DeployMountPreview";
 import { warningKey, warningText } from "./deployWarnings";
+import { Notice } from "../../ui-kit/Notice";
 
 // The server's findings about the API port a manual command states, shown
 // under the editor where the port is written.
@@ -201,11 +202,10 @@ export default function DeployRuntimeCommand({
             />
           </Form.Item>
           {portWarnings.map((warning) => (
-            <Alert
+            <Notice
               key={warningKey(warning)}
-              type="warning"
-              showIcon
-              message={warningText(t, warning)}
+              tone="warning"
+              title={warningText(t, warning)}
             />
           ))}
         </>
