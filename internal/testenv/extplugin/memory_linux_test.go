@@ -36,8 +36,13 @@ func TestRSSWatchdogRestartsAGrowingPlugin(t *testing.T) {
 	if st.Params["id"] != "acme_fake" || st.Params["limit_mib"] != 48 {
 		t.Fatalf("params = %#v", st.Params)
 	}
-	if rss, _ := st.Params["rss_mib"].(int64); rss < 80 {
-		t.Fatalf("rss_mib = %v, want the group's, at least the 80 MiB the plugin and its child hold", st.Params["rss_mib"])
+	// The watchdog kills at its first sample above the bound, while the
+	// plugin and its child are still touching their pages, so the sample is
+	// anywhere from the bound (rss_mib truncates, so 72 MiB and a bit reads
+	// 72) up to the 80 MiB they end at. At the bound is what shows the child
+	// counted: the plugin alone holds less.
+	if rss, _ := st.Params["rss_mib"].(int64); rss < 72 {
+		t.Fatalf("rss_mib = %v, want the group's, at least the 72 MiB bound only the plugin and its child together exceed", st.Params["rss_mib"])
 	}
 	if st.Cgroup != "" {
 		t.Fatalf("Cgroup = %q, the test host places no cgroups", st.Cgroup)
