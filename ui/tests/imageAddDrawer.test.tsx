@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { chooseOption, openSelect } from "./helpers/zeronSelect.ts";
 import { choose, openDrawer, renderPage } from "./helpers/imageAddDrawerHarness.tsx";
-import { communityRepos, imageEngines, json, vllmOpenAIBrowse, zhImages } from "./helpers/imagesHarness.ts";
+import { communityRepos, communitySeries, imageEngines, json, nightlyVersion, vllmOpenAIBrowse, zhImages } from "./helpers/imagesHarness.ts";
+import { pickNodes } from "./helpers/nodePicker.ts";
 
 const { act, fireEvent, screen, waitFor, within } = await import("@testing-library/react");
 const { formatTime } = await import("../src/i18n/datetime.ts");
