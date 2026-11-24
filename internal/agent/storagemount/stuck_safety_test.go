@@ -1,6 +1,7 @@
 package storagemount
 
 import (
+	"context"
 	"os"
 	"strings"
 	"sync"
@@ -57,6 +58,10 @@ func TestStuckMountThatIsAlreadyGoneIsMountedAgain(t *testing.T) {
 	}
 }
 
+// forcedUmountLimit is how long the hanging forced umount of the test below
+// runs before it is killed.
+const forcedUmountLimit = 40 * time.Millisecond
+
 // umount can detach the mount point and still exit non-zero, or be killed at
 // its time limit while it waits for the server. Either way the mount is gone,
 // so the storage is mounted again in the same pass.
@@ -64,7 +69,21 @@ func TestForcedUnmountThatDetachesButFailsStillRecovers(t *testing.T) {
 	for _, mode := range []string{"exits non-zero", "is killed at its time limit"} {
 		t.Run(mode, func(t *testing.T) {
 			e := newEnv(t)
-			m, clock, sp, _ := stuckNFS(t, e, func(o *Options) { o.MountTimeout = 40 * time.Millisecond })
+			// Only the forced umount is meant to meet a short time limit, and
+			// only in the mode that hangs it. MountTimeout bounds the mount
+			// too, and a 40ms one fails the remount on a loaded host with
+			// "mount did not finish", which is not what this test is about.
+			m, clock, sp, _ := stuckNFS(t, e, func(o *Options) {
+				inner := o.Runner
+				o.Runner = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+					if name == "umount" && len(args) == 3 && args[0] == "-f" && args[1] == "-l" {
+						var cancel context.CancelFunc
+						ctx, cancel = context.WithTimeout(ctx, forcedUmountLimit)
+						defer cancel()
+					}
+					return inner(ctx, name, args...)
+				}
+			})
 			e.h.forced = func(path string) { e.sf.letThrough(path) }
 			if mode == "exits non-zero" {
 				e.h.forceDetachFail = map[string]string{sp.Path: "umount.nfs: nas: RPC: Timed out"}
