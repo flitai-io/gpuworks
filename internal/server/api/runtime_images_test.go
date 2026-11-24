@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -178,7 +179,7 @@ func TestRuntimeImageRegistrationDuringCopy(t *testing.T) {
 				t.Fatalf("node calls: %d", calls)
 			}
 			if scenario == "deleted" || scenario == "replaced" {
-				if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), ErrorLocalImageCatalogChanged) {
+				if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), messages.ErrorLocalImageCatalogChanged) {
 					t.Fatalf("expected conflict: %d %s", rec.Code, rec.Body)
 				}
 				image, err := st.ImageByRef(ref)

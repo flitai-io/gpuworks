@@ -17,9 +17,6 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
-// ErrorLocalImageCatalogChanged reports a catalog conflict while the node was confirming an import.
-const ErrorLocalImageCatalogChanged = "LOCAL_IMAGE_CATALOG_CHANGED"
-
 type selectedNodeImage struct {
 	NodeUUID                    string `json:"node_uuid" yaml:"node_uuid"`
 	proto.RuntimeImageSelection `yaml:",inline"`
@@ -131,7 +128,7 @@ func (a *apiHandlers) registerRuntimeImage(w http.ResponseWriter, r *http.Reques
 func writeLocalRegistrationError(w http.ResponseWriter, ref string, err error) {
 	switch {
 	case errors.Is(err, store.ErrLocalImageCatalogConflict):
-		writeProductError(w, http.StatusConflict, ErrorLocalImageCatalogChanged, "the catalog entry changed or belongs to another source", map[string]any{"image": ref})
+		writeProductError(w, http.StatusConflict, messages.ErrorLocalImageCatalogChanged, "the catalog entry changed or belongs to another source", map[string]any{"image": ref})
 	case containsProductCode(err, ErrorImageFrameworkVersionRequired):
 		writeErr(w, http.StatusBadRequest, err)
 	default:
