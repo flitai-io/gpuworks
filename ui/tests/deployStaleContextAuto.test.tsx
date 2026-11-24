@@ -121,7 +121,11 @@ async function openOnVLLM() {
   fireEvent.mouseDown(vendor);
   fireEvent.click(await screen.findByTitle(deployLocale.basic.vendor.nvidia));
   // The vLLM answer lands its dictionary default: the context shows automatic.
-  await waitFor(() => assert.equal(contextInput().value, automatic));
+  // That is three debounced evaluations and the page's re-renders in sequence,
+  // about 5 s on an idle machine and the longest single wait in this file; a
+  // runner starved by concurrent pipelines outlasted the default 30 s here
+  // (the context input still empty), so this one wait gets a wider budget.
+  await waitFor(() => assert.equal(contextInput().value, automatic), { timeout: 120_000 });
 }
 
 test("an SGLang template chosen while editing the command does not inherit vLLM's automatic context", async () => {
