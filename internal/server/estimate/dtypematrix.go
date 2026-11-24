@@ -19,10 +19,13 @@ type archSupport struct {
 
 // byArch keys NVIDIA GPUs on arch family (lowercased).
 var byArch = map[string]archSupport{
-	"pascal":    {BF16: false, FP8: false, FP4: false, Quant: map[string]bool{"fp8": false, "fp4": false, "nvfp4": false}},
-	"volta":     {BF16: false, FP8: false, FP4: false, Quant: map[string]bool{"fp8": false, "fp4": false, "nvfp4": false}},
-	"turing":    {BF16: false, FP8: false, FP4: false, Quant: map[string]bool{"fp8": false, "fp4": false, "nvfp4": false}, Quirks: []string{"no bf16; float16 pinned"}},
-	"ampere":    {BF16: true, FP8: false, FP4: false, Quant: map[string]bool{"fp8": false, "fp4": false, "nvfp4": false}},
+	"pascal": {BF16: false, FP8: false, FP4: false, Quant: map[string]bool{"fp8": false, "fp4": false, "nvfp4": false}},
+	"volta":  {BF16: false, FP8: false, FP4: false, Quant: map[string]bool{"fp8": false, "fp4": false, "nvfp4": false}},
+	"turing": {BF16: false, FP8: false, FP4: false, Quant: map[string]bool{"fp8": false, "fp4": false, "nvfp4": false}, Quirks: []string{"no bf16; float16 pinned"}},
+	// Ampere has no FP8 tensor cores, but vLLM and SGLang serve FP8 weights on
+	// it through Marlin W8A16 kernels (FP8 weights, BF16/FP16 activations);
+	// vLLM-Omni's online FP8 does the same on an RTX 3090.
+	"ampere":    {BF16: true, FP8: true, FP4: false, Quant: map[string]bool{"fp8": true, "fp4": false, "nvfp4": false}},
 	"ada":       {BF16: true, FP8: true, FP4: false, Quant: map[string]bool{"fp8": true, "fp4": false, "nvfp4": false}},
 	"hopper":    {BF16: true, FP8: true, FP4: false, Quant: map[string]bool{"fp8": true, "fp4": false, "nvfp4": false}},
 	"blackwell": {BF16: true, FP8: true, FP4: true, Quant: map[string]bool{"fp8": true, "fp4": true, "nvfp4": true}},
