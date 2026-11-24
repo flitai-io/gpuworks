@@ -14,7 +14,9 @@ const (
 	ErrorPlacementStrategyInvalid = "PLACEMENT_STRATEGY_INVALID"
 	// ErrorDeploymentNeverFits: no node of the pool ({pool} nodes, {shapes}
 	// hardware shapes) could run a replica even with nothing else on it;
-	// {node} refused for {reason}.
+	// {node} refused for {reason}. {memory_contract_hint} (true, otherwise
+	// absent) says the refusal is the weight-derived memory estimate alone,
+	// which a template's placement contract could replace.
 	ErrorDeploymentNeverFits = "DEPLOYMENT_NEVER_FITS"
 	// ErrorDGPUStartupMemory: the {quota_gib} GiB quota needs startup
 	// headroom. Lower {utilization} to {max_utilization} or less.

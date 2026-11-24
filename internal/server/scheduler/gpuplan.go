@@ -97,7 +97,7 @@ func admit(req Request, node NodeSnapshot, pool []GPU, tp int) (placement, Reaso
 		}
 		// The rejection names the group that came closest, the one its
 		// figures describe, not the best-connected group tried first.
-		return placement{group: roomiestGroup(req, pool, tp)}, reasonMemoryShortfall(req, pool, tp, need), false
+		return placement{group: roomiestGroup(req, pool, tp)}, reasonMemoryShortfall(req, pool, tp, need, evaluation.GPUMemoryBytesPerDevice == 0), false
 	}
 	retry, retryEvaluation, reason, ok := pick(req, node, memoryPool, tp)
 	if !ok {
@@ -105,7 +105,7 @@ func admit(req Request, node NodeSnapshot, pool []GPU, tp int) (placement, Reaso
 	}
 	retryNeed := admitNeed(req, tp, retryEvaluation.GPUMemoryBytesPerDevice)
 	if !fits(req, memoryPool, retry.group, retryNeed) {
-		return placement{group: retry.group}, reasonMemoryShortfall(req, memoryPool, tp, retryNeed), false
+		return placement{group: retry.group}, reasonMemoryShortfall(req, memoryPool, tp, retryNeed, retryEvaluation.GPUMemoryBytesPerDevice == 0), false
 	}
 	return placement{group: retry.group, conn: retry.conn, topoScore: retry.topoScore, prefer: retryEvaluation.Preference,
 		need: reportNeed(req, tp, retryEvaluation.GPUMemoryBytesPerDevice), claim: sharedClaim(req, memoryPool, retry.group, retryNeed)}, Reason{}, true

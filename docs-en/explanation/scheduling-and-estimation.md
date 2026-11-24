@@ -28,6 +28,8 @@ all GPUs are treated as free and present, and no disk space is consumed. If no s
 specification count, and rejection reason for the first node. Deployments that cannot fit only *right now* because GPUs are occupied, GPUs are temporarily unhealthy, disks are temporarily full, or nodes are offline are created normally and wait.
 If 1,000 nodes have only three specifications, only three trials are needed. Scaling up does not perform a separate check: the deployment shape and candidate pool were already validated at creation.
 
+The per-GPU memory requirement is estimated from the registered model's on-disk weight size by default, so an engine that offloads weights to host memory or quantizes at load time can be refused by the estimate. When the estimate itself is the refusal (`no_fit`, the template declares no memory, and the estimate does not fit even an empty card), `DEPLOYMENT_NEVER_FITS` and the evaluation's node reason carry `memory_contract_hint: true`, and the UI says that the template can declare the engine's real per-GPU memory with a placement resolver. See [When the Engine Really Uses Less Memory Than Estimated](../reference/inference-catalog-spec.md#引擎实际显存低于估算时offload加载时量化). The refusal itself is unchanged.
+
 Changing node requirements, through Edit beside Node requirements in deployment details (`PUT /deployments/{id}/requirements`), performs the same check.
 The trial uses the deployment's saved configuration and the same code as the controller's candidate trials (`planning.DeploymentLaunch`). With the new requirements, the controller
 clears its rejection history for the old pool and selects nodes from the new pool in the next round. The vendor is fixed by the image and cannot be changed.
@@ -108,4 +110,4 @@ Parallelism is a runtime fact: ordinary specs derive tp from the number of alloc
 avoids duplicating tp/nodes in the catalog, where they could conflict with the actual GPU set, and lets the preview and actual controller share ResolveLaunch.
 
 <!-- translation-source-sha256: b85436aa827ce6f0a9fb89a47bbf49ed50011645add01224bc0dc3cc8afd8a52 # Scheduling and GPU Memory Estimation -->
-<!-- translation-source-sha256: e1a6b7e6079fb0b9e7c5d87fd7af907fbb6a8132e4cd1380e1ec230603c8b2c2 ## Node Placement for Single-Node Replicas -->
+<!-- translation-source-sha256: 0559bedb9bb1df5978c32b64986aba25ac49f619ce554563a8df01341c2bbaa0 ## Node Placement for Single-Node Replicas -->

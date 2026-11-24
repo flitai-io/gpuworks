@@ -519,6 +519,23 @@ to cover 8G cards through H100 (0.85 only leaves a slightly smaller KV pool on l
 also limits the number of image tokens in a single prompt). Note that the spec's `--gpu-memory-utilization` and GPU
 utilization in the deployment form (GPUMemUtil in planning, default 0.9) are two independent controls and are not synchronized.
 
+### When the Engine Really Uses Less Memory Than Estimated (Offload, Load-Time Quantization)
+
+By default, the per-GPU admission requirement is estimated from the **on-disk weight size** of the registered model. Some engines use far less: they offload weights to host memory, or quantize at load time (for example a bf16 checkpoint with vLLM-Omni `--quantization fp8`, whose real peak is well below the weight size). A 35 GB checkpoint on a 24 GB card is estimated at about 37 GB, so creating the deployment is refused with 400 `DEPLOYMENT_NEVER_FITS` (reason `no_fit`) and the deploy form's node list marks the node ineligible, although the engine would run.
+
+A template can then declare the engine's **measured per-GPU peak** in `placement`. The value `accept(gpu_memory_mib_per_device=...)` returns replaces the weight-derived estimate as the scheduling admission requirement; cards that cannot hold it are still turned down by `reject`:
+
+```python
+def resolve(gpu):
+    if gpu.count != 1 or gpu.min_memory_gib < 22:
+        return reject("one GPU with at least 22 GiB")
+    return accept(gpu_memory_mib_per_device=22528)
+```
+
+- Editing `weight_bytes` in the spec does not help: the registered model's weight size takes precedence, so per-GPU memory can only be declared through `placement`.
+- Use the measured total peak (weights + activations + CUDA graphs, and so on), not the weight size; a value set too low lets a deployment onto a card that cannot hold it and the engine runs out of memory at startup.
+- When the estimate is what refused the request, the server adds the param `memory_contract_hint: true` to the reason (once on `DEPLOYMENT_NEVER_FITS` and once in its `reason_params`; the evaluation's node reason carries it too), and the UI appends a sentence to the reason. It is added only when all three hold: the reason is `no_fit`; the per-GPU requirement is the weight estimate (the template declares no memory through `placement`); and that estimate does not fit even an empty card. Too few cards, an unsupported data type, a resolver that itself `reject`s, and a card that is only temporarily busy never carry it.
+
 ## api: External HTTP Contract
 
 Omitting `api` gives conservative defaults: only a `/health` health endpoint and no external operations. **Generative
@@ -793,6 +810,7 @@ Warnings do not block import. A successful import response includes the same `wa
 <!-- translation-source-sha256: a755bee59689f833778747841eb293a47a2b0d0dddafec599365a40a05ee5286 ## placement: Starlark Topology Derivation -->
 <!-- translation-source-sha256: 8730a225b2be22fb1a6ce28a3795c8c6ef8697f0af90adfad1c78236c1eb3dd1 ### Variable Expansion -->
 <!-- translation-source-sha256: 326983de77aaf4bb52b0516a7cb8fe35122d37bffd501bf241bd514297f95ad7 ### How Thresholds Relate to Scheduling Admission -->
+<!-- translation-source-sha256: cb98dec344064c257aaf84b6c93df2d9329bb8760be072aea372759f1f3d666f ### When the Engine Really Uses Less Memory Than Estimated (Offload, Load-Time Quantization) -->
 <!-- translation-source-sha256: b01668b34d029e72fa32f03c01631d123be2ab05c7fb5ad8edfcad66faef7c82 ## api: External HTTP Contract -->
 <!-- translation-source-sha256: 4070ee0770711185358f42c24fdc671a935929a1849ef47543173cae553e89a3 ### api.tokenizer_ref: Independent Tokenizer Source -->
 <!-- translation-source-sha256: 7a250e5a02165b91282a0bc517187d409ca0a3991ff66ccde34262b5bda86067 ### api.metrics: Engine Metric Mapping -->

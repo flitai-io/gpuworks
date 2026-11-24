@@ -80,7 +80,7 @@ func gpuResourceRefusal(req Request, node string, gpu GPU, need int64) Reason {
 		return Reason{Code: ReasonNoFreeGPU}
 	}
 	if !gpu.UsableFor(req, need) {
-		return reasonMemoryShortfall(req, []GPU{gpu}, 1, need)
+		return reasonMemoryShortfall(req, []GPU{gpu}, 1, need, false)
 	}
 	if !gpu.SharedByMemory {
 		if reason, blocked := sleepResidueBlock(req, []GPU{gpu}, 1, need); blocked {

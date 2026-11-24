@@ -53,7 +53,11 @@ func reasonInsufficientGPUs(req Request, tp int, need int64, qualifies int) Reas
 // failed — the requirement at this tp and the capacity of the binding card of
 // the roomiest group (bindingUsableCapacity) — so the verdict and its figures
 // cannot disagree.
-func reasonMemoryShortfall(req Request, gpus []GPU, tp int, need int64) Reason {
+//
+// estimated says need is the weight-derived estimate, not a figure a catalog
+// placement contract declared: only then can the template be the thing that
+// is wrong about the memory (memoryContractHint).
+func reasonMemoryShortfall(req Request, gpus []GPU, tp int, need int64, estimated bool) Reason {
 	binding, count, ok := bindingUsableCapacity(req, gpus, tp)
 	if !ok {
 		// Nothing qualifies at all, which is the count problem, not a shortfall.
@@ -86,7 +90,36 @@ func reasonMemoryShortfall(req Request, gpus []GPU, tp int, need int64) Reason {
 			params["foreign_headroom_bytes"], params["foreign_headroom_gib"] = headroom, gib(headroom)
 		}
 	}
+	if estimated && memoryContractHint(req, binding, required) {
+		params[ParamMemoryContractHint] = true
+	}
 	return Reason{Code: ReasonNoFit, Params: params}
+}
+
+// ParamMemoryContractHint marks a no_fit reason whose figure is the
+// weight-derived estimate and exceeds what an empty card could ever offer, so
+// the refusal does not wait on anything: an engine that offloads weights to
+// host memory or quantizes at load time uses less than that estimate, and its
+// template can say so with a placement resolver's gpu_memory_mib_per_device
+// (docs/reference/inference-catalog-spec.md). The server decides; clients only
+// render the text.
+const ParamMemoryContractHint = "memory_contract_hint"
+
+// memoryContractHint reports that required, the estimate, is more than the
+// card could hold with nothing else on it: the card's engine share for a
+// whole-card request, its whole memory when it is shared by memory. A card
+// that is merely busy never earns it, since the estimate is then not what
+// refuses the request. A memory-limited request names its own limit, which no
+// template contract replaces.
+func memoryContractHint(req Request, binding GPU, required int64) bool {
+	if req.PerGPULimitBytes > 0 {
+		return false
+	}
+	ceiling := int64(float64(binding.MemoryTotal) * req.GPUMemUtil)
+	if binding.SharedByMemory {
+		ceiling = binding.MemoryTotal
+	}
+	return required > ceiling
 }
 
 // reasonSleepResidueBlocksStartup explains the distinct whole-GPU failure
