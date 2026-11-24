@@ -25,7 +25,8 @@ type ProviderKindInfo = import("../src/api.ts").ProviderKindInfo;
 
 const original = { ...api };
 await freshPopupFramesPerTest();
-afterEach(() => { message.destroy(); cleanup(); Object.assign(api, original); });
+const observers: MutationObserver[] = [];
+afterEach(() => { observers.splice(0).forEach((observer) => observer.disconnect()); message.destroy(); cleanup(); Object.assign(api, original); });
 
 const ali = account(3, "ali-prod", "aliyun");
 // A kind the server cannot list instances of.
@@ -38,7 +39,7 @@ const racks = account(5, "rack-a", "racks", { category: "private_cloud", resourc
 /** The page opened on one account's row; the sync is held until `finish` (or `fail`) answers it. */
 function mount(address: string) {
   servePlatforms(api, { providers: [ali, racks], kinds: [aliyunKind, racksKind] });
-  const seen = { synced: [] as number[], instanceReads: 0, clusterReads: 0 };
+  const seen = { synced: [] as number[], instanceReads: 0, clusterReads: 0, notices: [] as string[] };
   let synced = false;
   let pending: { resolve: (v: { count: number }) => void; reject: (e: Error) => void } | null = null;
   Object.assign(api, {
@@ -47,6 +48,21 @@ function mount(address: string) {
     providerClusters: async () => { seen.clusterReads += 1; return list(synced ? [cloudCluster("c-gpu", "ack-gpu"), cloudCluster("c-new", "ack-new")] : [cloudCluster("c-gpu", "ack-gpu")]); },
   });
   render(<I18nextProvider i18n={i18n}><FeedbackHost /><MemoryRouter initialEntries={[address]}><CloudProvidersPage /></MemoryRouter></I18nextProvider>);
+  // Record each notice as it renders: under CI load the reads that follow a
+  // sync can outlast the toast's 3s lifetime before the case looks for it.
+  const notices = screen.getByRole("list", { name: "Notices" });
+  const captured = new Set<Element>();
+  const observer = new dom.window.MutationObserver(() => {
+    for (const notice of notices.children) {
+      const content = notice.textContent;
+      if (content && !captured.has(notice)) {
+        captured.add(notice);
+        seen.notices.push(content);
+      }
+    }
+  });
+  observer.observe(notices, { childList: true, subtree: true, characterData: true });
+  observers.push(observer);
   return {
     seen,
     user: userEvent.setup({ document: dom.window.document }),
@@ -54,7 +70,6 @@ function mount(address: string) {
     fail: async (error: Error) => { await act(async () => pending?.reject(error)); },
   };
 }
-const toasts = () => [...(screen.queryByRole("list", { name: "Notices" })?.children ?? [])].map((toast) => toast.textContent);
 /** The Sync above the opened account's table (the row's own Sync is an icon button named the same, in the row). */
 const detailSync = () => screen.getAllByRole("button", { name: p.table.sync }).filter((button) => button.textContent === p.table.sync);
 const busy = (button: HTMLElement) => button.hasAttribute("disabled") || button.getAttribute("aria-busy") === "true" || button.hasAttribute("data-loading");
@@ -77,7 +92,7 @@ test("an opened Alibaba Cloud account offers Sync above its table; it syncs the 
   assert.equal(seen.instanceReads, before.instances + 1);
   assert.equal(seen.clusterReads, before.clusters + 1, "once");
   await waitFor(() => assert.equal(busy(detailSync()[0]), false));
-  await waitFor(() => assert.deepEqual(toasts(), [p.message.syncDone.replace("{{count}}", "1")], "the same toast as the row's Sync"));
+  await waitFor(() => assert.deepEqual(seen.notices, [p.message.syncDone.replace("{{count}}", "1")], "the same toast as the row's Sync"));
 });
 
 test("Sync above the table is pressed with the keyboard too", async () => {
@@ -94,7 +109,7 @@ test("a failed sync from above the table says why, and the account stays open wi
   const instanceReads = seen.instanceReads;
   await user.click(detailSync()[0]);
   await fail(new Error("aliyun: InvalidAccessKeyId"));
-  await waitFor(() => assert.deepEqual(toasts(), [p.message.syncFailed.replace("{{detail}}", "aliyun: InvalidAccessKeyId")]));
+  await waitFor(() => assert.deepEqual(seen.notices, [p.message.syncFailed.replace("{{detail}}", "aliyun: InvalidAccessKeyId")]));
   await waitFor(() => assert.equal(busy(detailSync()[0]), false, "usable again"));
   assert.ok(await groupOf("ack-gpu"));
   assert.equal(seen.instanceReads, instanceReads, "nothing to read again");
