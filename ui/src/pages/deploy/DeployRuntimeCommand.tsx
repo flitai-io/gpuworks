@@ -17,7 +17,14 @@ import { useTranslation } from "react-i18next";
 import { launchCommand } from "./launchCommand";
 import CopyButton from "../../components/CopyButton";
 import DeployMountPreview, { mountClipboardText } from "./DeployMountPreview";
-import { warningText } from "./deployWarnings";
+import { warningKey, warningText } from "./deployWarnings";
+
+// The server's findings about the API port a manual command states, shown
+// under the editor where the port is written.
+const manualCommandPortWarnings = [
+  "MANUAL_COMMAND_PORT_UNSTATED",
+  "MANUAL_COMMAND_PORT_TAKEN",
+];
 
 // PdLaunch is one rank of a PD role unit, labelled by role, instance and
 // node: a unit's ranks each run on their own node, so the node tells a
@@ -77,6 +84,9 @@ export default function DeployRuntimeCommand({
     (warning) => warning.code === "MANUAL_DRAFT_UNAVAILABLE",
   );
   const variables = result?.manual_command_variables ?? [];
+  const portWarnings = (result?.warnings ?? []).filter((warning) =>
+    manualCommandPortWarnings.includes(warning.code),
+  );
 
   const enterManualMode = () =>
     form.setFieldsValue({
@@ -190,6 +200,14 @@ export default function DeployRuntimeCommand({
               className="deploy-command-editor"
             />
           </Form.Item>
+          {portWarnings.map((warning) => (
+            <Alert
+              key={warningKey(warning)}
+              type="warning"
+              showIcon
+              message={warningText(t, warning)}
+            />
+          ))}
         </>
       )}
       {manual && !multiRank ? null : loading || error || !result ? (

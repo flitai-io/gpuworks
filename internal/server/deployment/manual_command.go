@@ -6,6 +6,8 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/network"
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 // fieldContainerCmd is the deploy form control a manual command is edited in.
@@ -52,6 +54,43 @@ func checkManualCommandRanks(req *dto.DeployRequest) error {
 	return productError(messages.ErrorManualCommandRankBlind,
 		"the manual command of a multi-node or PD deployment runs on every rank and must reference "+strings.Join(missing, ", "),
 		map[string]any{"missing": missing})
+}
+
+// manualCommandPortTaken warns about each port a manual command script states
+// that is already taken (network.TakenEnginePorts) on node, the node the
+// preview serves the API from. A stated port is replaced by the assigned one
+// either way; a taken one is what a deployer who wrote it is told. An edit's
+// own instances (excludeDeployment) take no port from it, nor do the
+// listeners on the ports they hold. The check is best effort: a node whose
+// instances cannot be read warns about nothing.
+func (s *Service) manualCommandPortTaken(overrides deploy.ContainerOverrides, node *store.Node, excludeDeployment uint) []messages.Warning {
+	ports := deploy.ManualCommandPorts(overrides)
+	if len(ports) == 0 || node == nil {
+		return nil
+	}
+	instances, err := s.d.Store.InstancesForNode(node.ID)
+	if err != nil {
+		return nil
+	}
+	var others, own []store.Instance
+	for _, instance := range instances {
+		if excludeDeployment != 0 && instance.DeploymentID == excludeDeployment {
+			own = append(own, instance)
+		} else {
+			others = append(others, instance)
+		}
+	}
+	taken := network.TakenEnginePorts(network.Inventory(*node), others)
+	for port := range network.TakenEnginePorts(nil, own) {
+		delete(taken, port)
+	}
+	var warnings []messages.Warning
+	for _, port := range ports {
+		if taken[port] {
+			warnings = append(warnings, deploy.ManualCommandPortTakenWarning(port, node.DisplayName()))
+		}
+	}
+	return warnings
 }
 
 // manualDraftInput is the engine-mode launch a rank would run, whatever

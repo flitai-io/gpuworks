@@ -37,7 +37,7 @@ func TestAscendCompatManualShellWarns(t *testing.T) {
 	t.Run("Docker manual needs no PRoot overlay", func(t *testing.T) {
 		input := ascendCompatLaunchInput(proto.RuntimePreferenceDocker)
 		input.ContainerOverrides.CommandMode = string(CommandManual)
-		input.ContainerOverrides.CmdDisplay = "vllm serve /model"
+		input.ContainerOverrides.CmdDisplay = "vllm serve /model --port 30000"
 		launch, warnings := resolveWithWarnings(t, input)
 		requireWarningCodes(t, warnings)
 		if launch.PreStartScript != "" {
@@ -61,7 +61,7 @@ func TestMergedPreStartScriptLimitIsCheckedBeforeTheAgent(t *testing.T) {
 }
 
 func TestEngramManualShellIsReadStatically(t *testing.T) {
-	const command = "# environment\nVLLM_TEST=1\n\n# launch\nvllm serve /model --engram-config '" + engramTestConfig + "' 2>&1 | tee /tmp/engine.log"
+	const command = "# environment\nVLLM_TEST=1\n\n# launch\nvllm serve /model --port 30000 --engram-config '" + engramTestConfig + "' 2>&1 | tee /tmp/engine.log"
 	manual := func(runtime, cmd string) ResolveLaunchInput {
 		input := engramLaunchInput(runtime)
 		input.Params.TemplateArgs = nil
@@ -99,16 +99,16 @@ func TestEngramManualShellIsReadStatically(t *testing.T) {
 	})
 	t.Run("disabled shared memory in a manual command is silent", func(t *testing.T) {
 		launch, warnings := resolveWithWarnings(t, manual(proto.RuntimePreferenceUdocker,
-			`vllm serve /model --engram-config '{"cpu_offload":true,"dp_shared_memory":false}'`))
+			`vllm serve /model --port 30000 --engram-config '{"cpu_offload":true,"dp_shared_memory":false}'`))
 		requireWarningCodes(t, warnings)
 		if launch.ShmBytes != (vLLMEngine{}).Profile().ShmBytes {
 			t.Fatalf("shm = %d", launch.ShmBytes)
 		}
 	})
 	for name, cmd := range map[string]string{
-		"variable argument":    `ARGS="--engram-config $CFG"` + "\nvllm serve /model $ARGS",
-		"command substitution": "vllm serve /model --engram-config \"$(cat /etc/engram.json)\"",
-		"nested shell":         `bash -c "vllm serve /model --engram-config '` + engramTestConfig + `'"`,
+		"variable argument":    `ARGS="--engram-config $CFG"` + "\nvllm serve /model --port 30000 $ARGS",
+		"command substitution": "vllm serve /model --port 30000 --engram-config \"$(cat /etc/engram.json)\"",
+		"nested shell":         `bash -c "vllm serve /model --port 30000 --engram-config '` + engramTestConfig + `'"`,
 	} {
 		t.Run("unreadable "+name+" only warns", func(t *testing.T) {
 			launch, warnings := resolveWithWarnings(t, manual(proto.RuntimePreferenceDocker, cmd))
@@ -122,7 +122,7 @@ func TestEngramManualShellIsReadStatically(t *testing.T) {
 		})
 	}
 	t.Run("ordinary manual udocker is unchanged", func(t *testing.T) {
-		input := manual(proto.RuntimePreferenceUdocker, "vllm serve /model")
+		input := manual(proto.RuntimePreferenceUdocker, "vllm serve /model --port 30000")
 		launch, warnings := resolveWithWarnings(t, input)
 		requireWarningCodes(t, warnings)
 		if launch.ShmBytes != (vLLMEngine{}).Profile().ShmBytes || len(launch.DockerArgs) != 0 {

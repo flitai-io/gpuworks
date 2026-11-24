@@ -92,6 +92,17 @@ const (
 	// cannot be read statically, so its shared-memory settings are not derived.
 	// Params: flag.
 	WarningEngramManualUnchecked = "ENGRAM_MANUAL_UNCHECKED"
+	// WarningManualCommandPortUnstated: a manual shell command of a launch
+	// that serves the API neither states the port flag the platform rewrites
+	// nor references the API port variable, so the engine listens on its own
+	// default port and the instance never becomes healthy unless that default
+	// happens to be the assigned port. Params: flag, variable.
+	WarningManualCommandPortUnstated = "MANUAL_COMMAND_PORT_UNSTATED"
+	// WarningManualCommandPortTaken: a port a manual shell command states is
+	// already taken on the node the preview serves the API from, so the
+	// launch runs on the free port the platform assigns instead, as it does
+	// for any stated port. Params: port, node, flag, variable.
+	WarningManualCommandPortTaken = "MANUAL_COMMAND_PORT_TAKEN"
 	// WarningAscendSleepExpandableSegmentsDisabled: the template's allocator
 	// setting turns expandable segments on, which Ascend sleep mode cannot
 	// run with, so the platform turned it off; NPU memory may fragment more.

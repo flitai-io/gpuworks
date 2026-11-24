@@ -175,7 +175,7 @@ func TestShellCommandsWithoutEngramPassSilently(t *testing.T) {
 			input.Params.Vendor, input.Params.TemplateArgs = vendor, nil
 			input.ContainerOverrides = ContainerOverrides{
 				CommandMode: string(CommandManual), CommandIncludesPreparation: true,
-				CmdDisplay: "# environment\nNAME=demo\nexport CUDA_VISIBLE_DEVICES=$(seq -s, 0 3)\n\n# launch\ncd /tmp && vllm serve /model --served-model-name \"$NAME\" 2>&1 | tee /tmp/engine.log",
+				CmdDisplay: "# environment\nNAME=demo\nexport CUDA_VISIBLE_DEVICES=$(seq -s, 0 3)\n\n# launch\ncd /tmp && vllm serve /model --port 30000 --served-model-name \"$NAME\" 2>&1 | tee /tmp/engine.log",
 			}
 			launch, warnings := resolveWithWarnings(t, input)
 			requireWarningCodes(t, warnings)

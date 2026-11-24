@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/netplan"
 )
 
@@ -131,6 +132,80 @@ func TestManualCommandRankBlind(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := ManualCommandRankBlind(tc.script, tc.nnodes, tc.pd); !slices.Equal(got, tc.missing) {
 				t.Fatalf("missing = %v, want %v", got, tc.missing)
+			}
+		})
+	}
+}
+
+// The health check and the gateway dial a serving launch's assigned API port.
+// A manual script reaches it only through the port flag the platform rewrites
+// or the API port variable; otherwise the engine stays on its own default
+// port, which the instance waits on only by chance, so evaluate warns.
+func TestManualCommandWithoutPortWarns(t *testing.T) {
+	single := Params{ModelPath: "/model", APIPort: 30000, AssignedGPUs: 1, TensorParallel: 1, NNodes: 1}
+	follower := Params{ModelPath: "/model", AssignedGPUs: 1, TensorParallel: 2, NNodes: 2, NodeRank: 1, Headless: true,
+		MasterAddr: "10.0.0.1", MasterPort: 29500, NodeAddress: "10.0.0.2"}
+	for _, tc := range []struct {
+		name   string
+		params Params
+		script string
+		warn   bool
+	}{
+		{"no port", single, "exec vllm serve /model --served-model-name demo", true},
+		{"a flag that only starts like the port", single, "exec vllm serve /model --portal 1", true},
+		{"stated port", single, "exec vllm serve /model --port 8000", false},
+		{"stated port with equals", single, "exec vllm serve /model --port=8000", false},
+		{"port variable", single, "exec vllm serve /model --port ${GPUWORKS_API_PORT}", false},
+		{"port variable under another flag", single, "exec server --listen 0.0.0.0:${GPUWORKS_API_PORT}", false},
+		{"headless rank serves no API", follower, "exec vllm serve /model --node-rank ${GPUWORKS_NODE_RANK}", false},
+		{"JSON argv is not a script", single, `["vllm","serve","/model"]`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, warnings, err := ResolveLaunchWithWarnings(manualInput(tc.params, tc.script))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var port *messages.Warning
+			for index := range warnings {
+				if warnings[index].Code == messages.WarningManualCommandPortUnstated {
+					port = &warnings[index]
+				}
+			}
+			if (port != nil) != tc.warn {
+				t.Fatalf("warnings = %+v, want the port warning %t", warnings, tc.warn)
+			}
+			if port != nil && (port.Params["flag"] != "--port" || port.Params["variable"] != "${GPUWORKS_API_PORT}") {
+				t.Fatalf("port warning params = %#v", port.Params)
+			}
+		})
+	}
+}
+
+// The port numbers a manual script states are exactly what the platform
+// replaces: the values of its port flag. A value the shell expands is no
+// number yet, and neither a JSON argv nor an engine-mode command is a script.
+func TestManualCommandPorts(t *testing.T) {
+	manual := func(command string) ContainerOverrides {
+		return ContainerOverrides{CommandMode: string(CommandManual), CmdDisplay: command}
+	}
+	for _, tc := range []struct {
+		name      string
+		overrides ContainerOverrides
+		want      []int
+	}{
+		{"separate value", manual("exec vllm serve /model --port 30000"), []int{30000}},
+		{"equals value", manual("exec sglang serve --port=30001"), []int{30001}},
+		{"quoted value", manual(`exec vllm serve /model --port "30002"`), []int{30002}},
+		{"each port once", manual("case \"${GPUWORKS_HEADLESS}\" in\n  0) exec vllm serve --port 30000 ;;\n  *) exec vllm serve --port 30000 --x --port 30001 ;;\nesac"), []int{30000, 30001}},
+		{"port variable", manual("exec vllm serve /model --port ${GPUWORKS_API_PORT}"), nil},
+		{"shell variable", manual("exec vllm serve /model --port $PORT"), nil},
+		{"no port", manual("exec vllm serve /model --portal 1"), nil},
+		{"JSON argv", manual(`["vllm","serve","--port","30000"]`), nil},
+		{"engine mode", ContainerOverrides{CmdDisplay: "vllm serve --port 30000"}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ManualCommandPorts(tc.overrides); !slices.Equal(got, tc.want) {
+				t.Fatalf("ports = %v, want %v", got, tc.want)
 			}
 		})
 	}

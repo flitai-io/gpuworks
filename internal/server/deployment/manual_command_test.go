@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 func draftRanks(t *testing.T) []deploy.ResolveLaunchInput {
@@ -111,6 +114,76 @@ func TestCheckManualCommandRanks(t *testing.T) {
 			var product *messages.ProductError
 			if !errors.As(err, &product) || product.Code() != messages.ErrorManualCommandRankBlind || fmt.Sprint(product.Params()["missing"]) != tc.missing {
 				t.Fatalf("err = %v, want %s missing %s", err, messages.ErrorManualCommandRankBlind, tc.missing)
+			}
+		})
+	}
+}
+
+// A port the manual command states is named when something else on the node
+// that serves the API already holds it: another deployment's instance that may
+// still run, or a listener the agent reported. A deployment being edited holds
+// its own port, and the listener on it is its own engine.
+func TestManualCommandPortTaken(t *testing.T) {
+	st, err := store.Open("file:"+t.Name()+"?mode=memory&cache=shared", bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	launchConfigNode(t, st, "port-node")
+	node, err := st.NodeByUUID("port-node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	node.NetworkInventory = `{"engine_port_listeners":[30002,30003]}`
+	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/port", Revision: "main", Name: "org/port"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deployment := func(name string) *store.Deployment {
+		d, err := st.CreateDeployment(&store.Deployment{Name: name, ModelID: model.ID, NodeID: node.ID, Replicas: 1, PlacementStrategy: store.PlacementSpread})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	other, edited := deployment("other"), deployment("edited")
+	for _, instance := range []store.Instance{
+		{UUID: "other-0", DeploymentID: other.ID, State: proto.InstRunning, Ports: "[30000]"},
+		{UUID: "other-1", DeploymentID: other.ID, State: proto.InstStopped, Ports: "[30001]"},
+		{UUID: "edited-0", DeploymentID: edited.ID, State: proto.InstRunning, Ports: "[30002]"},
+	} {
+		instance.NodeID, instance.Image, instance.GPUIndexes = node.ID, "example/engine:1", "[0]"
+		if _, err := st.CreateInstance(&instance); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := New(Deps{Store: st})
+	for _, tc := range []struct {
+		name    string
+		command string
+		editing uint
+		taken   []int
+	}{
+		{"another deployment's instance", "exec vllm serve /model --port 30000", 0, []int{30000}},
+		{"a stopped instance", "exec vllm serve /model --port 30001", 0, nil},
+		{"an agent listener", "exec vllm serve /model --port 30003", 0, []int{30003}},
+		{"the edited deployment's own port", "exec vllm serve /model --port 30002", edited.ID, nil},
+		{"that port for another deployment", "exec vllm serve /model --port 30002", other.ID, []int{30002}},
+		{"a free port", "exec vllm serve /model --port 30004", 0, nil},
+		{"the port variable", "exec vllm serve /model --port ${GPUWORKS_API_PORT}", 0, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			overrides := deploy.ContainerOverrides{CommandMode: string(deploy.CommandManual), CmdDisplay: tc.command}
+			var taken []int
+			for _, warning := range s.manualCommandPortTaken(overrides, node, tc.editing) {
+				if warning.Code != messages.WarningManualCommandPortTaken || warning.Params["node"] != node.DisplayName() ||
+					warning.Params["flag"] != "--port" || warning.Params["variable"] != "${GPUWORKS_API_PORT}" {
+					t.Fatalf("warning = %+v", warning)
+				}
+				taken = append(taken, warning.Params["port"].(int))
+			}
+			if fmt.Sprint(taken) != fmt.Sprint(tc.taken) {
+				t.Fatalf("taken = %v, want %v", taken, tc.taken)
 			}
 		})
 	}

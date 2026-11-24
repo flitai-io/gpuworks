@@ -3,7 +3,6 @@ package controller
 import (
 	"encoding/json"
 
-	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/network"
 	"gpuworks.ai/gpuworks/internal/server/scheduler"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -30,21 +29,11 @@ func (c *Controller) pickPort(node *store.Node) (int, *scheduler.Reason) {
 // channel block in one call; the caller writes every port into
 // Instance.Ports so the next allocation on the node avoids them.
 func (c *Controller) pickPorts(node *store.Node, sizes ...int) ([]int, *scheduler.Reason) {
-	used := map[int]bool{}
 	insts, _ := c.store.InstancesForNode(node.ID)
-	for _, in := range insts {
-		if in.State == proto.InstStopped {
-			continue
-		}
-		for _, p := range parseInts(in.Ports) {
-			used[p] = true
-		}
-	}
+	inv := network.Inventory(*node)
+	used := network.TakenEnginePorts(inv, insts)
 	r := c.EnginePorts()
-	if inv := network.Inventory(*node); inv != nil {
-		for _, p := range inv.EnginePortListeners {
-			used[p] = true
-		}
+	if inv != nil {
 		if own := inv.EnginePortRange; own != nil && own.Valid() {
 			r = *own
 		}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -123,6 +124,63 @@ func TestUnverifiableLaunchesWarnInEvaluateAndCreateSucceeds(t *testing.T) {
 			h, st, modelID := launchWarningRig(t, test.runtime, "nvidia")
 			body := launchWarningBody(t, modelID, test.image, test.extra)
 			requireLaunchWarnings(t, h, body, test.want...)
+			requireCreateSucceeds(t, h, st, body)
+		})
+	}
+}
+
+// A manual command that never states the API port is shown in evaluate with
+// what to add, and the create still succeeds: the warning is advice, not a
+// refusal of a command the platform cannot prove wrong.
+func TestManualCommandWithoutPortWarnsInEvaluateAndCreateSucceeds(t *testing.T) {
+	for name, test := range map[string]struct {
+		command string
+		warn    bool
+	}{
+		"no port":       {command: "vllm serve /model --served-model-name demo", warn: true},
+		"stated port":   {command: "vllm serve /model --port 30000"},
+		"port variable": {command: "vllm serve /model --port ${GPUWORKS_API_PORT}"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, st, modelID := launchWarningRig(t, "docker", "nvidia")
+			body := launchWarningBody(t, modelID, "private.example/vllm:custom", manualCommand(test.command))
+			if got := slices.Contains(evaluateWarningCodes(t, h, body), messages.WarningManualCommandPortUnstated); got != test.warn {
+				t.Fatalf("port warning = %t, want %t", got, test.warn)
+			}
+			requireCreateSucceeds(t, h, st, body)
+		})
+	}
+}
+
+// A port the manual command states that another deployment's instance holds
+// on the node is named in evaluate; the create still succeeds, since the
+// launch runs on the port the platform assigns either way.
+func TestManualCommandPortTakenWarnsInEvaluateAndCreateSucceeds(t *testing.T) {
+	for name, test := range map[string]struct {
+		port  string
+		taken bool
+	}{
+		"taken port": {port: "30000", taken: true},
+		"free port":  {port: "30001"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, st, modelID := launchWarningRig(t, "docker", "nvidia")
+			node, err := st.NodeByUUID("pd-a")
+			if err != nil {
+				t.Fatal(err)
+			}
+			holder, err := st.CreateDeployment(&store.Deployment{Name: "holder", ModelID: modelID, NodeID: node.ID, Replicas: 1, PlacementStrategy: store.PlacementSpread})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.CreateInstance(&store.Instance{UUID: "holder-0", DeploymentID: holder.ID, NodeID: node.ID, State: proto.InstRunning,
+				Image: "example/engine:1", GPUIndexes: "[0]", Ports: "[30000]"}); err != nil {
+				t.Fatal(err)
+			}
+			body := launchWarningBody(t, modelID, "private.example/vllm:custom", manualCommand("vllm serve /model --port "+test.port))
+			if got := slices.Contains(evaluateWarningCodes(t, h, body), messages.WarningManualCommandPortTaken); got != test.taken {
+				t.Fatalf("port taken warning = %t, want %t", got, test.taken)
+			}
 			requireCreateSucceeds(t, h, st, body)
 		})
 	}

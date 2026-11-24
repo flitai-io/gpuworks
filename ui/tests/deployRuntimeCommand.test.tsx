@@ -98,6 +98,23 @@ test("launches without preparation retain manual command editing", async () => {
   assert.ok(screen.getByRole("textbox"));
 });
 
+// The server's findings about the port a manual command states are shown
+// under the editor, where the port is written; the other warnings stay with
+// the evaluation.
+test("manual mode shows the server's API port warnings under the editor", async () => {
+  const user = userEvent.setup();
+  const taken = { code: "MANUAL_COMMAND_PORT_TAKEN", params: { port: 30000, node: "gpu-a", flag: "--port", variable: "${GPUWORKS_API_PORT}" } };
+  const other = { code: "IMAGE_OVERRIDE_UNVERIFIED", params: { image: "sglang:test" } };
+  show({ ...launch, pre_start_script: undefined, env: {}, warnings: [taken, other] });
+  const takenText = i18n.t("warning.MANUAL_COMMAND_PORT_TAKEN", taken.params);
+  assert.ok(screen.queryByText(takenText) === null, "engine mode has no command to warn under");
+  await user.click(screen.getByRole("button", { name: new RegExp(locale.runtimeCommand.edit) }));
+  await user.click(screen.getByRole("button", { name: locale.runtimeCommand.enter, exact: true }));
+  const warning = screen.getByText(takenText);
+  assert.ok(screen.getByRole("textbox").compareDocumentPosition(warning) & Node.DOCUMENT_POSITION_FOLLOWING, "the warning follows the editor");
+  assert.ok(screen.queryByText(i18n.t("warning.IMAGE_OVERRIDE_UNVERIFIED", other.params)) === null, "other warnings stay with the evaluation");
+});
+
 test("each rank displays and copies only its own command, environment, preparation, and mounts", async () => {
   const user = userEvent.setup();
   const copied: string[] = [];
