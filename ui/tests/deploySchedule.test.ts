@@ -244,3 +244,37 @@ test("hardware refusals share feature translations across API and placement", ()
   }
  }
 });
+
+// The server marks a memory refusal that is the weight-derived estimate alone
+// (scheduler params.memory_contract_hint); the client only words the hint, in
+// the evaluation's node reason and in the create's DEPLOYMENT_NEVER_FITS.
+const memoryReason = (hint: boolean) => ({
+  code: "no_fit",
+  params: { gpus: 1, tp: 1, pp: 1, gpu_count: 1, required_gib: "65.3", available_gib: "43.2", ...(hint ? { memory_contract_hint: true } : {}) },
+});
+
+for (const lng of ["en", "zh"] as const) {
+  test(`a memory refusal carries the placement contract hint in ${lng} only when the server marks it`, () => {
+    const t = i18n.getFixedT(lng, "deploy") as never;
+    const hint = i18n.getFixedT(lng, "deploy")("scheduleNote.memory_contract_hint");
+    assert.match(hint, /placement resolver|placement 解析器/);
+    for (const text of [scheduleText(t, memoryReason(true)), placementRefusalText(t, memoryReason(true))]) {
+      assert.ok(text.endsWith(" " + hint), text);
+      assert.doesNotMatch(text, /\{\{|undefined/);
+    }
+    assert.doesNotMatch(scheduleText(t, memoryReason(false)), /placement resolver|placement 解析器/);
+    // A flag on another refusal (or a non-boolean) says nothing.
+    assert.doesNotMatch(scheduleText(t, { code: "insufficient_empty_gpus", params: { gpus: 2, tp: 2, pp: 1, required_gib: "10", available: 1, memory_contract_hint: true } }), /placement resolver|placement 解析器/);
+    assert.doesNotMatch(scheduleText(t, { code: "no_fit", params: { memory_contract_hint: "true" } }), /placement resolver|placement 解析器/);
+  });
+
+  test(`DEPLOYMENT_NEVER_FITS states the placement contract hint in ${lng} only when the server marks it`, () => {
+    const t = i18n.getFixedT(lng, "common") as never;
+    const base = { pool: 1, shapes: 1, node: "a40", reason: "no_fit", detail: "" };
+    const plain = apiErrorText(t, new APIError("DEPLOYMENT_NEVER_FITS", base, "never fits", 400));
+    const hinted = apiErrorText(t, new APIError("DEPLOYMENT_NEVER_FITS", { ...base, memory_contract_hint: true }, "never fits", 400));
+    const hint = i18n.getFixedT(lng, "deploy")("scheduleNote.memory_contract_hint");
+    assert.equal(hinted, plain + " " + hint);
+    assert.doesNotMatch(plain, /placement resolver|placement 解析器/);
+  });
+}

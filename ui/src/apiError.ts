@@ -4,7 +4,7 @@ import { notifySessionExpired } from "./session";
 import { CLUSTER_UPGRADE_CODE, notifyClusterUpgrade } from "./clusterUpgrade";
 import { diagnosticReport, type DiagnosticReport } from "./diagnosticChecks";
 import type { TFunction } from "i18next";
-import { placementRefusalText } from "./pages/deploy/deploySchedule";
+import { memoryContractHintNote, placementRefusalText } from "./pages/deploy/deploySchedule";
 
 export interface APIErrorPayload {
   error?: string;
@@ -112,10 +112,16 @@ export function apiErrorText(t: APIErrorTranslator, error: unknown): string {
   if (error.code === "SERVER_STORAGE_FULL" && typeof params.path === "string" && typeof params.available_bytes === "number" && typeof params.total_bytes === "number") {
     return t("serverStorageFull.at", { path: params.path, available: formatBytes(params.available_bytes), total: formatBytes(params.total_bytes), defaultValue: error.fallback || error.code });
   }
-  return t(`apiError.${error.code}`, {
+  const text = t(`apiError.${error.code}`, {
     ...params,
     defaultValue: error.fallback || error.code,
   });
+  if (error.code === "DEPLOYMENT_NEVER_FITS") {
+    // The server decides whether the estimate alone is what refused the node.
+    const tDeploy = (key: string, options: Record<string, unknown> = {}) => t(key, { ns: "deploy", ...options });
+    return text + memoryContractHintNote(tDeploy as unknown as TFunction<"deploy">, params);
+  }
+  return text;
 }
 
 const placementChecks = ["unmet", "cordoned", "offline", "busy", "no_network", "ucx_netlink_hang"] as const;

@@ -86,7 +86,7 @@ function scheduleNote(t: TFunction<"deploy">, value: Exclude<ScheduleMessageLike
     // reconciled with the card.
     case "no_fit":
       return note(t, "scheduleNote.sleeping_residue", "sleeping_gib", value.params?.sleeping_gib)
-        + foreignNote(t, value);
+        + foreignNote(t, value) + memoryContractHintNote(t, value.params);
     // The image ledger's own failure text: what the pull, load or peer transfer
     // reported, which is the part that says whether to retry or pick another
     // source.
@@ -148,6 +148,13 @@ function foreignNote(t: TFunction<"deploy">, value: Exclude<ScheduleMessageLike,
   const headroom = value.params?.foreign_headroom_gib;
   if (headroom === undefined || headroom === null || headroom === "") return " " + t("scheduleNote.foreign_held_only", { foreign_gib: foreign });
   return " " + t("scheduleNote.foreign_held", { foreign_gib: foreign, foreign_headroom_gib: headroom });
+}
+
+// The server says when the weight-derived estimate alone refused the card and
+// no template contract replaced it (memory_contract_hint); the client only
+// words it.
+export function memoryContractHintNote(t: TFunction<"deploy">, params: Record<string, unknown> | undefined): string {
+  return params?.memory_contract_hint === true ? " " + t("scheduleNote.memory_contract_hint") : "";
 }
 
 function note(t: TFunction<"deploy">, key: string, param: string, value: unknown): string {

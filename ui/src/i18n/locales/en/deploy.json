@@ -236,6 +236,7 @@
     "sleeping_residue": "keep {{sleeping_gib}} GiB resident for sleeping instances.",
     "foreign_held": "Processes outside the platform use {{foreign_gib}} GiB of the card, and {{foreign_headroom_gib}} GiB is kept free beside them.",
     "foreign_held_only": "Processes outside the platform use {{foreign_gib}} GiB of the card.",
+    "memory_contract_hint": "If the engine offloads weights or quantizes at load time, its template can declare the real per-GPU memory with a placement resolver.",
     "image_delivery_detail": "Reported failure: {{detail}}",
     "model_unavailable_detail": "Reported failure: {{detail}}",
     "plan_failed_detail": "Reported failure: {{detail}}",

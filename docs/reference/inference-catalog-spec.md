@@ -522,6 +522,23 @@ grammar/多模态 warmup，余量不足即 OOM。因此显存分档优先用 arg
 兼做单 prompt image token 数的上限）。注意 spec 的 `--gpu-memory-utilization` 与部署
 表单的 GPU 利用率（planning 的 GPUMemUtil，默认 0.9）是两个独立旋钮，互不同步。
 
+### 引擎实际显存低于估算时（offload、加载时量化）
+
+每卡准入要求默认按已登记模型的**磁盘权重大小**估算。有些引擎实际用得远比这少：把权重卸载到主机内存（offload），或加载时量化（例如 bf16 检查点配 vLLM-Omni `--quantization fp8`，实际峰值明显低于权重大小）。35 GB 的检查点在 24 GB 的卡上，估算要 37 GB 左右，创建部署就会被 400 `DEPLOYMENT_NEVER_FITS`（原因 `no_fit`）拒绝，部署表单的节点列表也把节点标为不可用，而引擎其实跑得起来。
+
+这时模板可以用 `placement` 声明引擎的**实测每卡峰值**。`accept(gpu_memory_mib_per_device=...)` 返回的值取代按权重得出的估算，作为调度的准入要求；放不下这个值的卡仍被 `reject` 拒绝：
+
+```python
+def resolve(gpu):
+    if gpu.count != 1 or gpu.min_memory_gib < 22:
+        return reject("one GPU with at least 22 GiB")
+    return accept(gpu_memory_mib_per_device=22528)
+```
+
+- 在 spec 里改 `weight_bytes` 没有用：已登记模型的权重大小优先，声明每卡显存只能经 `placement`。
+- 数值取实测的总峰值（权重 + 激活 + CUDA graph 等），不是权重大小；偏低会让部署放进放不下的卡后在引擎启动时 OOM。
+- 因估算被拒绝时，服务端在拒绝原因上带参数 `memory_contract_hint: true`（`DEPLOYMENT_NEVER_FITS` 的参数和它的 `reason_params` 里各一份，评测的节点原因里也有），界面据此在原因后补一句提示。只有同时满足三条才带：原因是 `no_fit`；每卡需求是权重估算（模板没有用 `placement` 声明显存）；这个估算连一张空卡也放不下。卡数不够、数据类型不支持、resolver 自己 `reject`，以及卡只是暂时被占，都不带。
+
 ## api：对外 HTTP 契约
 
 不声明 `api` 时得到保守默认：仅 `/health` 健康端点、无对外操作。**生成类

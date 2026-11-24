@@ -236,6 +236,7 @@
     "sleeping_residue": "休眠实例需保留 {{sleeping_gib}} GiB 常驻显存。",
     "foreign_held": "平台外的进程占用此卡 {{foreign_gib}} GiB，另在其旁保留 {{foreign_headroom_gib}} GiB 余量。",
     "foreign_held_only": "平台外的进程占用此卡 {{foreign_gib}} GiB。",
+    "memory_contract_hint": "卸载权重或加载时量化的引擎，模板可用 placement 解析器声明每卡显存。",
     "image_delivery_detail": "失败原因：{{detail}}",
     "model_unavailable_detail": "失败原因：{{detail}}",
     "plan_failed_detail": "上报的失败原因：{{detail}}",

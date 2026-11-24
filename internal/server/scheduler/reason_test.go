@@ -138,7 +138,7 @@ func TestMemoryShortfallOnASharedGPUNamesTheClaim(t *testing.T) {
 	if mac.UsableFor(req, need) {
 		t.Fatal("a 0.8 engine was admitted beside half the card in use")
 	}
-	reason := reasonMemoryShortfall(req, []GPU{mac}, 1, need)
+	reason := reasonMemoryShortfall(req, []GPU{mac}, 1, need, true)
 	required, _ := reason.Params["required_bytes"].(int64)
 	available, _ := reason.Params["available_bytes"].(int64)
 	if reason.Code != ReasonNoFit || required != mac.Claim(req, need) || required <= available {
@@ -153,4 +153,79 @@ func TestEveryPlatformFeatureHasARefusal(t *testing.T) {
 			t.Errorf("feature %q has no refusal reason", f)
 		}
 	}
+}
+
+func memoryHint(res Result) (bool, bool) {
+	v, ok := res.Message.Params[ParamMemoryContractHint]
+	hint, _ := v.(bool)
+	return hint, ok
+}
+
+// A refusal that is the weight-derived estimate alone, on a card that could
+// not hold it even empty, carries the hint that a template's placement
+// contract may declare the real figure.
+func TestMemoryShortfallOfTheEstimateCarriesTheContractHint(t *testing.T) {
+	res := Schedule(
+		Request{WeightBytes: 37 * giB, HeadCount: 32, AllowedTPs: []int{1}, GPUMemUtil: 0.9},
+		reasonNode(gpu(0, 24, true, 0)),
+	)
+	if res.OK || res.Message.Code != ReasonNoFit {
+		t.Fatalf("message = %+v, want a no_fit refusal", res.Message)
+	}
+	if hint, ok := memoryHint(res); !ok || !hint {
+		t.Fatalf("params = %+v, want %s=true", res.Message.Params, ParamMemoryContractHint)
+	}
+}
+
+// Nothing else about a refusal earns the hint: the estimate that would fit an
+// empty card, a card count, a dtype, and a figure a contract already declared.
+func TestOnlyAnEstimateTooLargeForAnEmptyCardCarriesTheContractHint(t *testing.T) {
+	t.Run("fits an empty card but the card is partly used", func(t *testing.T) {
+		// A shared-by-memory card with room for the estimate when empty.
+		shared := GPU{Index: 0, MemoryTotal: 96 * giB, Schedulable: true, SharedByMemory: true, AllocatedBytes: 80 * giB}
+		res := Schedule(
+			Request{WeightBytes: 30 * giB, HeadCount: 32, AllowedTPs: []int{1}, GPUMemUtil: 0.5},
+			reasonNode(shared),
+		)
+		if res.OK || res.Message.Code != ReasonNoFit {
+			t.Fatalf("message = %+v, want a no_fit refusal", res.Message)
+		}
+		if _, ok := memoryHint(res); ok {
+			t.Fatalf("params = %+v, a busy card is not an estimate problem", res.Message.Params)
+		}
+	})
+	t.Run("too few cards", func(t *testing.T) {
+		res := Schedule(
+			Request{WeightBytes: 37 * giB, HeadCount: 32, AllowedTPs: []int{4}, GPUMemUtil: 0.9},
+			reasonNode(gpu(0, 24, true, 0), gpu(1, 24, true, 0)),
+		)
+		if res.OK || res.Message.Code != ReasonInsufficientEmptyGPUs {
+			t.Fatalf("message = %+v, want a count refusal", res.Message)
+		}
+		if _, ok := memoryHint(res); ok {
+			t.Fatalf("params = %+v, a card count is not an estimate problem", res.Message.Params)
+		}
+	})
+	t.Run("a memory-limited request", func(t *testing.T) {
+		res := Schedule(
+			Request{WeightBytes: 37 * giB, HeadCount: 32, AllowedTPs: []int{1}, GPUMemUtil: 0.9, PerGPULimitBytes: 8 * giB, PartitionBackend: "hami"},
+			reasonNode(GPU{Index: 0, MemoryTotal: 24 * giB, Schedulable: true, PartitionBackends: []string{"hami"}}),
+		)
+		if _, ok := memoryHint(res); ok {
+			t.Fatalf("params = %+v, a limit the operator set is not the estimate's", res.Message.Params)
+		}
+	})
+	t.Run("a placement contract declared the figure", func(t *testing.T) {
+		res := Schedule(
+			Request{WeightBytes: 37 * giB, HeadCount: 32, AllowedTPs: []int{1}, GPUMemUtil: 0.9,
+				EvaluateCandidate: func([]GPU) CandidateEvaluation { return CandidateEvaluation{GPUMemoryBytesPerDevice: 30 * giB} }},
+			reasonNode(gpu(0, 24, true, 0)),
+		)
+		if res.OK || res.Message.Code != ReasonNoFit {
+			t.Fatalf("message = %+v, want a no_fit refusal", res.Message)
+		}
+		if _, ok := memoryHint(res); ok {
+			t.Fatalf("params = %+v, the template already declares its memory", res.Message.Params)
+		}
+	})
 }
