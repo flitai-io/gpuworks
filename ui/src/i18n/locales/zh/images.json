@@ -235,7 +235,7 @@
     "runtime": {
       "title": "从计算节点已有镜像导入",
       "namespace": "来源 namespace",
-      "target": "部署 namespace 为 {{ns}}。从其他 namespace 添加时，节点会先复制所选镜像。",
+      "target": "部署 namespace：{{ns}}。其他 namespace 的镜像会先复制过来。",
       "list": "节点上的 {{runtime}} 镜像",
       "name": "镜像名称",
       "tag": "标签",
