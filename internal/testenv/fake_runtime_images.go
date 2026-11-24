@@ -142,3 +142,10 @@ func (d *FakeDriver) TagImage(_ context.Context, source, target string) error {
 	d.loadedImages[target] = true
 	return nil
 }
+
+// FixImageAtNextLoad ends SetImageAbsent with the next archive load: until
+// then the runtime still says the image is missing, and the load after it
+// really installs the image. SetImageAbsent(false) makes the image visible at
+// once, so a node that already loaded an archive reports it present on its
+// next presence report, before any retry has asked it to load again.
+func (d *FakeDriver) FixImageAtNextLoad() { d.mu.Lock(); d.imageFixedByLoad = true; d.mu.Unlock() }
