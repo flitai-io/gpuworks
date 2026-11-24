@@ -405,6 +405,9 @@ RUN <<EOF
 EOF
 
 ## 自描述清单 + requires 断言
+# Opt-in ASGI middleware for gateway debug captures.
+COPY shared/gpuworks_request_trace.py /opt/gpuworks/shared/gpuworks_request_trace.py
+RUN python3 -c 'import shutil,sysconfig; shutil.copy("/opt/gpuworks/shared/gpuworks_request_trace.py", sysconfig.get_path("purelib"))'
 COPY shared/assert_requires.sh /opt/gpuworks/shared/assert_requires.sh
 RUN <<EOF
     set -eux

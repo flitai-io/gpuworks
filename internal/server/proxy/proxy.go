@@ -205,14 +205,7 @@ func New(st *store.Store, networks Networks, hub Tunneler, log *slog.Logger, max
 			if !ok {
 				return nil, errors.New("proxy: no target in context")
 			}
-			if a, ok := ctx.Value(attemptKey).(*routeAttempt); ok && a != nil && a.current != nil {
-				t.nodeUUID = a.current.c.nodeUUID
-				t.port = a.current.c.port
-			}
 			instanceUUID := t.instanceUUID
-			if a, ok := ctx.Value(attemptKey).(*routeAttempt); ok && a != nil && a.current != nil {
-				instanceUUID = a.current.c.instanceUUID
-			}
 			// A node with a serving network serves over it only; the agent
 			// tunnel is the path of nodes without one.
 			if ep, ok := p.routes.servingEndpoint(t.nodeUUID); ok && instanceUUID != "" {
@@ -242,6 +235,7 @@ func New(st *store.Store, networks Networks, hub Tunneler, log *slog.Logger, max
 				r.URL.Path, r.URL.RawPath = t.upstreamPath, ""
 			}
 			stripBrowserContext(r.Header)
+			r.Header.Del(debugAttemptHeader)
 			setTraceHeaders(r.Context(), r.Header)
 		},
 		FlushInterval: -1,

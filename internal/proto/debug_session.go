@@ -1,5 +1,7 @@
 package proto
 
+import "context"
+
 // RPCDebugStart opens a debug session on the agent: until UntilMS, or until
 // its file holds MaxBytes, every agent log record at debug and above is also
 // written to <state>/debug/<SessionID>.log; the agent's own log keeps its
@@ -27,4 +29,21 @@ type DebugSessionResult struct {
 	Open         bool   `json:"open"`
 	WrittenBytes int64  `json:"written_bytes"`
 	Ended        string `json:"ended,omitempty"`
+}
+
+// TunnelTrace joins one captured gateway attempt to its agent-side stream.
+type TunnelTrace struct {
+	RequestID string `json:"request_id"`
+	Attempt   int    `json:"attempt"`
+}
+
+type tunnelTraceKey struct{}
+
+func WithTunnelTrace(ctx context.Context, trace *TunnelTrace) context.Context {
+	return context.WithValue(ctx, tunnelTraceKey{}, trace)
+}
+
+func TunnelTraceFrom(ctx context.Context) *TunnelTrace {
+	trace, _ := ctx.Value(tunnelTraceKey{}).(*TunnelTrace)
+	return trace
 }

@@ -266,6 +266,7 @@ test-host-env-adapters:
 test-runner-image-scripts:
 	python3 -B build/runner-images/test_prebuilt.py
 	python3 -B build/runner-images/test_ascend_reload_patch.py
+	python3 -B -m unittest discover -s build/runner-images/shared -p 'test_gpuworks_request_trace.py'
 
 .PHONY: test-inference-template-assets
 test-inference-template-assets:
