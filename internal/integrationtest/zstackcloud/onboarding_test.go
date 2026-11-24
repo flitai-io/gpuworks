@@ -158,7 +158,11 @@ func addSyncInstall(t *testing.T, env *testenv.Env, endpoint, hostID string) str
 func waitForInstalledHost(t *testing.T, env *testenv.Env, providerPath, hostID string) string {
 	t.Helper()
 	var nodeID uint
-	env.Eventually(t, 15*time.Second, func() bool {
+	// The agent starts after the install call returns and then has to register
+	// and report its inventory; on a loaded runner that has outlasted 15s (the
+	// zstackcloud cases failing together at 17s in CI). Like the harness's own
+	// node waits, bound it by what a starved scheduler needs, not by speed.
+	env.Eventually(t, 60*time.Second, func() bool {
 		raw := requestJSON(t, env, "GET", providerPath+"/instances", "", http.StatusOK)
 		if bytes.Contains(raw, []byte("ssh-secret")) || bytes.Contains(raw, []byte("test-access-secret")) {
 			t.Fatal("instance list leaked credentials")
