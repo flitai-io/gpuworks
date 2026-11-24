@@ -36,9 +36,9 @@ specs:
     resolver: |
       def resolve(gpu):
           if gpu.count != 1:
-              return reject("该档位需要正好 1 张 GPU")
+              return reject("this profile requires exactly 1 GPU")
           if gpu.min_memory_gib < 22:
-              return reject("单卡显存至少需要 22 GiB")
+              return reject("each GPU requires at least 22 GiB")
           return accept(gpu_memory_mib_per_device = 21504)
   # vLLM-Omni quantizes the BF16 checkpoint to FP8 while loading, so the
   # 35 GB of weights are read once and about 17.6 GiB stay resident. Measured
@@ -113,13 +113,13 @@ specs:
       def resolve(gpu):
           if gpu.count == 1:
               if gpu.min_memory_gib < 40:
-                  return reject("单卡部署需要显存至少 40 GiB")
+                  return reject("a single GPU requires at least 40 GiB")
               return accept(gpu_memory_mib_per_device = 37888, prefer = 1)
           if gpu.count == 2:
               if gpu.min_memory_gib < 22:
-                  return reject("双卡部署每卡显存至少需要 22 GiB")
+                  return reject("each of the 2 GPUs requires at least 22 GiB")
               return accept(gpu_memory_mib_per_device = 20480)
-          return reject("该档位使用 1 或 2 张 GPU")
+          return reject("this profile uses 1 or 2 GPUs")
   # One card holds the whole 35 GB checkpoint (36.0 GiB peak on an RTX 4090
   # 48 GB). Two cards split it with tensor parallelism, which the platform sets
   # from the placed GPU count (18.2 GiB peak per RTX 3090 at 2048x2048). When
