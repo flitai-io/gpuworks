@@ -76,12 +76,12 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 			seriesOf[version.Name] = series
 		}
 	}
-	wantSeries := "MLX Audio · Metal,MLX-VLM · Metal,SGLang · CANN,SGLang · CUDA,SGLang · DTK,SGLang · HGGC,SGLang · ROCm,Strata · CUDA,llama.cpp · Metal,vLLM Omni · CANN,vLLM Omni · CUDA,vLLM · CANN,vLLM · CUDA,vLLM · DTK,vLLM · HGGC,vLLM · Metal,vLLM · ROCm,vLLM · XRE"
+	wantSeries := "MLX Audio · Metal,MLX-VLM · Metal,SGLang · CANN,SGLang · CUDA,SGLang · DTK,SGLang · HGGC,SGLang · ROCm,SGLang · XRE,Strata · CUDA,System One · CUDA,llama.cpp · Metal,vLLM Omni · CANN,vLLM Omni · CUDA,vLLM Omni · HGGC,vLLM Omni · XRE,vLLM · CANN,vLLM · CUDA,vLLM · DTK,vLLM · HGGC,vLLM · Metal,vLLM · ROCm,vLLM · XRE"
 	if strings.Join(names, ",") != wantSeries {
 		t.Fatalf("series = %v", names)
 	}
-	if len(versions) != 63 {
-		t.Fatalf("versions = %d, want 63", len(versions))
+	if len(versions) != 173 {
+		t.Fatalf("versions = %d, want 173", len(versions))
 	}
 	// The Apple silicon environment package: framework metal, its version the
 	// minimum macOS, its arch the CPU's.
@@ -99,6 +99,10 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 	xre := versions["xre5.0.21.46-vllm0.25.1-r1"]
 	if xre.FrameworkVersion != "5.0.21.46" || xre.EngineVersion != "0.25.1" || xre.Arch != "amd64" || seriesOf[xre.Name].Framework != "xre" || len(xre.RegistrySources) != 2 {
 		t.Fatalf("Kunlun release = %+v in %+v", xre, seriesOf[xre.Name])
+	}
+
+	if alias := versions["xre-vllm0.25.1-amd64-slot26"]; alias.FrameworkVersion != xre.FrameworkVersion || alias.EngineVersion != xre.EngineVersion || alias.Arch != xre.Arch {
+		t.Fatalf("Kunlun slot26 alias differs from its release: %+v, %+v", alias, xre)
 	}
 
 	omni := versions["cann9.1-910b-vllm-omni0.30.0-r3"]
@@ -405,8 +409,8 @@ func TestMatrixDeclaresTheVoltaImageUnlisted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(seed, []byte("cuda12.8-v100-vllm1cat1.5.1-r1")) {
-		t.Fatal("the seed lists the unlisted V100 1.5.1 image")
+	if bytes.Contains(seed, []byte(`"image_ref": "gpuworks/gpuworks-runner:cuda12.8-v100-vllm1cat1.5.1-r1"`)) {
+		t.Fatal("the seed lists the unlisted V100 build tier under the canonical reference")
 	}
 }
 

@@ -65,6 +65,8 @@ func TestPublishedSpecialistImagesRemainManualAfterEnable(t *testing.T) {
 		"rocm10.0-sglang0.5.23-mi30x-r3-linux-amd64",
 		"rocm10.0-sglang0.5.23-mi35x-r3-linux-amd64",
 		"cuda12.8-v100-vllm1cat1.5.3-r1-linux-amd64",
+		"cuda12.8-v100-vllm1cat1.5.1-r1",
+		"cuda12.8-systemone1.0-r1",
 	}
 	for _, tag := range tags {
 		ref := "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:" + tag

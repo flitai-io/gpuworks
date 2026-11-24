@@ -29,7 +29,7 @@ Some vLLM patches under patches/ carry third-party attribution; see [NOTICE](NOT
 
 ## Published SWR tags in the system catalog
 
-The matrix's `published` section lists published SWR releases. Record the platforms returned by SWR and check manifest digests before adding entries. The generator preserves each exact tag and uses the SWR reference for pulls. Tags already listed by `items` keep their existing references. Build and push scripts read the separate `items` section.
+The matrix's `published` section lists existing SWR tags, including historical aliases, multi-platform images, and macOS host environment packages. Record the platforms returned by SWR and check manifest digests before adding entries. The generator preserves each exact tag and uses the SWR reference for pulls. Tags already listed by `items` keep their existing references. Build and push scripts read the separate `items` section.
 
 Run `make image-manifest` after editing the list. The inventory is a snapshot of registry tags. It carries no tag immutability guarantee, even for revision-shaped names. These entries use the schema-3 rolling-tag policy: they are available for explicit selection and excluded from automatic selection, including on older servers. New servers initially disable these SWR inventory rows and preserve subsequent operator choices. To promote a tag for automatic deployment, verify its immutability and hardware eligibility, and use the maintained matrix entry.
 

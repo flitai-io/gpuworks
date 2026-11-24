@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
-  "catalog_version": "2026-11-24.9d5043fd",
-  "sha256": "bf7a83d097b048bb8ec74493e4b03cc6f5f1e9174728d5721f7e1bd148a9f7bd",
+  "catalog_version": "2026-11-24.f9d3feff",
+  "sha256": "5dc6148ea0748ad156dc86ed92d535a4010a70a45c67084901725d0fdac8c202",
   "series": [
     {
       "name": "MLX Audio · Metal",
@@ -52,6 +52,14 @@
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:metal15.0-mlx-vlm0.8.1.dev20261121-r1"
           ],
           "notes": "Apple silicon 的 mlx-vlm 档，与 0.7.8 档并存（PaddleOCR-VL 的 Mac 模板仍用 0.7.8， 它在那一档上实测过）。上游主线 2026-11-21 的提交 f1618d6：Inkling 2 Mini（inkling2_loop， Blaizzy/mlx-vlm #2778）与其 tool parser（#2783）合入时还没有 PyPI 版本（最新 0.8.0 早于它们），版本号按 PEP 440 写作 0.8.1 的开发版。入口 gpuworks-mlx-vlm 把回复里 回显的模型路径换回请求的名字。Inkling 2 Mini 的 Mac MLX 模板用这档；0.8.1 发布后换正式版。 构建：GPUWORKS_HOSTENV_COMMIT=f1618d6d52be4ef25d3fe65270f7528a59c55df3 build/host-envs/build.sh mlx-vlm 0.8.1.dev20261121 r1。"
+        },
+        {
+          "name": "metal15.0-mlx-vlm0.7.8-r1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:metal15.0-mlx-vlm0.7.8-r1",
+          "engine_version": "0.7.8",
+          "framework_version": "15.0",
+          "arch": "arm64",
+          "rolling_tag": true
         }
       ]
     },
@@ -110,6 +118,70 @@
           "notes": "A3（910C）的 sglang 档，其余同 910b 档。\nrequires: engine, diffusion, overlays\nmodel: a3"
         },
         {
+          "name": "cann8.5-910b-sglang0.5.12.post1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-910b-sglang0.5.12.post1",
+          "engine_version": "0.5.12.post1",
+          "framework_version": "8.5",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann8.5-a3-sglang0.5.12.post1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-a3-sglang0.5.12.post1",
+          "engine_version": "0.5.12.post1",
+          "framework_version": "8.5",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.0-910b-sglang0.5.18",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-910b-sglang0.5.18",
+          "engine_version": "0.5.18",
+          "framework_version": "9.0",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.0-a3-sglang0.5.18",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-a3-sglang0.5.18",
+          "engine_version": "0.5.18",
+          "framework_version": "9.0",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.0-sglang0.5.15.post1-amd64-diffusion-slot16",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-sglang0.5.15.post1-amd64-diffusion-slot16",
+          "engine_version": "0.5.15.post1",
+          "framework_version": "9.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.0-sglang0.5.15.post1-arm64-diffusion-slot16",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-sglang0.5.15.post1-arm64-diffusion-slot16",
+          "engine_version": "0.5.15.post1",
+          "framework_version": "9.0",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.0-sglang0.5.18-amd64-diffusion-slot15",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-sglang0.5.18-amd64-diffusion-slot15",
+          "engine_version": "0.5.18",
+          "framework_version": "9.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.0-sglang0.5.18-arm64-diffusion-slot15",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-sglang0.5.18-arm64-diffusion-slot15",
+          "engine_version": "0.5.18",
+          "framework_version": "9.0",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
           "name": "cann9.1-a3-sglang0.5.23-r1-amd64",
           "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-a3-sglang0.5.23-r1-amd64",
           "engine_version": "0.5.23",
@@ -160,6 +232,126 @@
           "notes": "CUDA 13 的 sglang 档，含 diffusion 依赖（从 base 的 sglang 源码树安装， 装不上即构建失败）。\nrequires: engine, engine_import, diffusion, overlays"
         },
         {
+          "name": "cuda12.8-sglang0.5.8.post1-amd64-diffusion-slot12",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-sglang0.5.8.post1-amd64-diffusion-slot12",
+          "engine_version": "0.5.8.post1",
+          "framework_version": "12.8",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.8-sglang0.5.8.post1-arm64-diffusion-slot12",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-sglang0.5.8.post1-arm64-diffusion-slot12",
+          "engine_version": "0.5.8.post1",
+          "framework_version": "12.8",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.8-sglang0.5.9-amd64-diffusion-slot11",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-sglang0.5.9-amd64-diffusion-slot11",
+          "engine_version": "0.5.9",
+          "framework_version": "12.8",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.8-sglang0.5.9-arm64-diffusion-slot11",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-sglang0.5.9-arm64-diffusion-slot11",
+          "engine_version": "0.5.9",
+          "framework_version": "12.8",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.9-sglang0.5.18",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.18",
+          "engine_version": "0.5.18",
+          "framework_version": "12.9",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.9-sglang0.5.18-amd64-diffusion-slot08",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.18-amd64-diffusion-slot08",
+          "engine_version": "0.5.18",
+          "framework_version": "12.9",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.9-sglang0.5.18-arm64-diffusion-slot08",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.18-arm64-diffusion-slot08",
+          "engine_version": "0.5.18",
+          "framework_version": "12.9",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.9-sglang0.5.19-amd64-diffusion-slot07",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.19-amd64-diffusion-slot07",
+          "engine_version": "0.5.19",
+          "framework_version": "12.9",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.9-sglang0.5.19-arm64-diffusion-slot07",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.19-arm64-diffusion-slot07",
+          "engine_version": "0.5.19",
+          "framework_version": "12.9",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-sglang0.5.18-amd64-diffusion-slot04",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.18-amd64-diffusion-slot04",
+          "engine_version": "0.5.18",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-sglang0.5.18-arm64-diffusion-slot04",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.18-arm64-diffusion-slot04",
+          "engine_version": "0.5.18",
+          "framework_version": "13.0",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-sglang0.5.19-amd64-diffusion-slot03",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.19-amd64-diffusion-slot03",
+          "engine_version": "0.5.19",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-sglang0.5.19-arm64-diffusion-slot03",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.19-arm64-diffusion-slot03",
+          "engine_version": "0.5.19",
+          "framework_version": "13.0",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-sglang0.5.21",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.21",
+          "engine_version": "0.5.21",
+          "framework_version": "13.0",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-sglang0.5.21-r3",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.21-r3",
+          "engine_version": "0.5.21",
+          "framework_version": "13.0",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
           "name": "cuda13.0-sglang0.5.23-r2-amd64",
           "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.23-r2-amd64",
           "engine_version": "0.5.23",
@@ -196,6 +388,22 @@
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-sglang0.5.12-r2"
           ],
           "notes": "K100 等海光 DCU 的 sglang 档，含 diffusion 依赖。DCU 的 fa3 注意力后端要求 KV 页大小为 64，推理目录的 spec 必须带 --page-size 64，否则第一次 forward 就 崩且容器进程挂住不退出。\nrequires: engine, diffusion, overlays"
+        },
+        {
+          "name": "dtk26.04-sglang0.5.12",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-sglang0.5.12",
+          "engine_version": "0.5.12",
+          "framework_version": "26.04",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "dtk26.04-sglang0.5.12-amd64-diffusion-slot20",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-sglang0.5.12-amd64-diffusion-slot20",
+          "engine_version": "0.5.12",
+          "framework_version": "26.04",
+          "arch": "amd64",
+          "rolling_tag": true
         }
       ]
     },
@@ -216,6 +424,38 @@
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-sglang0.5.13-r3"
           ],
           "notes": "PPU 的 sglang 档。与 vllm 档同一 vanilla、同一 rootfs，只有 label 与引擎标识 不同，因此两档共享 base 的全部层（前提是 base 只压一次，见本线说明）。 r3 加 PPU 同机 PD 补丁（hggc/ppu-pd，pdmode sglang-ppu-ipc），只在 PD 的 环境变量打开时生效；r2 → r3 只多这一层，r2 的部署照常可用。\nrequires: engine, diffusion, overlays, ppu_pd"
+        },
+        {
+          "name": "hggc13.0-sglang0.5.10-amd64-diffusion-slot24",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-sglang0.5.10-amd64-diffusion-slot24",
+          "engine_version": "0.5.10",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "hggc13.0-sglang0.5.12-amd64-diffusion-slot23",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-sglang0.5.12-amd64-diffusion-slot23",
+          "engine_version": "0.5.12",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "hggc13.0-sglang0.5.13",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-sglang0.5.13",
+          "engine_version": "0.5.13",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "hggc13.0-sglang0.5.13-r2",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-sglang0.5.13-r2",
+          "engine_version": "0.5.13",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
         }
       ]
     },
@@ -242,6 +482,45 @@
           "arch": "amd64",
           "rolling_tag": true,
           "notes": "AMD MI35x (gfx950) only. Includes SGLang Diffusion."
+        },
+        {
+          "name": "rocm7.2.4-sglang0.5.21.dev550-g4142235c2-amd64-slot30",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:rocm7.2.4-sglang0.5.21.dev550-g4142235c2-amd64-slot30",
+          "engine_version": "0.5.21.dev550",
+          "framework_version": "7.2.4",
+          "arch": "amd64",
+          "rolling_tag": true
+        }
+      ]
+    },
+    {
+      "name": "SGLang · XRE",
+      "engine": "sglang",
+      "purpose": "inference",
+      "framework": "xre",
+      "versions": [
+        {
+          "name": "xre-sglang0.5.5.post3-amd64-diffusion-slot27",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-sglang0.5.5.post3-amd64-diffusion-slot27",
+          "engine_version": "0.5.5.post3",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "xre5.37.1.0-sglang0.5.18-amd64-diffusion-slot27",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre5.37.1.0-sglang0.5.18-amd64-diffusion-slot27",
+          "engine_version": "0.5.18",
+          "framework_version": "5.37.1.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "xre5.37.1.0-sglang0.5.18-amd64-diffusion-slot28",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre5.37.1.0-sglang0.5.18-amd64-diffusion-slot28",
+          "engine_version": "0.5.18",
+          "framework_version": "5.37.1.0",
+          "arch": "amd64",
+          "rolling_tag": true
         }
       ]
     },
@@ -252,6 +531,30 @@
       "framework": "cuda",
       "versions": [
         {
+          "name": "cuda13.0-strata0.1.38-amd64-slot31-r5",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5",
+          "engine_version": "0.1.38",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-strata0.1.38-r5",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-r5",
+          "engine_version": "0.1.38",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-strata0.1.59-deepseek41-amd64-r4",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.59-deepseek41-amd64-r4",
+          "engine_version": "0.1.59",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
           "name": "cuda13.0-strata0.1.59-deepseek41-amd64-r5",
           "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.59-deepseek41-amd64-r5",
           "engine_version": "0.1.59",
@@ -259,6 +562,30 @@
           "arch": "amd64",
           "rolling_tag": true,
           "notes": "DeepSeek 4.1 GGUF. Select through a Strata Serve Adapter template."
+        },
+        {
+          "name": "cuda13.0-strata0.1.59-deepseek41-amd64-slot32-r4",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.59-deepseek41-amd64-slot32-r4",
+          "engine_version": "0.1.59",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        }
+      ]
+    },
+    {
+      "name": "System One · CUDA",
+      "engine": "callable",
+      "purpose": "inference",
+      "framework": "cuda",
+      "versions": [
+        {
+          "name": "cuda12.8-systemone1.0-r1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1",
+          "engine_version": "1.0",
+          "framework_version": "12.8",
+          "arch": "amd64",
+          "rolling_tag": true
         }
       ]
     },
@@ -361,6 +688,46 @@
           "notes": "A3（910C）的 omni 档，其余同 910b 档。\nrequires: engine, omni, omni_no_mooncake, omni_patched, overlays\nmodel: a3"
         },
         {
+          "name": "cann8.5-vllm0.18.0-amd64-omni-slot14",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-vllm0.18.0-amd64-omni-slot14",
+          "framework_version": "8.5",
+          "arch": "amd64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cann8.5-vllm0.18.0-arm64-omni-slot14",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-vllm0.18.0-arm64-omni-slot14",
+          "framework_version": "8.5",
+          "arch": "arm64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cann9.0-910b-vllm-omni0.23.0rc1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-910b-vllm-omni0.23.0rc1",
+          "engine_version": "0.23.0rc1",
+          "framework_version": "9.0",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.0-a3-vllm-omni0.23.0rc1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-a3-vllm-omni0.23.0rc1",
+          "engine_version": "0.23.0rc1",
+          "framework_version": "9.0",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.1-910b-vllm-omni0.30.0",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-910b-vllm-omni0.30.0",
+          "engine_version": "0.30.0",
+          "framework_version": "9.1",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
           "name": "cann9.1-910b-vllm-omni0.32.0-r2-linux-amd64",
           "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-910b-vllm-omni0.32.0-r2-linux-amd64",
           "engine_version": "0.32.0",
@@ -370,6 +737,22 @@
           "notes": "Review deployment compatibility before enabling."
         },
         {
+          "name": "cann9.1-950-vllm-omni0.30.0",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-950-vllm-omni0.30.0",
+          "engine_version": "0.30.0",
+          "framework_version": "9.1",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.1-a3-vllm-omni0.30.0",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-a3-vllm-omni0.30.0",
+          "engine_version": "0.30.0",
+          "framework_version": "9.1",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
           "name": "cann9.1-a3-vllm-omni0.32.0-r2-linux-amd64",
           "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-a3-vllm-omni0.32.0-r2-linux-amd64",
           "engine_version": "0.32.0",
@@ -377,6 +760,22 @@
           "arch": "amd64",
           "rolling_tag": true,
           "notes": "Review deployment compatibility before enabling."
+        },
+        {
+          "name": "cann9.1-vllm0.23.0-amd64-omni-slot13",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-vllm0.23.0-amd64-omni-slot13",
+          "framework_version": "9.1",
+          "arch": "amd64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cann9.1-vllm0.23.0-arm64-omni-slot13",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-vllm0.23.0-arm64-omni-slot13",
+          "framework_version": "9.1",
+          "arch": "arm64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
         }
       ]
     },
@@ -399,6 +798,94 @@
           "notes": "omni 档，给 vllm-omni 独家支持的负载用（Qwen3-TTS、Ming-omni-tts、图像与 视频生成等）。代价是 transformers 被压到 \u003c5.15、accelerate 钉到 1.12.0， 所以普通负载请用默认档。不声明 diffusion：omni 自带 diffusers 但不带 opencv， 与 sglang 的 diffusion 扩展不是一回事。r3 加装 vllm-omni 的 indextts2 前端 （fugashi、unidic-lite，x86_64 另有 WeTextProcessing）；arm64 上没有 pynini 的 cp312 wheel， 所以 IndexTTS 2.5 的中英文文本规范化只在 x86_64 上可用。r4 以 --no-deps 加装 voxcpm （VoxCPM2 用），并打 omni 补丁 003（MOSS-TTS-Realtime 参考音频编码的设备不一致）。\nrequires: engine, engine_import, omni, indextts2_frontend, voxcpm, mooncake, overlays, audit"
         },
         {
+          "name": "cuda12.8-vllm0.16.0-amd64-omni-slot10",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.16.0-amd64-omni-slot10",
+          "framework_version": "12.8",
+          "arch": "amd64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cuda12.8-vllm0.16.0-arm64-omni-slot10",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.16.0-arm64-omni-slot10",
+          "framework_version": "12.8",
+          "arch": "arm64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cuda12.8-vllm0.17.1-amd64-omni-slot09",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.17.1-amd64-omni-slot09",
+          "framework_version": "12.8",
+          "arch": "amd64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cuda12.8-vllm0.17.1-arm64-omni-slot09",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.17.1-arm64-omni-slot09",
+          "framework_version": "12.8",
+          "arch": "arm64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cuda12.9-vllm0.28.0-amd64-omni-slot06",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.28.0-amd64-omni-slot06",
+          "framework_version": "12.9",
+          "arch": "amd64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cuda12.9-vllm0.28.0-arm64-omni-slot06",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.28.0-arm64-omni-slot06",
+          "framework_version": "12.9",
+          "arch": "arm64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cuda12.9-vllm0.29.0-amd64-omni-slot05",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.29.0-amd64-omni-slot05",
+          "framework_version": "12.9",
+          "arch": "amd64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cuda12.9-vllm0.29.0-arm64-omni-slot05",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.29.0-arm64-omni-slot05",
+          "framework_version": "12.9",
+          "arch": "arm64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cuda13.0-vllm-omni0.30.0",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.30.0",
+          "engine_version": "0.30.0",
+          "framework_version": "13.0",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-vllm-omni0.30.0-r2",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.30.0-r2",
+          "engine_version": "0.30.0",
+          "framework_version": "13.0",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-vllm-omni0.30.0-r3",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.30.0-r3",
+          "engine_version": "0.30.0",
+          "framework_version": "13.0",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
           "name": "cuda13.0-vllm-omni0.32.0-r2-linux-amd64",
           "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.32.0-r2-linux-amd64",
           "engine_version": "0.32.0",
@@ -415,6 +902,84 @@
           "arch": "arm64",
           "rolling_tag": true,
           "notes": "Review deployment compatibility before enabling."
+        },
+        {
+          "name": "cuda13.0-vllm0.28.0-amd64-omni-slot02",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.28.0-amd64-omni-slot02",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cuda13.0-vllm0.28.0-arm64-omni-slot02",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.28.0-arm64-omni-slot02",
+          "framework_version": "13.0",
+          "arch": "arm64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cuda13.0-vllm0.29.0-amd64-omni-slot01",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.29.0-amd64-omni-slot01",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "cuda13.0-vllm0.29.0-arm64-omni-slot01",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.29.0-arm64-omni-slot01",
+          "framework_version": "13.0",
+          "arch": "arm64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        }
+      ]
+    },
+    {
+      "name": "vLLM Omni · HGGC",
+      "engine": "vllm-omni",
+      "purpose": "inference",
+      "framework": "hggc",
+      "versions": [
+        {
+          "name": "hggc13.0-vllm0.20.1-amd64-omni-slot22",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-vllm0.20.1-amd64-omni-slot22",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "hggc13.0-vllm0.23.0-amd64-omni-slot21",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-vllm0.23.0-amd64-omni-slot21",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        }
+      ]
+    },
+    {
+      "name": "vLLM Omni · XRE",
+      "engine": "vllm-omni",
+      "purpose": "inference",
+      "framework": "xre",
+      "versions": [
+        {
+          "name": "xre-vllm0.1.dev3-amd64-omni-slot25",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-vllm0.1.dev3-amd64-omni-slot25",
+          "arch": "amd64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
+        },
+        {
+          "name": "xre-vllm0.25.1-amd64-omni-slot26",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-vllm0.25.1-amd64-omni-slot26",
+          "arch": "amd64",
+          "rolling_tag": true,
+          "notes": "Legacy Omni tag. The label records the base vLLM version."
         }
       ]
     },
@@ -557,6 +1122,94 @@
           "notes": "A3（910C）的 0.30.0rc2 档，其余同 910b 档。\nrequires: engine, mooncake, overlays\nmodel: a3"
         },
         {
+          "name": "cann8.5-910b-vllm0.18.0",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-910b-vllm0.18.0",
+          "engine_version": "0.18.0",
+          "framework_version": "8.5",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann8.5-vllm0.18.0-amd64-slot14",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-vllm0.18.0-amd64-slot14",
+          "engine_version": "0.18.0",
+          "framework_version": "8.5",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann8.5-vllm0.18.0-arm64-slot14",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-vllm0.18.0-arm64-slot14",
+          "engine_version": "0.18.0",
+          "framework_version": "8.5",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.1-310p-vllm0.27.1rc1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-310p-vllm0.27.1rc1",
+          "engine_version": "0.27.1rc1",
+          "framework_version": "9.1",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.1-910b-vllm0.26.0rc1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-910b-vllm0.26.0rc1",
+          "engine_version": "0.26.0rc1",
+          "framework_version": "9.1",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.1-910b-vllm0.27.1rc1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-910b-vllm0.27.1rc1",
+          "engine_version": "0.27.1rc1",
+          "framework_version": "9.1",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.1-950-vllm0.27.1rc1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-950-vllm0.27.1rc1",
+          "engine_version": "0.27.1rc1",
+          "framework_version": "9.1",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.1-a3-vllm0.26.0rc1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-a3-vllm0.26.0rc1",
+          "engine_version": "0.26.0rc1",
+          "framework_version": "9.1",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.1-a3-vllm0.27.1rc1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-a3-vllm0.27.1rc1",
+          "engine_version": "0.27.1rc1",
+          "framework_version": "9.1",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.1-vllm0.23.0-amd64-slot13",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-vllm0.23.0-amd64-slot13",
+          "engine_version": "0.23.0",
+          "framework_version": "9.1",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cann9.1-vllm0.23.0-arm64-slot13",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-vllm0.23.0-arm64-slot13",
+          "engine_version": "0.23.0",
+          "framework_version": "9.1",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
           "name": "cann9.2-910b-vllm0.30.0-r1-amd64",
           "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.2-910b-vllm0.30.0-r1-amd64",
           "engine_version": "0.30.0",
@@ -661,6 +1314,14 @@
           "notes": "CUDA 13 的默认档，普通文本/多模态推理负载用。不含 vllm-omni，transformers 不设上界。mooncake 由 base 预装（cuda13 的包名是 mooncake-transfer-engine-cuda13）。 r3 加装 decord2（import 名 decord），ERNIE-4.5-VL 的 HF 动态模块要它；PyPI 的 decord 只有 x86_64 wheel，所以不用它。r4 再加装 moviepy：同一个动态模块还直接 import 它。\nrequires: engine, engine_import, decord, moviepy, mooncake, overlays, audit"
         },
         {
+          "name": "cuda12.8-v100-vllm1cat1.5.1-r1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-v100-vllm1cat1.5.1-r1",
+          "engine_version": "1cat1.5.1",
+          "framework_version": "12.8",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
           "name": "cuda12.8-v100-vllm1cat1.5.3-r1-linux-amd64",
           "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-v100-vllm1cat1.5.3-r1-linux-amd64",
           "engine_version": "1cat1.5.3",
@@ -668,6 +1329,142 @@
           "arch": "amd64",
           "rolling_tag": true,
           "notes": "NVIDIA Volta SM70 only. Select through a V100-specific template."
+        },
+        {
+          "name": "cuda12.8-vllm0.16.0-amd64-slot10",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.16.0-amd64-slot10",
+          "engine_version": "0.16.0",
+          "framework_version": "12.8",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.8-vllm0.16.0-arm64-slot10",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.16.0-arm64-slot10",
+          "engine_version": "0.16.0",
+          "framework_version": "12.8",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.8-vllm0.17.1-amd64-slot09",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.17.1-amd64-slot09",
+          "engine_version": "0.17.1",
+          "framework_version": "12.8",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.8-vllm0.17.1-arm64-slot09",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.17.1-arm64-slot09",
+          "engine_version": "0.17.1",
+          "framework_version": "12.8",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.9-vllm0.28.0-amd64-slot06",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.28.0-amd64-slot06",
+          "engine_version": "0.28.0",
+          "framework_version": "12.9",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.9-vllm0.28.0-arm64-slot06",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.28.0-arm64-slot06",
+          "engine_version": "0.28.0",
+          "framework_version": "12.9",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.9-vllm0.29.0-amd64-slot05",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.29.0-amd64-slot05",
+          "engine_version": "0.29.0",
+          "framework_version": "12.9",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.9-vllm0.29.0-arm64-slot05",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.29.0-arm64-slot05",
+          "engine_version": "0.29.0",
+          "framework_version": "12.9",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda12.9-vllm0.31.0",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0",
+          "engine_version": "0.31.0",
+          "framework_version": "12.9",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-vllm0.28.0-amd64-slot02",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.28.0-amd64-slot02",
+          "engine_version": "0.28.0",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-vllm0.28.0-arm64-slot02",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.28.0-arm64-slot02",
+          "engine_version": "0.28.0",
+          "framework_version": "13.0",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-vllm0.29.0-amd64-slot01",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.29.0-amd64-slot01",
+          "engine_version": "0.29.0",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-vllm0.29.0-arm64-slot01",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.29.0-arm64-slot01",
+          "engine_version": "0.29.0",
+          "framework_version": "13.0",
+          "arch": "arm64",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-vllm0.30.0",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0",
+          "engine_version": "0.30.0",
+          "framework_version": "13.0",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-vllm0.30.0-r2",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r2",
+          "engine_version": "0.30.0",
+          "framework_version": "13.0",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-vllm0.30.0-r3",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r3",
+          "engine_version": "0.30.0",
+          "framework_version": "13.0",
+          "arch": "multi",
+          "rolling_tag": true
+        },
+        {
+          "name": "cuda13.0-vllm0.33.0-r1-amd64",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.33.0-r1-amd64",
+          "engine_version": "0.33.0",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
         },
         {
           "name": "cuda13.0-vllm0.34.0-r1-amd64",
@@ -686,6 +1483,15 @@
           "arch": "arm64",
           "rolling_tag": true,
           "notes": "Review deployment compatibility before enabling."
+        },
+        {
+          "name": "zz-pilot-v100-1cat-r1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:zz-pilot-v100-1cat-r1",
+          "engine_version": "1cat1.5.1",
+          "framework_version": "12.8",
+          "arch": "amd64",
+          "rolling_tag": true,
+          "notes": "Historical Volta pilot alias. NVIDIA SM70 only."
         }
       ]
     },
@@ -718,6 +1524,54 @@
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r4"
           ],
           "notes": "K100 等海光 DCU 的 vllm 0.21 档。r2 起应用 patches/vllm_dtk/001：base 自带海光构建的 mooncake-transfer-engine 0.3.10 与 vLLM 的 MooncakeConnector（PD 模式 vllm-mooncake 用它），但连接器 把拉取失败的请求当作已收到 KV，decode 照样回答、kv_load_failure_policy 不生效；补丁让失败的块上报给调度器。r3 起再应用 002、003：Qwen3.5/3.6/3.8 这类 GDN 混合模型做 PD 时，连接器原样只认全注意力（Mamba 层注册即断言失败、强制 HND 布局让混合模型算错），调度器遇到 多 KV 组的拉取失败直接让 EngineCore 崩；补丁让同 TP、PP=1 的混合模型按整页传 KV、prefill 只算 N-1、失败按策略处理（K100 实测 Qwen3.5-0.8B 与 hygon/Qwen3.8-27B-Channel-INT8-w8a8）。混合模型须带 `--no-disable-hybrid-kv-cache-manager`，平台对 vllm-mooncake 的混合模型自动加。r4 起再应用 004： 混合模型新分配的块要清零，调度器把块号随该步输出交给 worker 发清零 kernel，而 decode 在同一步发起远端 KV 拉取，二者无序，清零晚于写入时抹掉收到的 KV/状态（BW 实测把清零延后时 20/20 次输出错）；004 不清零 异步加载要写入的块（上游 vLLM 后来的 `_skip_zero_block_ids` 同理）。**不含 omni**：厂商原件（ubuntu22.04 / py3.10）的 pip 清单是 vllm 0.21.0、vllm-hcu 0.21.0（vllm 平台插件）、transformers 5.5.0、torch 2.10.0（dtk2604）， 没有 vllm-omni；海光的 omni 负载仍走厂商 custom:* 系列镜像。 内置 vllm-hcu-apply-patches（厂商 base 构建时已执行过一次，可重复执行；推理目录的 pre_start_argv 依赖它）。callable runtime 不烤进镜像：推理目录用 sha256 钉住同一资产并只读挂到同一路径。 注意：vllm-hcu 插件默认开启自定义量化 GEMM，compressed-tensors W8A8 INT8 在 K100 上输出全是 `!` （K100 真机实测）；INT8 spec 须设 `VLLM_HCU_USE_CUSTOM_QUANTIZATION_GEMM=0`，BF16 不受影响。\nrequires: engine, hcu_patches, overlays, mooncake, mooncake_load_errors, mooncake_hybrid"
+        },
+        {
+          "name": "dtk26.04-vllm0.18.1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-vllm0.18.1",
+          "engine_version": "0.18.1",
+          "framework_version": "26.04",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "dtk26.04-vllm0.18.1-amd64-slot18",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-vllm0.18.1-amd64-slot18",
+          "engine_version": "0.18.1",
+          "framework_version": "26.04",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "dtk26.04-vllm0.21.0",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0",
+          "engine_version": "0.21.0",
+          "framework_version": "26.04",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "dtk26.04-vllm0.21.0-r1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r1",
+          "engine_version": "0.21.0",
+          "framework_version": "26.04",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "dtk26.04-vllm0.21.0-r2",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r2",
+          "engine_version": "0.21.0",
+          "framework_version": "26.04",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "dtk26.04-vllm0.21.0-r3",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r3",
+          "engine_version": "0.21.0",
+          "framework_version": "26.04",
+          "arch": "amd64",
+          "rolling_tag": true
         }
       ]
     },
@@ -738,6 +1592,22 @@
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-vllm0.23.0-r2"
           ],
           "notes": "PPU 的 vllm 档。omni、diffusion、mooncake 都来自 vanilla，所以本档同时能跑 omni 负载。本层只做：排障工具与 tini、清掉 vanilla 的 BASH_ENV 自启动 （每次 bash 启动都部署 cache bundle，拖慢健康检查）、把 vanilla 继承的 内网包源 env 改回公网源、运行期 env（VLLM_USE_V1=0 等）。\nrequires: engine, omni, mooncake, diffusion, overlays"
+        },
+        {
+          "name": "hggc13.0-vllm0.20.1-amd64-slot22",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-vllm0.20.1-amd64-slot22",
+          "engine_version": "0.20.1",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "hggc13.0-vllm0.23.0",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-vllm0.23.0",
+          "engine_version": "0.23.0",
+          "framework_version": "13.0",
+          "arch": "amd64",
+          "rolling_tag": true
         },
         {
           "name": "hggc13.0-vllm0.23.0-legacy-clean-r1-linux-amd64",
@@ -767,6 +1637,14 @@
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:metal15.0-vllm0.31.0-r2"
           ],
           "notes": "Apple silicon（M1–M5，macOS 15+）的 vLLM 档，引擎是 vllm-metal 0.31.0（钉 vLLM 0.31.0 CPU 核心 + MLX）。不是容器镜像：agent 的 host 运行时把它解包成宿主环境， 引擎以 macOS 原生进程跑在 Metal 上。构建： build/host-envs/build.sh vllm-metal 0.31.0 r2。r2 起带 vLLM 源码里的 examples/*.jinja 并以 /vllm-workspace 为工作目录（与 Linux runner 一致，模板的 --chat-template 可原样引用）。 不支持 sleep、多机、KV 磁盘层（accelerator.Supports）。"
+        },
+        {
+          "name": "metal15.0-vllm0.31.0-r1",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:metal15.0-vllm0.31.0-r1",
+          "engine_version": "0.31.0",
+          "framework_version": "15.0",
+          "arch": "arm64",
+          "rolling_tag": true
         }
       ]
     },
@@ -805,6 +1683,22 @@
           "arch": "amd64",
           "rolling_tag": true,
           "notes": "Review deployment compatibility before enabling."
+        },
+        {
+          "name": "rocm7.2.3-vllm0.29.0-amd64-slot29",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:rocm7.2.3-vllm0.29.0-amd64-slot29",
+          "engine_version": "0.29.0",
+          "framework_version": "7.2.3",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "rocm7.2.3-vllm0.30.0",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:rocm7.2.3-vllm0.30.0",
+          "engine_version": "0.30.0",
+          "framework_version": "7.2.3",
+          "arch": "amd64",
+          "rolling_tag": true
         }
       ]
     },
@@ -825,6 +1719,21 @@
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre5.0.21.46-vllm0.25.1-r1"
           ],
           "notes": "Kunlunxin P800 PCIe / KL3, Linux amd64; native XRE inference with RDMA userspace libraries. The runtime entrypoint is /opt/vllm025-venv/bin/vllm. Qwen profiles load original BF16 weights with FP16 computation. Single-node inference does not require XDR; cross-node inference requires the validated host XDR/RDMA stack."
+        },
+        {
+          "name": "xre-vllm0.1.dev3-amd64-slot25",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-vllm0.1.dev3-amd64-slot25",
+          "engine_version": "0.1.dev3",
+          "arch": "amd64",
+          "rolling_tag": true
+        },
+        {
+          "name": "xre-vllm0.25.1-amd64-slot26",
+          "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-vllm0.25.1-amd64-slot26",
+          "engine_version": "0.25.1",
+          "framework_version": "5.0.21.46",
+          "arch": "amd64",
+          "rolling_tag": true
         }
       ]
     }

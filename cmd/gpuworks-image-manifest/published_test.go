@@ -69,6 +69,31 @@ func TestPublishedSWRRejectsWrongIdentity(t *testing.T) {
 	}
 }
 
+func TestPublishedSWRPreservesLegacyTags(t *testing.T) {
+	cases := []struct {
+		item                                    publishedItem
+		arch, engine, version, frameworkVersion string
+	}{
+		{publishedItem{ID: "cuda13.0-vllm0.30.0", Tag: "cuda13.0-vllm0.30.0", Platforms: []string{"linux/amd64", "linux/arm64"}}, "multi", "vllm", "0.30.0", "13.0"},
+		{publishedItem{ID: "cann9.1-vllm0.23.0", Tag: "cann9.1-vllm0.23.0-amd64-omni-slot13", Platforms: []string{"linux/amd64"}}, "amd64", "vllm-omni", "", "9.1"},
+		{publishedItem{ID: "xre-sglang0.5.5.post3", Tag: "xre-sglang0.5.5.post3-amd64-diffusion-slot27", Platforms: []string{"linux/amd64"}}, "amd64", "sglang", "0.5.5.post3", ""},
+		{publishedItem{ID: "metal15.0-llama.cpp-b12631", Tag: "metal15.0-llama.cpp-b12631-r1", Platforms: []string{"darwin/arm64"}}, "arm64", "llama.cpp", "b12631", "15.0"},
+		{publishedItem{ID: "cuda12.8-v100-vllm1cat1.5.1", Tag: "zz-pilot-v100-1cat-r1", Platforms: []string{"linux/amd64"}, Alias: true}, "amd64", "vllm", "1cat1.5.1", "12.8"},
+	}
+	for _, test := range cases {
+		t.Run(test.item.Tag, func(t *testing.T) {
+			v, parsed, err := test.item.version()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if v.ImageRef != swrRunner+":"+test.item.Tag || v.Arch != test.arch || parsed.Engine != test.engine ||
+				v.EngineVersion != test.version || v.FrameworkVersion != test.frameworkVersion || !v.RollingTag {
+				t.Fatalf("published version = %+v, tag = %+v", v, parsed)
+			}
+		})
+	}
+}
+
 func TestGenerateRejectsDuplicatePublishedTag(t *testing.T) {
 	const input = `
 defaults:
