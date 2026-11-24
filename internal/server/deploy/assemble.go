@@ -401,7 +401,8 @@ func ResolveLaunchWithWarnings(input ResolveLaunchInput) (ResolvedLaunch, []mess
 }
 
 // manualCommandPortFlag is the API port flag of a manual command that
-// replaceManualCommandPort rewrites to the assigned port.
+// replaceManualCommandPort rewrites to the assigned port, whatever the engine:
+// the manual command contract of ADR 0020 decision 6.
 const manualCommandPortFlag = "--port"
 
 var manualCommandPortPattern = regexp.MustCompile(`(?m)(^|[ \t])` + regexp.QuoteMeta(manualCommandPortFlag) + `(?:[ \t]+|=)([^ \t\r\n;|&]+)`)

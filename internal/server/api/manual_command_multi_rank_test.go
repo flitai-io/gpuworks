@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 // manualOverrides is the container_overrides a form in manual mode sends: the
@@ -227,4 +229,51 @@ func TestSingleNodeManualCommandUnchanged(t *testing.T) {
 		t.Fatalf("single-node manual env = %v, want no system layer", resp.Env)
 	}
 	r.mustCreate(t, body)
+}
+
+// Only a rank that serves the API is checked for a taken port: in a two-node
+// group the headless follower binds none, so the port taken on its node says
+// nothing, and the same port taken on the leader's node is named.
+func TestMultiNodeManualCommandPortTakenOnlyOnTheServingRank(t *testing.T) {
+	script := "case \"${GPUWORKS_HEADLESS}\" in\n  0) exec vllm serve /model --port 30000 ;;\n  *) exec vllm serve /model --headless ;;\nesac"
+	for _, holder := range []string{"au-1", "au-2"} {
+		t.Run(holder, func(t *testing.T) {
+			r := newAutoRig(t, 2)
+			node, err := r.st.NodeByUUID(holder)
+			if err != nil {
+				t.Fatal(err)
+			}
+			held, err := r.st.CreateDeployment(&store.Deployment{Name: "holder", ModelID: r.modelID, NodeID: node.ID, Replicas: 1, PlacementStrategy: store.PlacementSpread})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.st.CreateInstance(&store.Instance{UUID: "holder-0", DeploymentID: held.ID, NodeID: node.ID, State: proto.InstRunning,
+				Image: "example/engine:1", GPUIndexes: "[1]", Ports: "[30000]"}); err != nil {
+				t.Fatal(err)
+			}
+			resp := r.evaluateBody(t, r.pinnedMultiBody("multi", manualOverrides(t, script)))
+			leader := ""
+			for _, rank := range resp.RankCommands {
+				if !rank.Headless {
+					leader = rank.NodeUUID
+				}
+			}
+			if !resp.OK || leader == "" {
+				t.Fatalf("evaluate ok %t leader %q errors %+v", resp.OK, leader, resp.Errors)
+			}
+			var named []string
+			for _, warning := range resp.Warnings {
+				if warning.Code == messages.WarningManualCommandPortTaken {
+					named = append(named, fmt.Sprint(warning.Params["node"]))
+				}
+			}
+			var want []string
+			if holder == leader {
+				want = []string{node.DisplayName()}
+			}
+			if !slices.Equal(named, want) {
+				t.Fatalf("port taken on %s (leader %s) named %v, want %v", holder, leader, named, want)
+			}
+		})
+	}
 }
