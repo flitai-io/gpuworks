@@ -475,8 +475,8 @@ func (m *RuntimeMountManager) preflight(name string, owner agentruntime.MountOwn
 			if isTarget {
 				need = 0o5
 			}
-			if !agentruntime.OwnerCanAccess(current, info, owner, need) {
-				return permissionError(current, info, owner, "traverse/read")
+			if ok, probeErr := agentruntime.OwnerCanAccess(current, info, owner, need); !ok {
+				return permissionError(current, info, owner, "traverse/read", probeErr)
 			}
 			if m.accessAsOwner != nil {
 				if err := m.accessAsOwner(owner, current, true); err != nil {
@@ -488,8 +488,8 @@ func (m *RuntimeMountManager) preflight(name string, owner agentruntime.MountOwn
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("runtime mount preflight target %s is not a regular file", current)
 		}
-		if !agentruntime.OwnerCanAccess(current, info, owner, 0o4) {
-			return permissionError(current, info, owner, "read")
+		if ok, probeErr := agentruntime.OwnerCanAccess(current, info, owner, 0o4); !ok {
+			return permissionError(current, info, owner, "read", probeErr)
 		}
 		if m.accessAsOwner != nil {
 			if err := m.accessAsOwner(owner, current, false); err != nil {
@@ -500,9 +500,17 @@ func (m *RuntimeMountManager) preflight(name string, owner agentruntime.MountOwn
 	return nil
 }
 
-func permissionError(name string, info os.FileInfo, owner agentruntime.MountOwner, operation string) error {
+// permissionError reports a preflight denial with the facts that decide
+// it: the owner and the mode bits. probeErr, when there is one, is the
+// error the probe returned after the bits denied, wrapped so a caller
+// can match it.
+func permissionError(name string, info os.FileInfo, owner agentruntime.MountOwner, operation string, probeErr error) error {
 	uid, gid, _ := agentruntime.FileOwner(info)
-	return fmt.Errorf("runtime mount %s denied for path=%s run_uid=%d run_gid=%d owner_uid=%d owner_gid=%d mode=%04o", operation, name, owner.UID, owner.GID, uid, gid, info.Mode().Perm())
+	denied := fmt.Sprintf("runtime mount %s denied for path=%s run_uid=%d run_gid=%d owner_uid=%d owner_gid=%d mode=%04o", operation, name, owner.UID, owner.GID, uid, gid, info.Mode().Perm())
+	if probeErr != nil {
+		return fmt.Errorf("%s: %w", denied, probeErr)
+	}
+	return errors.New(denied)
 }
 
 func samePath(left, right string) bool {

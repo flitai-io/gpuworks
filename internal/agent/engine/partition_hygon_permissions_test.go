@@ -62,8 +62,11 @@ func TestHygonUdockerConfigTraversalWithRestrictiveUmask(t *testing.T) {
 		t.Helper()
 		for _, parent := range parents {
 			info, err := os.Stat(parent)
-			if err != nil || !agentruntime.OwnerCanAccess(parent, info, runtimeOwner, 0o1) || info.Mode().Perm() != 0o711 {
-				t.Fatalf("dedicated runtime cannot search managed parent %s: %v/%v", parent, info, err)
+			if err != nil {
+				t.Fatalf("dedicated runtime cannot search managed parent %s: %v", parent, err)
+			}
+			if ok, _ := agentruntime.OwnerCanAccess(parent, info, runtimeOwner, 0o1); !ok || info.Mode().Perm() != 0o711 {
+				t.Fatalf("dedicated runtime cannot search managed parent %s: %v", parent, info)
 			}
 		}
 		assertHygonUdockerView(t, ws, dir, 4)
@@ -79,8 +82,11 @@ func TestHygonUdockerConfigTraversalWithRestrictiveUmask(t *testing.T) {
 		}
 		for _, path := range []string{private, filepath.Join(dir, hygonVdevLedgerName)} {
 			info, err := os.Stat(path)
-			if err != nil || agentruntime.OwnerCanAccess(path, info, runtimeOwner, 0o4) {
-				t.Fatalf("dedicated runtime can read private file: %s/%v/%v", path, info, err)
+			if err != nil {
+				t.Fatalf("dedicated runtime can read private file: %s/%v", path, err)
+			}
+			if canRead, _ := agentruntime.OwnerCanAccess(path, info, runtimeOwner, 0o4); canRead {
+				t.Fatalf("dedicated runtime can read private file: %s/%v", path, info)
 			}
 		}
 	}

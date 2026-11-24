@@ -1,8 +1,12 @@
 package engine
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 
 	agentruntime "gpuworks.ai/gpuworks/internal/agent/runtime"
@@ -130,26 +134,95 @@ func TestRuntimeMountManagerPreStartPublicationIsAtomicAndIdempotent(t *testing.
 	}
 }
 
+// missingCapability ends a test whose premise this process lacks: the
+// filesystem or namespace refuses uid 1000 as an owner, or the kernel
+// does not behave toward this process the way the case needs. Strict
+// mode turns the lack into a failure.
+func missingCapability(t *testing.T, what string, err error) {
+	t.Helper()
+	if os.Getenv("GPUWORKS_TEST_STRICT") == "1" {
+		t.Fatalf("GPUWORKS_TEST_STRICT=1: %s: %v", what, err)
+	}
+	t.Skipf("%s: %v", what, err)
+}
+
+// rootOverridesBits ends the test, as a capability lack, unless the
+// kernel lets this root process search and read a directory its mode
+// bits close to it: the capability the fix relies on.
+func rootOverridesBits(t *testing.T) {
+	t.Helper()
+	closed := filepath.Join(t.TempDir(), "closed")
+	if err := os.Mkdir(closed, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(closed, 0o200); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(closed + "/."); err != nil {
+		if errors.Is(err, fs.ErrPermission) {
+			missingCapability(t, "root cannot search a directory the mode bits close to it", err)
+		}
+		t.Fatal(err)
+	}
+	f, err := os.Open(closed)
+	if err != nil {
+		if errors.Is(err, fs.ErrPermission) {
+			missingCapability(t, "root cannot read a directory the mode bits close to it", err)
+		}
+		t.Fatal(err)
+	}
+	f.Close()
+}
+
 // A root agent on a local filesystem can traverse and read through
 // CAP_DAC_OVERRIDE where the mode bits deny it: a preflight failed on a
 // 0711 state directory owned by the sudo caller's uid while the agent ran
 // as root. The preflight must ask the kernel when the mount owner is the
 // calling identity itself, and must keep the mode-bit verdict when the
 // owner is someone else (the kernel cannot speak for a switched identity).
-// Without capabilities the kernel answer matches the bits, which pins both
-// directions.
+//
+// The root branch is the proof of the fix, the one case where the kernel's
+// answer differs from the mode bits; it needs root to give the directory
+// another owner. The non-root branch pins the other direction -- the probe
+// does not open what the kernel also denies -- and that such a denial
+// carries the kernel's error: without the probe it fails on a bare
+// mode-bit verdict.
 func TestRuntimeMountPreflightFallsBackToKernelAccess(t *testing.T) {
 	state := t.TempDir()
 	manager := &RuntimeMountManager{stateDir: state, root: state, legacy: true}
 	owner := agentruntime.MountOwner{UID: os.Geteuid(), GID: os.Getegid()}
 
 	if os.Geteuid() == 0 {
-		if err := os.Chown(state, 1000, 1000); err != nil {
-			t.Skipf("this user namespace does not map uid 1000: %v", err)
-		}
 		if err := os.Chmod(state, 0o711); err != nil {
 			t.Fatal(err)
 		}
+		if err := os.Chown(state, 1000, 1000); err != nil {
+			// A user namespace without uid 1000 mapped, or a root without
+			// CAP_CHOWN, cannot build the shape; anything else is a fault.
+			if errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.EPERM) {
+				missingCapability(t, "cannot give the state directory to uid 1000", err)
+			}
+			t.Fatal(err)
+		}
+		// The same false denial is reachable on an ancestor. The directory
+		// is a sibling of the state directory, so building and removing it
+		// need no write into a directory another user owns.
+		nested := filepath.Join(filepath.Dir(state), "nested")
+		if err := os.Mkdir(nested, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chown(nested, 1000, 1000); err != nil {
+			t.Fatal(err)
+		}
+		// 0700 gives root nothing there -- it does not own the directory
+		// -- so only the probe can pass the walk; and nothing of root's
+		// own reach may answer for the foreign owner.
+		blocked, _ := agentruntime.CheckAncestorTraversal(nested, agentruntime.MountOwner{UID: 4242, GID: 4242}).(*agentruntime.TraversalError)
+		if blocked == nil || blocked.Dir != nested || blocked.ProbeErr != nil {
+			t.Fatalf("a foreign owner must keep the bare mode-bit denial on the ancestor: %v", blocked)
+		}
+		// What follows needs the kernel to grant root what the bits deny.
+		rootOverridesBits(t)
 		if err := manager.ensureRoot(owner); err != nil {
 			t.Fatalf("root agent must pass preflight the kernel allows despite mode bits: %v", err)
 		}
@@ -160,33 +233,26 @@ func TestRuntimeMountPreflightFallsBackToKernelAccess(t *testing.T) {
 		if info.Mode().Perm() != 0o711 {
 			t.Fatalf("preflight fell back to a chmod: mode=%o, want 0711 kept", info.Mode().Perm())
 		}
-		// The same false denial is reachable on an ancestor: a 0700
-		// directory owned by another uid must not block a root agent's
-		// ancestor walk, and a foreign owner must keep the denial. The
-		// 0700 mode is what makes this pin the kernel probe: the mode
-		// bits deny every class, so only the probe can pass the walk.
-		nested := filepath.Join(state, "nested")
-		if err := os.Mkdir(nested, 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Chown(nested, 1000, 1000); err != nil {
-			t.Skipf("this user namespace does not map uid 1000: %v", err)
-		}
 		if err := agentruntime.CheckAncestorTraversal(nested, owner); err != nil {
 			t.Fatalf("root agent must traverse a 0700 foreign-owned ancestor: %v", err)
-		}
-		if err := agentruntime.CheckAncestorTraversal(nested, agentruntime.MountOwner{UID: 4242, GID: 4242}); err == nil {
-			t.Fatal("a foreign owner must keep the mode-bit denial on the ancestor")
 		}
 		return
 	}
 
 	denied := filepath.Join(state, "denied")
-	if err := os.Mkdir(denied, 0o300); err != nil {
+	if err := os.Mkdir(denied, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.preflight(denied, owner, true); err == nil {
-		t.Fatal("preflight must fail when the kernel also denies search+read on 0300")
+	file := filepath.Join(denied, "asset")
+	if err := os.WriteFile(file, []byte("asset"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	// The directory is tightened below, and then holds a file its owner
+	// cannot remove: put it back whatever ends the test.
+	t.Cleanup(func() { _ = os.Chmod(denied, 0o700) })
+	// What the mode bits allow passes with no probe.
+	if err := manager.preflight(file, owner, false); err != nil {
+		t.Fatalf("preflight must pass when the file bits allow: %v", err)
 	}
 	if err := os.Chmod(denied, 0o500); err != nil {
 		t.Fatal(err)
@@ -194,21 +260,25 @@ func TestRuntimeMountPreflightFallsBackToKernelAccess(t *testing.T) {
 	if err := manager.preflight(denied, owner, true); err != nil {
 		t.Fatalf("preflight must pass when the mode bits allow: %v", err)
 	}
+	// The bits deny the read and the kernel denies it too: the verdict is
+	// the kernel's error, and the message keeps the facts.
+	if err := os.Chmod(denied, 0o300); err != nil {
+		t.Fatal(err)
+	}
+	err := manager.preflight(denied, owner, true)
+	if !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("preflight on 0300 must be denied with the kernel's error: %v", err)
+	}
+	if prefix := "runtime mount traverse/read denied for path=" + denied + " "; !strings.HasPrefix(err.Error(), prefix) || !strings.Contains(err.Error(), "mode=0300") {
+		t.Fatalf("the denial must name the path and the mode bits: %v", err)
+	}
 	if err := os.Chmod(denied, 0o700); err != nil {
 		t.Fatal(err)
 	}
-
-	file := filepath.Join(denied, "asset")
-	if err := os.WriteFile(file, []byte("asset"), 0o200); err != nil {
+	if err := os.Chmod(file, 0o200); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.preflight(file, owner, false); err == nil {
-		t.Fatal("preflight must fail when the kernel also denies read on a 0200 file")
-	}
-	if err := os.Chmod(file, 0o400); err != nil {
-		t.Fatal(err)
-	}
-	if err := manager.preflight(file, owner, false); err != nil {
-		t.Fatalf("preflight must pass when the file bits allow: %v", err)
+	if err := manager.preflight(file, owner, false); !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("preflight must be denied with the kernel's error when the kernel also denies read on a 0200 file: %v", err)
 	}
 }
