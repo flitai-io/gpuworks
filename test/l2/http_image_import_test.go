@@ -401,6 +401,23 @@ func TestHTTPImageDeployAcquireURL(t *testing.T) {
 	}
 	localResp.Body.Close()
 
+	// The vRAM limit names no backend, so the create settles it from the
+	// node's reported dGPU capabilities. Online only means the agent
+	// connected; the capabilities arrive with its status report.
+	if !waitNodeUntil(t, c.base, c.adminToken, serverHealthTimeout, func(n processNode) bool {
+		if n.UUID != c.node.UUID || n.State != "online" || len(n.GPUs) != 1 {
+			return false
+		}
+		for _, capability := range n.GPUs[0].PartitionCapabilities {
+			if capability.Backend == "nvidia-dgpu" && capability.Status == "ready" {
+				return true
+			}
+		}
+		return false
+	}) {
+		t.Fatalf("node %s never reported a ready nvidia-dgpu capability within %s", c.node.UUID, serverHealthTimeout)
+	}
+
 	deployBody, _ := json.Marshal(map[string]any{
 		"name": "archive-url-deploy", "served_name": "archive-url-deploy",
 		"model_id": model.ID, "node_uuid": c.node.UUID,

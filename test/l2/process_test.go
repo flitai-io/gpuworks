@@ -825,9 +825,14 @@ func loginWithPassword(t *testing.T, base, password string) string {
 	return ""
 }
 
+// waitNode shares serverHealthTimeout: a node's first status report follows a
+// fresh agent's start-up and its registration, and the 15s this used to allow
+// failed on loaded CI runners ("timeout waiting for node state") across many
+// cases whose nodes did come online.
 func waitNode(t *testing.T, base, token string, want func(processNode) bool) processNode {
 	t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(serverHealthTimeout)
+	var seen []processNode
 	for time.Now().Before(deadline) {
 		req, _ := http.NewRequest(http.MethodGet, base+"/api/v1/nodes", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -844,11 +849,12 @@ func waitNode(t *testing.T, base, token string, want func(processNode) bool) pro
 					return node
 				}
 			}
+			seen = nodes
 		} else if resp != nil {
 			resp.Body.Close()
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatal("timeout waiting for node state")
+	t.Fatalf("timeout waiting for node state; last nodes: %+v", seen)
 	return processNode{}
 }
