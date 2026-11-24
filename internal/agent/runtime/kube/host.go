@@ -276,5 +276,5 @@ var authSubdir = filepath.Join("kube-tools", "pull-auth")
 // newImageStore is the node's containerd in kubelet's namespace, pulling with
 // logins staged under the state directory.
 func newImageStore(stateDir string) ImageStore {
-	return nerdctl.NewInNamespace("k8s.io").WithAuthDir(filepath.Join(stateDir, authSubdir))
+	return nerdctl.NewInNamespace("k8s.io").WithAuthDir(filepath.Join(stateDir, authSubdir)).WithHostRoot(HostRoot)
 }

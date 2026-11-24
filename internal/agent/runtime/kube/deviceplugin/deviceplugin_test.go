@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"gpuworks.ai/gpuworks/internal/agent/runtime/kube/grpcwire"
+	"gpuworks.ai/gpuworks/internal/agent/runtime/grpcwire"
 )
 
 // fakeKubelet is the kubelet's registration service: it records each

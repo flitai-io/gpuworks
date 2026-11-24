@@ -39,6 +39,9 @@ type Driver struct {
 	// authDir is where a pull's private registry login is written; "" is the
 	// system temp directory.
 	authDir string
+
+	// hostRoot locates the containerd socket when nerdctl executes on the host.
+	hostRoot string
 }
 
 // New returns a nerdctl driver pinned to the GPUWorks namespace.
@@ -250,7 +253,8 @@ func (d *Driver) PullImage(ctx context.Context, image string, onLine func(string
 // TagImage records a source-selected pull under the canonical catalog ref.
 func (d *Driver) TagImage(ctx context.Context, source, canonical string) error {
 	slog.Info("runtime command", "runtime", "nerdctl", "args", []string{"-n", d.ns, "tag", source, canonical})
-	return exec.CommandContext(ctx, "nerdctl", "-n", d.ns, "tag", source, canonical).Run()
+	_, err := exec.CommandContext(ctx, "nerdctl", "-n", d.ns, "tag", source, canonical).Output()
+	return err
 }
 
 // HoldsImage reports whether the gpuworks namespace holds image, for a node
@@ -263,8 +267,7 @@ func (d *Driver) SaveImage(ctx context.Context, image string, w io.Writer) error
 	slog.Debug("runtime command", "runtime", "nerdctl", "args", []string{"-n", d.ns, "save", image})
 	cmd := exec.CommandContext(ctx, "nerdctl", "-n", d.ns, "save", image)
 	cmd.Stdout = w
-	cmd.Stderr = io.Discard
-	return cmd.Run()
+	return runImageExport(cmd)
 }
 
 func (d *Driver) LoadImage(ctx context.Context, image string, r io.Reader) error {

@@ -55,7 +55,7 @@ func ResolveLoadedImageRef(ctx context.Context, inspector ImageInspector, output
 }
 
 func loadedImageRefs(output, image string) []string {
-	wanted := loadedImageRefName(image)
+	wanted := CanonicalImageRef(image)
 	var found string
 	var refs []string
 	seen := make(map[string]bool)
@@ -106,7 +106,7 @@ func loadedImageRefs(output, image string) []string {
 			continue
 		}
 		if key == "" {
-			key = loadedImageRefName(ref)
+			key = CanonicalImageRef(ref)
 			if key == wanted {
 				return []string{image}
 			}
@@ -136,9 +136,9 @@ func IsImageID(ref string) bool {
 	return err == nil
 }
 
-// loadedImageRefName applies Docker name defaults: the legacy index.docker.io
+// CanonicalImageRef applies Docker name defaults: the legacy index.docker.io
 // name, library/ and the latest tag. Registry endpoint hosts remain distinct.
-func loadedImageRefName(ref string) string {
+func CanonicalImageRef(ref string) string {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return ""

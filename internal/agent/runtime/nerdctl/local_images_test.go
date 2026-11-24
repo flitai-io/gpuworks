@@ -3,12 +3,15 @@ package nerdctl
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
+	"gpuworks.ai/gpuworks/internal/agent/runtime/grpcwire"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
@@ -33,6 +36,7 @@ func TestRuntimeImageImportAcrossNamespaces(t *testing.T) {
 	// contents over stdin, so the test also observes when a copy occurs.
 	const cli = `#!/bin/sh
 set -eu
+if [ "$1" = --help ]; then echo '  --address string  containerd address (default "unix:///containerd.sock")'; exit; fi
 [ "$1" = "-n" ]
 ns=$2
 shift 2
@@ -55,7 +59,10 @@ esac
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
 	t.Setenv("TEST_IMAGE_STORE", dir)
 	t.Setenv("TEST_TARGET", target)
-	d := NewInNamespace("k8s.io")
+	other := strings.Replace(image, config, "sha256:"+strings.Repeat("c", 64), 1)
+	var atCreate atomic.Bool
+	d := testLocalImagePublisher(t, dir, target, other, &atCreate)
+	finalPath := filepath.Join(dir, "k8s.io/runner:v1")
 	list, err := d.ListLocalImages(t.Context(), "default")
 	if err != nil || list.TargetNamespace != "k8s.io" || list.Namespace != "default" || len(list.Items) != 1 || list.Items[0].Ref != "runner:v1" {
 		t.Fatalf("list %+v: %v", list, err)
@@ -78,8 +85,14 @@ esac
 	if err != nil || string(copies) != "copied\n" {
 		t.Fatalf("transfers: %q %v", copies, err)
 	}
-	other := strings.Replace(image, config, "sha256:"+strings.Repeat("c", 64), 1)
-	write("k8s.io/runner:v1", other)
+	if err := os.Remove(finalPath); err != nil {
+		t.Fatal(err)
+	}
+	atCreate.Store(true)
+	if _, err := d.ResolveLocalImage(t.Context(), p, true); !errors.Is(err, runtime.ErrLocalImageConflict) {
+		t.Fatalf("concurrent create should preserve the other image: %v", err)
+	}
+	// The ordinary conflict also leaves the competing tag intact.
 	if _, err := d.ResolveLocalImage(t.Context(), p, true); !errors.Is(err, runtime.ErrLocalImageConflict) {
 		t.Fatalf("expected conflict: %v", err)
 	}
@@ -91,4 +104,101 @@ esac
 	if _, err := d.ResolveLocalImage(t.Context(), p, true); !errors.Is(err, runtime.ErrLocalImageChanged) {
 		t.Fatalf("stale selection: %v", err)
 	}
+}
+
+// testLocalImagePublisher serves the two containerd image RPCs used by publishLocalImage.
+func testLocalImagePublisher(t *testing.T, dir, target, other string, atCreate *atomic.Bool) *Driver {
+	t.Helper()
+	// A short socket path also works when CI places t.TempDir under a long path.
+	host, err := os.MkdirTemp("", "gw-rpc-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(host) })
+	finalPath := filepath.Join(dir, "k8s.io/runner:v1")
+	var descriptor grpcwire.Message
+	desc := descriptor.String(2, target).Encode()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fail := func(err error) {
+			t.Error(err)
+			grpcwire.Fail(w, grpcwire.CodeInternal, "fixture failure")
+		}
+		if ns := r.Header.Get("containerd-namespace"); ns != "k8s.io" {
+			fail(fmt.Errorf("namespace %q", ns))
+			return
+		}
+		req, err := grpcwire.ReadFrame(r.Body)
+		if err != nil {
+			fail(err)
+			return
+		}
+		var name string
+		var img grpcwire.Message
+		switch r.URL.Path {
+		case "/containerd.services.images.v1.Images/Get":
+			err = grpcwire.Fields(req, func(n, w int, b []byte) error {
+				if n == 1 {
+					name = string(b)
+				}
+				return nil
+			})
+			if err != nil || !strings.HasPrefix(name, localImportStagePrefix) {
+				fail(fmt.Errorf("stage %q: %v", name, err))
+				return
+			}
+			if _, err = os.Stat(filepath.Join(dir, "k8s.io", name)); err != nil {
+				fail(err)
+				return
+			}
+			var response grpcwire.Message
+			response.Bytes(1, img.String(1, name).Bytes(3, desc).Encode())
+			grpcwire.StartResponse(w)
+			_ = grpcwire.Send(w, response.Encode())
+			grpcwire.Finish(w, 0, "")
+		case "/containerd.services.images.v1.Images/Create":
+			err = grpcwire.Fields(req, func(n, w int, b []byte) error {
+				if n != 1 {
+					return nil
+				}
+				return grpcwire.Fields(b, func(field, w int, val []byte) error {
+					switch field {
+					case 1:
+						name = string(val)
+					case 3:
+						if string(val) != string(desc) {
+							return errors.New("wrong descriptor")
+						}
+					}
+					return nil
+				})
+			})
+			if err != nil || name != "docker.io/library/runner:v1" {
+				fail(fmt.Errorf("destination %q: %v", name, err))
+				return
+			}
+			if atCreate.Load() {
+				if err := os.WriteFile(finalPath, []byte(other), 0600); err != nil {
+					fail(err)
+					return
+				}
+			}
+			if err := os.Link(filepath.Join(dir, "default/runner:v1"), finalPath); errors.Is(err, os.ErrExist) {
+				grpcwire.Fail(w, grpcwire.CodeAlreadyExists, "image already exists")
+				return
+			} else if err != nil {
+				fail(err)
+				return
+			}
+			grpcwire.StartResponse(w)
+			grpcwire.Finish(w, 0, "")
+		default:
+			fail(fmt.Errorf("unexpected RPC %s", r.URL.Path))
+		}
+	})
+	stop, err := grpcwire.Listen(t.Context(), filepath.Join(host, "containerd.sock"), handler)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(stop)
+	return NewInNamespace("k8s.io").WithHostRoot(host)
 }

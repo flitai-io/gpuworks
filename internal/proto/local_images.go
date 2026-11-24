@@ -10,6 +10,7 @@ const (
 	RPCImageRuntimeList        = "image.runtime_list"
 	RPCImageRuntimeInspect     = "image.runtime_inspect"
 	RPCImageRuntimeImport      = "image.runtime_import"
+	ErrorLocalImageBusy        = "LOCAL_IMAGE_BUSY"
 	ErrorLocalImageUnavailable = "LOCAL_IMAGE_UNAVAILABLE"
 	ErrorLocalImageChanged     = "LOCAL_IMAGE_CHANGED"
 	ErrorLocalImageConflict    = "LOCAL_IMAGE_CONFLICT"

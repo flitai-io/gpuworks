@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
@@ -14,7 +15,7 @@ func (d *Driver) ListLocalImages(ctx context.Context, ns string) (proto.RuntimeI
 	}
 	out, err := exec.CommandContext(ctx, "docker", "image", "ls", "--no-trunc", "--format", runtime.LocalImageListFormat).Output()
 	if err != nil {
-		return proto.RuntimeImageList{}, err
+		return proto.RuntimeImageList{}, fmt.Errorf("docker image ls: %w", err)
 	}
 	return proto.RuntimeImageList{Runtime: d.Name(), Items: runtime.ParseLocalImages(string(out))}, nil
 }

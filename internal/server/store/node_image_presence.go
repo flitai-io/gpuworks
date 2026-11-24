@@ -9,16 +9,6 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
-// ObserveLocalImage records an explicitly inspected image with the same
-// active-transfer ownership rules as a normal node inventory.
-func (s *Store) ObserveLocalImage(imageID, nodeID uint, report proto.ImagePresence) error {
-	err := s.db.Transaction(func(tx *gorm.DB) error { return reconcileImagePresence(tx, nodeID, []proto.ImagePresence{report}) })
-	if err == nil {
-		s.Bus.PublishChange("image", uintKey(imageID), "node")
-	}
-	return err
-}
-
 func reconcileImagePresence(tx *gorm.DB, nodeID uint, reports []proto.ImagePresence) error {
 	// One read of the reported images and one of the node's rows for them:
 	// every agent reports every catalog image once a minute, and reading

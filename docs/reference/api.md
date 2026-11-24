@@ -619,6 +619,31 @@ macOS 忽略 `no_systemd`。
 | PATCH | `/api/v1/storages/settings` | 修改上述设置 | admin |
 | GET | `/api/v1/storages/usage` | 各节点模型盘用量统计 | JWT |
 
+### 登记节点已有镜像
+
+管理员先调用 `GET /api/v1/images/nodes/{uuid}/runtime-images`。`list` 为响应，`selectedIndex` 为用户选择的行。读取该行的 `ref`、`identity`，再从列表顶层读取 `runtime`、`namespace` 和 `target_namespace`。Docker 的两个 namespace 均为空字符串。nerdctl 的 `namespace` 是来源，`target_namespace` 是该节点的部署目标。
+
+```js
+const row = list.items[selectedIndex];
+const selection = {
+  ref: row.ref,
+  identity: row.identity,
+  runtime: list.runtime,
+  namespace: list.namespace,
+  target_namespace: list.target_namespace
+};
+const inspectBody = selection;
+const importBody = {
+  runtime_image: { ...selection, node_uuid: nodeUUID },
+  series: [{
+    source: "custom", engine: "vllm", framework: "cuda",
+    versions: [{ image_ref: row.ref, framework_version: "13.0" }]
+  }]
+};
+```
+
+将 `inspectBody` 提交到同一节点的 `POST .../runtime-images/inspect` 读取元数据。补齐目录字段后，将 `importBody` 提交到 `POST /api/v1/images/import`。`nodeUUID` 与 GET 路径中的节点相同。示例中的引擎、框架和版本应使用该镜像的实际值。跨 namespace 复制只在导入时执行。
+
 ### 存储配置与缓存状态
 
 - `updated_at` 用作编辑版本；target 的 `override_only: true` 表示纯节点配置例外，不参与范围选择。省略或为 `false` 时保留显式选择语义。

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -103,5 +104,115 @@ func TestRuntimeImageImportVerifiesNodeBeforeRecordingPresence(t *testing.T) {
 	row, err := st.ImageNode(image.ID, node.ID)
 	if err != nil || row.State != store.ImageStatePresent || row.ImageDigestID != id {
 		t.Fatalf("presence %+v, %v", row, err)
+	}
+}
+
+// The node RPC is the point at which another admin can change the catalog
+// while the first request is copying layers. Use the real store on both sides.
+func TestRuntimeImageRegistrationDuringCopy(t *testing.T) {
+	for _, scenario := range []string{"new version", "concurrent registration", "deleted", "replaced", "inherited framework missing version"} {
+		t.Run(scenario, func(t *testing.T) {
+			st, _, _ := newSessionRouter(t)
+			node, _, err := st.CreateNodePending("worker", "agent_dial")
+			if err != nil {
+				t.Fatal(err)
+			}
+			signer, admin := roleTestToken(t, st, "admin")
+			const ref = "example/runner:v2"
+			const sources = `["https://images.example/keep.tar"]`
+			series, err := st.UpsertImageSeries(&store.ImageSeries{Name: "example/runner", Source: "custom", Engine: "vllm", Framework: "dtk", Purpose: store.ImagePurposeEvaluation, Notes: "operator note"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.SetImageSeriesEnabled(series.ID, false); err != nil {
+				t.Fatal(err)
+			}
+			create := func(tag string) *store.Image {
+				t.Helper()
+				row, err := st.UpsertImage(&store.Image{SeriesID: series.ID, ImageRef: tag, Engine: "vllm", Framework: "dtk", FrameworkVersion: "25.04", Source: "custom", Notes: "existing version", RegistrySources: sources})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return row
+			}
+			create("example/runner:v1")
+			var before *store.Image
+			if scenario == "deleted" || scenario == "replaced" {
+				before = create(ref)
+			}
+			installedID := "sha256:" + strings.Repeat("a", 64)
+			calls := 0
+			router := Router(Deps{Store: st, AuthSigner: signer, CallNode: func(_ context.Context, uuid, method string, _ any) (json.RawMessage, error) {
+				calls++
+				if uuid != node.UUID || method != proto.RPCImageRuntimeImport {
+					t.Fatal("unexpected RPC", uuid, method)
+				}
+				switch scenario {
+				case "concurrent registration":
+					create(ref)
+				case "deleted", "replaced":
+					if err := st.DeleteImage(before.ID); err != nil {
+						t.Fatal(err)
+					}
+					if scenario == "replaced" {
+						create(ref)
+					}
+				}
+				return json.Marshal(proto.RuntimeImageDetails{ImageID: installedID})
+			}})
+			body := fmt.Sprintf(`{"runtime_image":{"node_uuid":%q,"runtime":"nerdctl","namespace":"default","target_namespace":"gpuworks","ref":%q,"identity":%q},"series":[{"engine":"vllm","source":"custom","versions":[{"image_ref":%q,"framework_version":"25.04"}]}]}`, node.UUID, ref, installedID, ref)
+			if scenario == "inherited framework missing version" {
+				body = strings.Replace(body, `,"framework_version":"25.04"`, "", 1)
+			}
+			req := httptest.NewRequest("POST", "/api/v1/images/import", strings.NewReader(body))
+			req.Header.Set("Authorization", "Bearer "+admin)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if scenario == "inherited framework missing version" {
+				if calls != 0 || rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), ErrorImageFrameworkVersionRequired) {
+					t.Fatalf("validation: calls=%d status=%d body=%s", calls, rec.Code, rec.Body)
+				}
+				return
+			}
+			if calls != 1 {
+				t.Fatalf("node calls: %d", calls)
+			}
+			if scenario == "deleted" || scenario == "replaced" {
+				if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), ErrorLocalImageCatalogChanged) {
+					t.Fatalf("expected conflict: %d %s", rec.Code, rec.Body)
+				}
+				image, err := st.ImageByRef(ref)
+				if scenario == "deleted" && !errors.Is(err, store.ErrNotFound) {
+					t.Fatalf("deleted version reappeared: %v", err)
+				}
+				if scenario == "replaced" {
+					if err != nil || image.ID == before.ID {
+						t.Fatalf("expected replacement: %v", err)
+					}
+					if _, err := st.ImageNode(image.ID, node.ID); !errors.Is(err, store.ErrNotFound) {
+						t.Fatalf("unexpected replacement presence: %v", err)
+					}
+				}
+				return
+			}
+			if rec.Code != http.StatusOK {
+				t.Fatalf("register: %d %s", rec.Code, rec.Body)
+			}
+			saved, err := st.GetImageSeries(series.ID)
+			if err != nil || saved.Enabled || saved.Purpose != store.ImagePurposeEvaluation || saved.Notes != "operator note" {
+				t.Fatalf("series settings changed: %+v %v", saved, err)
+			}
+			image, err := st.ImageByRef(ref)
+			if err != nil || image.SeriesID != series.ID || image.Framework != "dtk" {
+				t.Fatalf("version: %+v %v", image, err)
+			}
+			if scenario == "concurrent registration" && (image.Notes != "existing version" || image.RegistrySources != sources) {
+				t.Fatalf("version metadata changed: %+v", image)
+			}
+			present, err := st.ImageNode(image.ID, node.ID)
+			if err != nil || present.State != store.ImageStatePresent || present.ImageDigestID != installedID {
+				t.Fatalf("presence: %+v %v", present, err)
+			}
+		})
 	}
 }

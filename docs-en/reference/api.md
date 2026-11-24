@@ -619,6 +619,31 @@ the endpoint returns 409 and does not replace the existing registration. If the 
 | PATCH | `/api/v1/storages/settings` | Update the preceding settings | admin |
 | GET | `/api/v1/storages/usage` | Get model disk usage statistics for each node | JWT |
 
+### Register an image already on a node
+
+As an administrator, call `GET /api/v1/images/nodes/{uuid}/runtime-images`. In the example, `list` is the response and `selectedIndex` identifies the row chosen by the user. Take `ref` and `identity` from that row, and `runtime`, `namespace` and `target_namespace` from the top level. Both namespace fields are empty strings for Docker. For nerdctl, `namespace` is the source and `target_namespace` is the node’s deployment target.
+
+```js
+const row = list.items[selectedIndex];
+const selection = {
+  ref: row.ref,
+  identity: row.identity,
+  runtime: list.runtime,
+  namespace: list.namespace,
+  target_namespace: list.target_namespace
+};
+const inspectBody = selection;
+const importBody = {
+  runtime_image: { ...selection, node_uuid: nodeUUID },
+  series: [{
+    source: "custom", engine: "vllm", framework: "cuda",
+    versions: [{ image_ref: row.ref, framework_version: "13.0" }]
+  }]
+};
+```
+
+Send `inspectBody` to `POST .../runtime-images/inspect` on the same node to read the metadata. Complete the catalog fields and send `importBody` to `POST /api/v1/images/import`. Use the GET request’s node UUID for `nodeUUID` and the image’s actual engine, framework and version. A cross-namespace copy starts on import.
+
 ### Storage Configuration and Cache Status
 
 - `updated_at` serves as the edit version; `override_only: true` on a target indicates a node configuration override only, which does not participate in scope selection. Omitting it or setting it to `false` preserves explicit selection semantics.
@@ -2452,6 +2477,7 @@ An unknown `target_vendor` on `/api/v1/engines` returns 400. If custom-command f
 <!-- translation-source-sha256: 2818637fc41db824cf8851d4bd0bc2cb1e90e978da76ce1c2cb5098d8aeece25 ### List Filtering and Presence Summary -->
 <!-- translation-source-sha256: 536c79e56bf4d787dec94eef14773f9e978accf7d42427e195db79e5fa0ac045 ### Register an Existing Node Path -->
 <!-- translation-source-sha256: a8ebc8f569b4695db5d7e80450a6e843689abd8b2724c44a3c54d53df4c178bc ## Images / Storages (Image Catalog and Storage Policies) -->
+<!-- translation-source-sha256: 05ed6fb2534b70b387c674d5c214bd855c06eb8fac44a0ab466565f2eaa2e87c ### Register an image already on a node -->
 <!-- translation-source-sha256: 04f403145369bea2e0886af6fd3a84add59d07299152c9a53cc09ef3d598fdf0 ### Storage Configuration and Cache Status -->
 <!-- translation-source-sha256: 76495aa0a302fbe279f354b4207253de032639c11e8498c2041f1b8a373a248c ### Storage File Operation Scope and Errors -->
 <!-- translation-source-sha256: 28ab68c5e446f16a186a6ea1ad5e2fe940b67e51a2098b9d556108ede3a22d09 ### Catalog Import Results -->

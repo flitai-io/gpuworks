@@ -242,60 +242,58 @@ func (a *apiHandlers) syncImagesManifest(w http.ResponseWriter, r *http.Request)
 func (a *apiHandlers) upsertImageInputs(inputs []imageInput) ([]dto.Image, error) {
 	result := make([]dto.Image, 0, len(inputs))
 	for _, in := range inputs {
-		if err := validateImageInput(in); err != nil {
-			return nil, err
-		}
-		if strings.TrimSpace(in.EngineVersion) == "" {
-			in.EngineVersion = community.InferEngineVersion(in.ImageRef)
-		}
-		enabled := true
-		if in.Enabled != nil {
-			enabled = *in.Enabled
-		}
-		source := in.Source
-		seriesName, err := a.resolveInputSeriesName(in, source)
+		series, version, err := a.prepareImageInput(in)
 		if err != nil {
 			return nil, err
 		}
-		if seriesName == "" {
-			seriesName = strings.TrimSpace(in.Name)
-		}
-		if seriesName == "" {
-			seriesName = in.Engine
-		}
-		purpose := strings.TrimSpace(in.Purpose)
-		if purpose == "" {
-			purpose = store.ImagePurposeInference
-		}
-		commonArgs, _ := json.Marshal(in.CommonArgs)
-		commonEnv, _ := json.Marshal(in.CommonEnv)
-		series, err := a.d.Store.UpsertImageSeries(&store.ImageSeries{Name: seriesName, Engine: in.Engine, Purpose: purpose, Framework: in.Framework, Source: source, Enabled: enabled, Notes: in.Notes, CommonArgs: string(commonArgs), CommonEnv: string(commonEnv)})
+		series, err = a.d.Store.UpsertImageSeries(series)
 		if err != nil {
 			return nil, err
 		}
-		framework := series.Framework
-		if framework == "" {
-			framework = in.Framework
+		if err := version.BindCatalogSeries(series); err != nil {
+			return nil, err
 		}
-		// The framework version is one of the three facts a catalog entry
-		// exists to declare, and it gates automatic selection — unlike the
-		// engine version, which is display metadata and may be inferred from
-		// the tag. A gating fact must be declared, not guessed: an entry that
-		// states a framework but no version is exactly the half-declared row
-		// that once made automatic image selection flip between call sites.
-		if framework != "" && strings.TrimSpace(in.FrameworkVersion) == "" {
-			return nil, productError(ErrorImageFrameworkVersionRequired, "framework_version is required when a framework is declared", map[string]any{"image": in.ImageRef, "framework": framework})
-		}
-		sources, _ := json.Marshal(in.RegistrySources)
-		// A known rolling name is rolling whatever the form said; the form can
-		// only add rolling to a tag the name does not reveal.
-		img, err := a.d.Store.UpsertImage(&store.Image{SeriesID: series.ID, Name: in.Name, Engine: in.Engine, EngineVersion: in.EngineVersion, Framework: framework, FrameworkVersion: in.FrameworkVersion, Arch: in.Arch, ImageRef: in.ImageRef, Source: source, RegistrySources: string(sources), Notes: in.Notes, Enabled: enabled, RollingTag: in.RollingTag || community.IsRollingTag(in.ImageRef)})
+		img, err := a.d.Store.UpsertImage(version)
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, a.imageDTO(img, true))
 	}
 	return result, nil
+}
+
+// prepareImageInput resolves catalog defaults without modifying the series or version.
+func (a *apiHandlers) prepareImageInput(in imageInput) (*store.ImageSeries, *store.Image, error) {
+	if err := validateImageInput(in); err != nil {
+		return nil, nil, err
+	}
+	name, err := a.resolveInputSeriesName(in, in.Source)
+	if err != nil {
+		return nil, nil, err
+	}
+	if name == "" {
+		name = strings.TrimSpace(in.Name)
+	}
+	if name == "" {
+		name = in.Engine
+	}
+	purpose := strings.TrimSpace(in.Purpose)
+	if purpose == "" {
+		purpose = store.ImagePurposeInference
+	}
+	if strings.TrimSpace(in.EngineVersion) == "" {
+		in.EngineVersion = community.InferEngineVersion(in.ImageRef)
+	}
+	enabled := in.Enabled == nil || *in.Enabled
+	args, _ := json.Marshal(in.CommonArgs)
+	env, _ := json.Marshal(in.CommonEnv)
+	sources, _ := json.Marshal(in.RegistrySources)
+	series := &store.ImageSeries{Name: name, Engine: in.Engine, Purpose: purpose, Framework: in.Framework,
+		Source: in.Source, Enabled: enabled, Notes: in.Notes, CommonArgs: string(args), CommonEnv: string(env)}
+	version := &store.Image{Name: in.Name, Engine: in.Engine, EngineVersion: in.EngineVersion, Framework: in.Framework,
+		FrameworkVersion: in.FrameworkVersion, Arch: in.Arch, ImageRef: in.ImageRef, Source: in.Source,
+		RegistrySources: string(sources), Notes: in.Notes, Enabled: enabled, RollingTag: in.RollingTag || community.IsRollingTag(in.ImageRef)}
+	return series, version, version.BindCatalogSeries(series)
 }
 
 // resolveInputSeriesName keeps community/custom repositories grouped by both

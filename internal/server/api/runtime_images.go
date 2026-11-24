@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -50,7 +50,7 @@ func (a *apiHandlers) runtimeImageCall(w http.ResponseWriter, r *http.Request, n
 			code = messages.ErrorAgentUpgradeRequired
 		} else if errors.As(err, &rpc) {
 			switch rpc.Code {
-			case proto.ErrorLocalImageChanged, proto.ErrorLocalImageConflict, proto.ErrorLocalImageUnsupported:
+			case proto.ErrorLocalImageBusy, proto.ErrorLocalImageChanged, proto.ErrorLocalImageConflict, proto.ErrorLocalImageUnsupported:
 				code = rpc.Code
 			}
 		}
@@ -90,25 +90,14 @@ func (a *apiHandlers) registerRuntimeImage(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	in := inputs[0]
-	if err := validateImageInput(in); err != nil {
+	series, version, err := a.prepareImageInput(in)
+	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	if strings.TrimSpace(in.Framework) != "" && strings.TrimSpace(in.FrameworkVersion) == "" {
-		writeProductError(w, http.StatusBadRequest, ErrorImageFrameworkVersionRequired, "framework version is required", map[string]any{"image": in.ImageRef, "framework": in.Framework})
-		return
-	}
-	if _, err := a.resolveInputSeriesName(in, in.Source); err != nil {
-		writeErr(w, http.StatusBadRequest, err)
-		return
-	}
-	current, err := a.d.Store.ImageByRef(in.ImageRef)
-	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	if current != nil && current.Source != "custom" {
-		writeProductError(w, http.StatusConflict, ErrorImageImportConflict, "this image belongs to another catalog source", map[string]any{"detail": in.ImageRef})
+	expectedID, err := a.d.Store.CheckLocalImageRegistration(*series, *version)
+	if err != nil {
+		writeLocalRegistrationError(w, in.ImageRef, err)
 		return
 	}
 
@@ -121,23 +110,28 @@ func (a *apiHandlers) registerRuntimeImage(w http.ResponseWriter, r *http.Reques
 		writeProductError(w, http.StatusBadGateway, proto.ErrorLocalImageUnavailable, "the node did not confirm the installed image", nil)
 		return
 	}
-	// A second node with the same custom ref adds presence to that version.
-	// Its import form does not own the version's saved sources or settings.
-	var rows []dto.Image
-	if current != nil {
-		rows = []dto.Image{a.imageDTO(current, false)}
-	} else {
-		rows, err = a.upsertImageInputs(inputs)
-		if err != nil {
-			writeErr(w, http.StatusBadRequest, err)
-			return
-		}
-	}
-	if err = a.d.Store.ObserveLocalImage(rows[0].ID, node.ID, proto.ImagePresence{
-		ImageRef: in.ImageRef, ImageID: installed.ImageID, RuntimeSizeBytes: installed.RuntimeSizeBytes, Present: true,
-	}); err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
+	saved, id, err := a.d.Store.RegisterLocalImage(node.ID, expectedID, *series, *version, proto.ImagePresence{
+		ImageID: installed.ImageID, RuntimeSizeBytes: installed.RuntimeSizeBytes, Present: true,
+	})
+	if err != nil {
+		writeLocalRegistrationError(w, in.ImageRef, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, dto.NewList(a.imageSeriesResult(rows)))
+	result := a.imageSeriesDTO(saved, true)
+	if !slices.ContainsFunc(result.Versions, func(v dto.Image) bool { return v.ID == id }) {
+		writeLocalRegistrationError(w, in.ImageRef, store.ErrLocalImageCatalogConflict)
+		return
+	}
+	writeJSON(w, http.StatusOK, dto.NewList([]dto.ImageSeries{result}))
+}
+
+func writeLocalRegistrationError(w http.ResponseWriter, ref string, err error) {
+	switch {
+	case errors.Is(err, store.ErrLocalImageCatalogConflict):
+		writeProductError(w, http.StatusConflict, ErrorLocalImageCatalogChanged, "the catalog entry changed or belongs to another source", map[string]any{"image": ref})
+	case containsProductCode(err, ErrorImageFrameworkVersionRequired):
+		writeErr(w, http.StatusBadRequest, err)
+	default:
+		writeErr(w, http.StatusInternalServerError, err)
+	}
 }

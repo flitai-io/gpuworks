@@ -113,6 +113,8 @@ var routeDocs = map[string]string{
 
 	"/api/v1/images/engines": "镜像表单可选的引擎字典 `[{\"name\",\"label\"}]`，按展示顺序：全部部署引擎加目录专用的 `vllm-omni`",
 
+	"/api/v1/images/nodes/{}/runtime-images": "扫描带标签的节点镜像。可选查询参数 `namespace`；返回镜像引用、不可变标识、大小及来源和部署用的 namespace。",
+
 	"/api/v1/images/versions": "镜像版本行列表；每行带 `present_nodes`/`total_nodes` 与 `reference_count`，不带逐节点行（节点行见系列详情）",
 
 	"/api/v1/images/{}": "镜像系列详情；各版本的节点行带 `node_name`、`node_state`、`image_digest_id`、`updated_at`，节点间同步来的行另带 `source_node_name`。`state` 只表示节点运行时里有没有该镜像；上一次获取的结局看 `transfer_error_code` 与 `message`：`present` 且 `transfer_error_code=IMAGE_REFETCH_FAILED` 表示强制重新获取失败、节点保留了原有镜像，`message` 是失败原因，保留到下一次获取；`PEER_TRANSFER_CANCELED` 表示节点间传输被操作员取消；`PEER_DIRECT_CONNECT_FAILED` 表示源节点连不上目标节点且未经中继，`message` 是连接错误",

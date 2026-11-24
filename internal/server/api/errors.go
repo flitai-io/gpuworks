@@ -8,6 +8,8 @@ import (
 // old clients receive an actionable error string; the UI translates the stable
 // code and params from common.json.
 const (
+	ErrorLocalImageCatalogChanged = "LOCAL_IMAGE_CATALOG_CHANGED"
+
 	// ErrorResponseEncodingFailed: a response's data could not be encoded
 	// as JSON, so the server answered this error instead.
 	ErrorResponseEncodingFailed   = "RESPONSE_ENCODING_FAILED"
@@ -246,7 +248,7 @@ const (
 	ErrorImageRetryUnavailable             = "IMAGE_RETRY_UNAVAILABLE"
 	ErrorImageInspectionUnavailable        = "IMAGE_INSPECTION_UNAVAILABLE"
 	ErrorImageImportTooLarge               = "IMAGE_IMPORT_TOO_LARGE"
-	ErrorImageFrameworkVersionRequired     = "IMAGE_FRAMEWORK_VERSION_REQUIRED"
+	ErrorImageFrameworkVersionRequired     = messages.ErrorImageFrameworkVersionRequired
 	ErrorImageSeriesVersionRequired        = "IMAGE_SERIES_VERSION_REQUIRED"
 	ErrorCatalogPackageDigestInvalid       = "CATALOG_PACKAGE_DIGEST_INVALID"
 	ErrorCatalogPackageRequiredForFiles    = "CATALOG_PACKAGE_REQUIRED_FOR_FILES"

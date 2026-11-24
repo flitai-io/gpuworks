@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"gpuworks.ai/gpuworks/internal/agent/runtime/kube/grpcwire"
+	"gpuworks.ai/gpuworks/internal/agent/runtime/grpcwire"
 )
 
 // DefaultSocket is the kubelet's PodResources socket.

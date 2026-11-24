@@ -1,5 +1,4 @@
-// Package grpcwire speaks just enough gRPC for the kubelet's local APIs (the
-// PodResources lister, device plugin registration and serving): HTTP/2
+// Package grpcwire speaks gRPC for the agent's local kubelet and containerd APIs: HTTP/2
 // without TLS over a Unix socket, length-prefixed messages, the status in
 // the trailers, and the few protobuf wire forms those messages use, encoded
 // and decoded by hand. The agent therefore carries neither a gRPC nor a
@@ -15,10 +14,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 )
 
-// maxMessage bounds a message read from the kubelet.
+// maxMessage bounds a message read from a local gRPC peer.
 const maxMessage = 32 << 20
 
 // Fields walks a protobuf message, handing every length-delimited field to
@@ -171,12 +171,23 @@ func Dial(path string, timeout time.Duration) *Client {
 	return &Client{socket: path, http: &http.Client{Transport: tr, Timeout: timeout}}
 }
 
+// Close releases idle connections after the last call.
+func (c *Client) Close() { c.http.CloseIdleConnections() }
+
 // Unary makes a unary call (method is "/package.Service/Method") and
 // returns the response message.
 func (c *Client) Unary(ctx context.Context, method string, request []byte) ([]byte, error) {
+	return c.UnaryWithHeaders(ctx, method, request, nil)
+}
+
+// UnaryWithHeaders attaches service metadata, such as a containerd namespace.
+func (c *Client) UnaryWithHeaders(ctx context.Context, method string, request []byte, headers http.Header) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://localhost"+method, bytes.NewReader(Frame(request)))
 	if err != nil {
 		return nil, err
+	}
+	if headers != nil {
+		req.Header = headers.Clone()
 	}
 	req.Header.Set("Content-Type", "application/grpc")
 	req.Header.Set("TE", "trailers")
@@ -193,7 +204,11 @@ func (c *Client) Unary(ctx context.Context, method string, request []byte) ([]by
 		return nil, err
 	}
 	if st := status(resp); st != "" && st != "0" {
-		return nil, fmt.Errorf("%s: grpc-status %s: %s", method, st, firstNonEmpty(resp.Trailer.Get("Grpc-Message"), resp.Header.Get("Grpc-Message")))
+		code, err := strconv.Atoi(st)
+		if err != nil {
+			return nil, fmt.Errorf("%s: invalid grpc-status %q", method, st)
+		}
+		return nil, &StatusError{Method: method, Code: code, Message: firstNonEmpty(resp.Trailer.Get("Grpc-Message"), resp.Header.Get("Grpc-Message"))}
 	}
 	if len(body) == 0 {
 		return []byte{}, nil
@@ -206,6 +221,17 @@ func (c *Client) Unary(ctx context.Context, method string, request []byte) ([]by
 		return nil, fmt.Errorf("%s: frame says %d bytes, got %d", method, len(msg), len(body)-5)
 	}
 	return msg, nil
+}
+
+// StatusError is a remote gRPC refusal, distinct from a transport failure.
+type StatusError struct {
+	Method  string
+	Code    int
+	Message string
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("%s: grpc-status %d: %s", e.Method, e.Code, e.Message)
 }
 
 func status(resp *http.Response) string {
@@ -257,9 +283,10 @@ func Fail(w http.ResponseWriter, code int, message string) {
 	Finish(w, code, message)
 }
 
-// Status codes the agent answers with.
+// gRPC status codes used by the local services.
 const (
 	CodeInvalidArgument = 3
+	CodeAlreadyExists   = 6
 	CodeUnimplemented   = 12
 	CodeInternal        = 13
 )

@@ -21,7 +21,7 @@ import (
 	"syscall"
 	"time"
 
-	"gpuworks.ai/gpuworks/internal/agent/runtime/kube/grpcwire"
+	"gpuworks.ai/gpuworks/internal/agent/runtime/grpcwire"
 )
 
 // DefaultDir is the kubelet's device plugin directory.

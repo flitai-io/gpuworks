@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -23,7 +24,7 @@ func (d *Driver) ListLocalImages(ctx context.Context, ns string) (proto.RuntimeI
 	}
 	out, err := exec.CommandContext(ctx, "nerdctl", "-n", d.ns, "namespace", "ls", "-q").Output()
 	if err != nil {
-		return proto.RuntimeImageList{}, err
+		return proto.RuntimeImageList{}, fmt.Errorf("nerdctl namespace ls: %w", err)
 	}
 	spaces := strings.Fields(string(out))
 	if !slices.Contains(spaces, d.ns) {
@@ -38,7 +39,7 @@ func (d *Driver) ListLocalImages(ctx context.Context, ns string) (proto.RuntimeI
 	}
 	out, err = exec.CommandContext(ctx, "nerdctl", "-n", ns, "images", "--no-trunc", "--format", runtime.LocalImageListFormat).Output()
 	if err != nil {
-		return proto.RuntimeImageList{}, err
+		return proto.RuntimeImageList{}, fmt.Errorf("nerdctl images: %w", err)
 	}
 	items := slices.DeleteFunc(runtime.ParseLocalImages(string(out)), func(row proto.RuntimeImage) bool {
 		return strings.HasPrefix(row.Ref, localImportStagePrefix)
@@ -53,7 +54,7 @@ func (d *Driver) ResolveLocalImage(ctx context.Context, p proto.RuntimeImageSele
 	src := NewInNamespace(p.Namespace)
 	image, target, err := src.inspectImage(ctx, p.Ref)
 	if err != nil {
-		return image, err
+		return image, fmt.Errorf("inspect selected image: %w", err)
 	}
 	if target != p.Identity {
 		return image, runtime.ErrLocalImageChanged
@@ -71,14 +72,14 @@ func (d *Driver) ResolveLocalImage(ctx context.Context, p proto.RuntimeImageSele
 	// identity and conflicts after the potentially long transfer.
 	stage := localImportStagePrefix + strings.ToLower(rand.Text())
 	if err := src.TagImage(ctx, p.Ref, stage); err != nil {
-		return image, err
+		return image, fmt.Errorf("pin source image: %w", err)
 	}
 	defer src.removeImportTag(stage)
 	// Some nerdctl versions can inspect a digest but can tag only by name.
 	// Verify the new, pinned name before any bytes go to the destination.
 	_, pinned, err := src.inspectImage(ctx, stage)
 	if err != nil {
-		return image, err
+		return image, fmt.Errorf("inspect pinned source: %w", err)
 	}
 	if pinned != target {
 		return image, runtime.ErrLocalImageChanged
@@ -89,22 +90,12 @@ func (d *Driver) ResolveLocalImage(ctx context.Context, p proto.RuntimeImageSele
 	}
 	staged, err := d.InspectImage(ctx, stage)
 	if err != nil {
-		return image, err
+		return image, fmt.Errorf("inspect staged destination: %w", err)
 	}
 	if staged.ID != image.ID {
 		return image, runtime.ErrLocalImageChanged
 	}
-	if present, err := d.sameLocalImage(ctx, p.Ref, image.ID); err != nil || present {
-		return image, err
-	}
-	if err := d.TagImage(ctx, stage, p.Ref); err != nil {
-		return image, err
-	}
-	final, err := d.InspectImage(ctx, p.Ref)
-	if err == nil && final.ID != image.ID {
-		err = runtime.ErrLocalImageChanged
-	}
-	return final, err
+	return d.publishLocalImage(ctx, stage, p.Ref, image.ID)
 }
 
 func (d *Driver) sameLocalImage(ctx context.Context, ref, id string) (bool, error) {
@@ -113,7 +104,7 @@ func (d *Driver) sameLocalImage(ctx context.Context, ref, id string) (bool, erro
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("inspect destination: %w", err)
 	}
 	if current.ID != id {
 		return false, runtime.ErrLocalImageConflict
@@ -127,6 +118,26 @@ func (d *Driver) removeImportTag(ref string) {
 	if err := d.RemoveImage(ctx, ref); err != nil && !errors.Is(err, runtime.ErrImageNotFound) {
 		slog.Warn("remove temporary local import tag", "namespace", d.ns, "image", ref, "err", err)
 	}
+}
+
+// Save writes the tar to stdout; keep bounded stderr for the agent diagnostic.
+type exportDiagnostic []byte
+
+func (b *exportDiagnostic) Write(p []byte) (int, error) {
+	const limit = 4096
+	*b = append(*b, p[:min(len(p), limit-len(*b))]...)
+	return len(p), nil
+}
+
+func runImageExport(cmd *exec.Cmd) error {
+	var stderr exportDiagnostic
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		exit.Stderr = stderr
+	}
+	return err
 }
 
 // The archive travels through a kernel pipe on the worker, even when nerdctl
@@ -149,5 +160,12 @@ func streamLocalImage(ctx context.Context, source, dest *Driver, ref string) err
 	if loadErr != nil {
 		cancel()
 	}
-	return errors.Join(loadErr, <-exported)
+	saveErr := <-exported
+	if saveErr != nil {
+		saveErr = fmt.Errorf("export source image: %w", saveErr)
+	}
+	if loadErr != nil {
+		loadErr = fmt.Errorf("load destination image: %w", loadErr)
+	}
+	return errors.Join(saveErr, loadErr)
 }
