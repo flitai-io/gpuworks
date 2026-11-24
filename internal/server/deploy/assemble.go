@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -417,59 +416,6 @@ func replaceManualCommandPort(command string, port int) string {
 		return command
 	}
 	return manualCommandPortPattern.ReplaceAllString(command, "${1}"+manualCommandPortFlag+" "+strconv.Itoa(port))
-}
-
-// manualCommandStatesPort reports whether a manual command puts the engine on
-// the launch's API port: it states manualCommandPortFlag for
-// replaceManualCommandPort to rewrite, or references the API port variable.
-// Without either the engine listens on its own default port while the health
-// check and the gateway dial the assigned one.
-func manualCommandStatesPort(command string) bool {
-	return manualCommandPortPattern.MatchString(command) ||
-		slices.Contains(placementeval.References(command), placementeval.VariablePrefix+placementeval.VarAPIPort)
-}
-
-// manualScriptOf is the shell script a manual command states, or "" for any
-// other command. The deployment command editor owns a complete shell command
-// and emits a readable block containing comments, environment assignments and
-// the launch command. JSON arrays retain the catalog argv contract.
-func manualScriptOf(overrides ContainerOverrides) string {
-	candidate := strings.TrimSpace(overrides.CmdDisplay)
-	if CommandMode(overrides.CommandMode) != CommandManual || strings.HasPrefix(candidate, "[") {
-		return ""
-	}
-	return candidate
-}
-
-// ManualCommandPorts lists the port numbers a manual command script states for
-// manualCommandPortFlag, each once: the values replaceManualCommandPort
-// replaces with the assigned port. A value the shell expands
-// (${GPUWORKS_API_PORT}, $PORT) is no number and is left out, as is every
-// command that is not a manual script.
-func ManualCommandPorts(overrides ContainerOverrides) []int {
-	var ports []int
-	for _, match := range manualCommandPortPattern.FindAllStringSubmatch(manualScriptOf(overrides), -1) {
-		port, err := strconv.Atoi(strings.Trim(match[2], `"'`))
-		if err == nil && port > 0 && !slices.Contains(ports, port) {
-			ports = append(ports, port)
-		}
-	}
-	return ports
-}
-
-// ManualCommandPortTakenWarning says a port a manual command states is already
-// taken on node; the launch runs on the port the platform assigns instead.
-func ManualCommandPortTakenWarning(port int, node string) messages.Warning {
-	params := manualCommandPortFix()
-	params["port"], params["node"] = port, node
-	return messages.NewWarning(messages.WarningManualCommandPortTaken, params)
-}
-
-// manualCommandPortFix is what a manual command port warning tells the
-// deployer to write: the port flag with the API port variable, which every
-// launch expands to its own assigned port.
-func manualCommandPortFix() map[string]any {
-	return map[string]any{"flag": manualCommandPortFlag, "variable": variableReference(placementeval.VarAPIPort)}
 }
 
 // replaceManualServedName applies a configured engine alias to a manual launch.

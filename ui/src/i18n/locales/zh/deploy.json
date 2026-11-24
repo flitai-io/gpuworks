@@ -133,7 +133,7 @@
     "ENGRAM_CONFIG_UNCERTAIN": "无法解析 Engram 配置（{{flag}}）；如果它使用共享内存，需要约 {{shm_gib}} GiB /dev/shm 和不受限的锁定内存，而 {{runtime}} 直接沿用宿主机设置，请检查配置和宿主机。",
     "ENGRAM_MANUAL_UNCHECKED": "手写命令中出现了 Engram（{{flag}}），但写法过于动态无法解析，平台没有据此推导共享内存和锁定内存设置。请确认共享内存与 memlock 足够，或改用引擎模式。",
     "MANUAL_COMMAND_PORT_UNSTATED": "手写命令没有设置 API 端口，引擎会监听自己的默认端口，与平台分配的端口不一致时部署会一直无法就绪。请在引擎命令中加上 {{flag}} {{variable}}。",
-    "MANUAL_COMMAND_PORT_TAKEN": "端口 {{port}} 在节点 {{node}} 上已被占用，启动时会换成平台分配的空闲端口。可改写为 {{flag}} {{variable}}，由平台填入分配的端口。",
+    "MANUAL_COMMAND_PORT_TAKEN": "端口 {{port}} 在节点 {{node}} 上已被占用。命令里写的端口总会换成平台分配的端口，可直接写 {{flag}} {{variable}}。",
     "ASCEND_SLEEP_EXPANDABLE_SEGMENTS_DISABLED": "昇腾上休眠不能与 expandable segments 共存，已把 {{variable}} 改为 {{value}}；如显存不足，请调低 gpu_memory_utilization 或 max_model_len 或关闭“可休眠”。",
     "KUBE_ENGINE_PORTS_OUTSIDE": "有运行中的实例占用的端口在新的引擎端口段 {{range}} 之外：{{instances}}。它们保留原端口、继续运行；只有之后启动的实例才使用新范围。",
     "PD_UCX_NETLINK_HANG": "节点 {{names}} 的内核会让 UCX 卡住，而 PD 模式 {{mode}} 经以太网用 NIXL 传 KV，引擎很可能一直起不来。部署仍允许创建；请先在该节点上关闭整机 IPv6，修复命令见下方。",
