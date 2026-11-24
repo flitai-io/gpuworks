@@ -871,3 +871,110 @@ items:
       ggml-org/llama.cpp PR #32694），b12611 修正循环层共享 slot 时漏掉逐专家 scale
       （#32704）；Inkling 2 Mini 的 Mac 模板用这档。
       构建：build/host-envs/build.sh llama.cpp b12631 r1。
+
+# Published SWR releases outside the build matrix. Inventory tags are manual selections.
+published:
+  - id: cann9.1-910b-vllm-omni0.32.0
+    tag: cann9.1-910b-vllm-omni0.32.0-r2-linux-amd64
+    platforms: [linux/amd64]
+    note: Review deployment compatibility before enabling.
+  - id: cann9.1-a3-sglang0.5.23
+    tag: cann9.1-a3-sglang0.5.23-r1-amd64
+    platforms: [linux/amd64]
+    note: Review deployment compatibility before enabling.
+  - id: cann9.1-a3-sglang0.5.23
+    tag: cann9.1-a3-sglang0.5.23-r1-arm64
+    platforms: [linux/arm64]
+    note: Review deployment compatibility before enabling.
+  - id: cann9.1-a3-vllm-omni0.32.0
+    tag: cann9.1-a3-vllm-omni0.32.0-r2-linux-amd64
+    platforms: [linux/amd64]
+    note: Review deployment compatibility before enabling.
+  - id: cann9.2-910b-vllm0.30.0
+    tag: cann9.2-910b-vllm0.30.0-r1-amd64
+    platforms: [linux/amd64]
+    note: Review deployment compatibility before enabling.
+  - id: cann9.2-910b-vllm0.30.0
+    tag: cann9.2-910b-vllm0.30.0-r1-arm64
+    platforms: [linux/arm64]
+    note: Review deployment compatibility before enabling.
+  - id: cann9.2-910b-vllm0.32.0rc1
+    tag: cann9.2-910b-vllm0.32.0rc1-r1-amd64
+    platforms: [linux/amd64]
+    engine_version: 0.32.0
+    note: vLLM 0.32.0 with vLLM-Ascend 0.32.0rc1 and CANN 9.2.1. NPU inference pending.
+  - id: cann9.2-910b-vllm0.32.0rc1
+    tag: cann9.2-910b-vllm0.32.0rc1-r1-arm64
+    platforms: [linux/arm64]
+    engine_version: 0.32.0
+    note: vLLM 0.32.0 with vLLM-Ascend 0.32.0rc1 and CANN 9.2.1. NPU inference pending.
+  - id: cann9.2-a3-vllm0.30.0
+    tag: cann9.2-a3-vllm0.30.0-r1-amd64
+    platforms: [linux/amd64]
+    note: Review deployment compatibility before enabling.
+  - id: cann9.2-a3-vllm0.30.0
+    tag: cann9.2-a3-vllm0.30.0-r1-arm64
+    platforms: [linux/arm64]
+    note: Review deployment compatibility before enabling.
+  - id: cann9.2-a3-vllm0.32.0rc1
+    tag: cann9.2-a3-vllm0.32.0rc1-r1-amd64
+    platforms: [linux/amd64]
+    engine_version: 0.32.0
+    note: vLLM 0.32.0 with vLLM-Ascend 0.32.0rc1 and CANN 9.2.1. NPU inference pending.
+  - id: cann9.2-a3-vllm0.32.0rc1
+    tag: cann9.2-a3-vllm0.32.0rc1-r1-arm64
+    platforms: [linux/arm64]
+    engine_version: 0.32.0
+    note: vLLM 0.32.0 with vLLM-Ascend 0.32.0rc1 and CANN 9.2.1. NPU inference pending.
+  - id: cuda12.8-v100-vllm1cat1.5.3
+    tag: cuda12.8-v100-vllm1cat1.5.3-r1-linux-amd64
+    platforms: [linux/amd64]
+    note: NVIDIA Volta SM70 only. Select through a V100-specific template.
+  - id: cuda13.0-sglang0.5.23
+    tag: cuda13.0-sglang0.5.23-r2-amd64
+    platforms: [linux/amd64]
+    note: Review deployment compatibility before enabling.
+  - id: cuda13.0-sglang0.5.23
+    tag: cuda13.0-sglang0.5.23-r2-arm64
+    platforms: [linux/arm64]
+    note: Review deployment compatibility before enabling.
+  - id: cuda13.0-strata0.1.59
+    tag: cuda13.0-strata0.1.59-deepseek41-amd64-r5
+    platforms: [linux/amd64]
+    note: DeepSeek 4.1 GGUF. Select through a Strata Serve Adapter template.
+  - id: cuda13.0-vllm-omni0.32.0
+    tag: cuda13.0-vllm-omni0.32.0-r2-linux-amd64
+    platforms: [linux/amd64]
+    note: Review deployment compatibility before enabling.
+  - id: cuda13.0-vllm-omni0.32.0
+    tag: cuda13.0-vllm-omni0.32.0-r2-linux-arm64
+    platforms: [linux/arm64]
+    note: Review deployment compatibility before enabling.
+  - id: cuda13.0-vllm0.34.0
+    tag: cuda13.0-vllm0.34.0-r1-amd64
+    platforms: [linux/amd64]
+    note: Review deployment compatibility before enabling.
+  - id: cuda13.0-vllm0.34.0
+    tag: cuda13.0-vllm0.34.0-r1-arm64
+    platforms: [linux/arm64]
+    note: Review deployment compatibility before enabling.
+  - id: hggc13.0-vllm0.23.0
+    tag: hggc13.0-vllm0.23.0-legacy-clean-r1-linux-amd64
+    platforms: [linux/amd64]
+    note: Review deployment compatibility before enabling.
+  - id: rocm10.0-sglang0.5.23
+    tag: rocm10.0-sglang0.5.23-mi30x-r3-linux-amd64
+    platforms: [linux/amd64]
+    note: AMD MI30x (gfx942) only. Includes SGLang Diffusion.
+  - id: rocm10.0-sglang0.5.23
+    tag: rocm10.0-sglang0.5.23-mi35x-r3-linux-amd64
+    platforms: [linux/amd64]
+    note: AMD MI35x (gfx950) only. Includes SGLang Diffusion.
+  - id: rocm10.0-vllm0.33.0
+    tag: rocm10.0-vllm0.33.0-r2-linux-amd64
+    platforms: [linux/amd64]
+    note: Review deployment compatibility before enabling.
+  - id: rocm7.2-vllm0.33.0
+    tag: rocm7.2-vllm0.33.0-r2-linux-amd64
+    platforms: [linux/amd64]
+    note: Review deployment compatibility before enabling.

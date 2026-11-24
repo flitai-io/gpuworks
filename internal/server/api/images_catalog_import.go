@@ -61,7 +61,7 @@ type imageImportPayload struct {
 }
 
 // importImages accepts two bodies. A manifest (schema_version 2 or 3) is the
-// system catalog uploaded by hand, applied exactly like "check for updates".
+// system catalog uploaded by hand. A conflicting upload is rejected in full.
 // A body without schema_version is the community/custom form the image page
 // submits. Any other schema_version is an old catalog format and is refused.
 func (a *apiHandlers) importImages(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +78,7 @@ func (a *apiHandlers) importImages(w http.ResponseWriter, r *http.Request) {
 		SchemaVersion *int `json:"schema_version"`
 	}
 	if json.Unmarshal(body, &probe) == nil && probe.SchemaVersion != nil {
-		a.applyOfficialManifest(w, body)
+		a.applyOfficialManifest(w, body, false)
 		return
 	}
 	var req imageImportPayload
@@ -109,10 +109,9 @@ func (a *apiHandlers) importImages(w http.ResponseWriter, r *http.Request) {
 const imageImportMaxBytes = 8 << 20
 
 // applyOfficialManifest imports a system catalog manifest and writes the
-// import counts. A conflict with a community or custom row fails the whole
-// import before anything is written.
-func (a *apiHandlers) applyOfficialManifest(w http.ResponseWriter, body []byte) {
-	result, err := imagecatalog.ImportManifest(a.d.Store, body)
+// import counts. Signed channel updates skip conflicting local entries.
+func (a *apiHandlers) applyOfficialManifest(w http.ResponseWriter, body []byte, skipConflicts bool) {
+	result, err := imagecatalog.ImportManifest(a.d.Store, body, skipConflicts)
 	switch {
 	case errors.Is(err, imagecatalog.ErrManifestInvalid):
 		writeProductError(w, http.StatusBadRequest, ErrorImageManifestInvalid, err.Error(), map[string]any{"detail": err.Error()})
@@ -124,9 +123,10 @@ func (a *apiHandlers) applyOfficialManifest(w http.ResponseWriter, body []byte) 
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	// The import is committed; the version is only what the update view shows
-	// as current, so failing to note it does not fail the import.
-	_ = a.d.Store.RecordImageCatalogImport(result.CatalogVersion)
+	if err := a.d.Store.RecordImageCatalogImport(result.CatalogVersion, result.SkippedNames()); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
 	series := make([]dto.ImageSeries, 0)
 	if rows, listErr := a.d.Store.ListImageSeries(); listErr == nil {
 		for i := range rows {
@@ -231,7 +231,7 @@ func (a *apiHandlers) syncImagesManifest(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	a.applyOfficialManifest(w, body)
+	a.applyOfficialManifest(w, body, true)
 }
 
 func (a *apiHandlers) upsertImageInputs(inputs []imageInput) ([]dto.Image, error) {

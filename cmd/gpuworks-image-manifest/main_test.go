@@ -76,12 +76,12 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 			seriesOf[version.Name] = series
 		}
 	}
-	wantSeries := "MLX Audio · Metal,MLX-VLM · Metal,SGLang · CANN,SGLang · CUDA,SGLang · DTK,SGLang · HGGC,llama.cpp · Metal,vLLM Omni · CANN,vLLM Omni · CUDA,vLLM · CANN,vLLM · CUDA,vLLM · DTK,vLLM · HGGC,vLLM · Metal,vLLM · ROCm,vLLM · XRE"
+	wantSeries := "MLX Audio · Metal,MLX-VLM · Metal,SGLang · CANN,SGLang · CUDA,SGLang · DTK,SGLang · HGGC,SGLang · ROCm,Strata · CUDA,llama.cpp · Metal,vLLM Omni · CANN,vLLM Omni · CUDA,vLLM · CANN,vLLM · CUDA,vLLM · DTK,vLLM · HGGC,vLLM · Metal,vLLM · ROCm,vLLM · XRE"
 	if strings.Join(names, ",") != wantSeries {
 		t.Fatalf("series = %v", names)
 	}
-	if len(versions) != 38 {
-		t.Fatalf("versions = %d, want 38", len(versions))
+	if len(versions) != 63 {
+		t.Fatalf("versions = %d, want 63", len(versions))
 	}
 	// The Apple silicon environment package: framework metal, its version the
 	// minimum macOS, its arch the CPU's.
@@ -131,7 +131,7 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 		t.Fatalf("post-release engine version = %+v", sglang)
 	}
 	for name, version := range versions {
-		if version.RollingTag || version.Deprecated || version.BlobSHA256 != "" || version.SizeBytes != 0 {
+		if (version.RollingTag && !strings.HasPrefix(version.ImageRef, swrRunner+":")) || version.Deprecated || version.BlobSHA256 != "" || version.SizeBytes != 0 {
 			t.Fatalf("version %s carries a field the generator must not produce: %+v", name, version)
 		}
 	}
@@ -405,7 +405,20 @@ func TestMatrixDeclaresTheVoltaImageUnlisted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(seed, []byte("v100")) {
-		t.Fatal("the seed lists the V100 image")
+	if bytes.Contains(seed, []byte("cuda12.8-v100-vllm1cat1.5.1-r1")) {
+		t.Fatal("the seed lists the unlisted V100 1.5.1 image")
+	}
+}
+
+func TestGenerateRejectsInventoryWithoutBuildItems(t *testing.T) {
+	const data = `published:
+  - id: cuda13.0-vllm0.34.0
+    tag: cuda13.0-vllm0.34.0-r1-amd64
+    platforms: [linux/amd64]
+`
+	for _, prefix := range []string{"", "items: []\n", "items:\n  - id: cuda13.0-vllm0.34.0\n    revision: r1\n    platforms: [linux/amd64]\n    catalog: false\n"} {
+		if out, err := generate([]byte(prefix+data), options{}); err == nil || len(out) != 0 {
+			t.Fatalf("inventory alone generated a replacement catalog (%d bytes): %v", len(out), err)
+		}
 	}
 }

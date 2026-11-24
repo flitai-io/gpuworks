@@ -19,7 +19,8 @@ type OfficialCatalogState struct {
 	// ImageCatalogVersion is the catalog_version of the system image catalog
 	// last imported from any entry point: the embedded seed, the channel or an
 	// upload. Nothing in the image rows records it.
-	ImageCatalogVersion string `json:"image_catalog_version,omitempty"`
+	ImageCatalogVersion string   `json:"image_catalog_version,omitempty"`
+	ImageCatalogSkipped []string `json:"image_catalog_skipped,omitempty"`
 }
 
 // officialCatalogsMu serializes the read-modify-write of the state row.
@@ -62,9 +63,10 @@ func (s *Store) updateOfficialCatalogState(change func(*OfficialCatalogState)) e
 
 // RecordImageCatalogImport notes the catalog_version of an image catalog that
 // was just imported.
-func (s *Store) RecordImageCatalogImport(catalogVersion string) error {
+func (s *Store) RecordImageCatalogImport(catalogVersion string, skipped []string) error {
 	return s.updateOfficialCatalogState(func(state *OfficialCatalogState) {
 		state.ImageCatalogVersion = strings.TrimSpace(catalogVersion)
+		state.ImageCatalogSkipped = skipped
 	})
 }
 

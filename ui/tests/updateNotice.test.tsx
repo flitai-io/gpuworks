@@ -37,7 +37,7 @@ after(() => closeChannels());
 
 function status(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
   return {
-    channel: "nightly", channel_editable: true, checked_at: "2026-10-11T02:00:00Z", available: true, sources: [],
+    channel: "nightly", channel_editable: true, auto_check: true, checked_at: "2026-10-11T02:00:00Z", available: true, sources: [],
     server: { current: "a", latest: "a", update_available: false, installable: true, self_upgrade: true },
     image_catalog: { current: "x", latest: "x", update_available: false, compatible: true },
     template_catalog: { current: "y", latest: "y", update_available: false, compatible: true },
@@ -96,7 +96,7 @@ test("a different channel offers a manual version choice without triggering a se
     current_build: { version: "v26.11.2", kind: "stable", build_channel: "release" } } });
   assert.equal(noticeModule.serverUpdateState(value), "differentChannelVersion");
   assert.equal(noticeModule.hasUpdate(value), false);
-  value.image_catalog.update_available = true;
+  value.image_catalog = { ...value.image_catalog, latest: "z", update_available: true };
   assert.equal(noticeModule.hasUpdate(value), true);
 });
 
@@ -113,4 +113,12 @@ test("the notice follows a check made on the settings page", async () => {
   await screen.findByRole("button", { name: new RegExp(label) });
   act(() => noticeModule.publishUpdateStatus(status()));
   await waitFor(() => assert.equal(screen.queryByRole("button", { name: new RegExp(label) }), null));
+});
+
+test("a same-version catalog conflict does not show the header update notice", async () => {
+  const value = status({ image_catalog: { current: "x", latest: "x", update_available: false, compatible: true, skipped: ["swr.example/runner:tag"] } });
+  apiModule.api.updates = async () => value;
+  renderNotice();
+  await waitFor(() => assert.ok(window.localStorage.getItem("gpuworks.updates.checked")));
+  assert.equal(screen.queryByRole("button", { name: new RegExp(label) }) === null, true);
 });

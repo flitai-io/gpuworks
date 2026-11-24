@@ -8,6 +8,7 @@ import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
 const closeChannels = trackMessageChannels();
 const { i18n, locale } = await createI18n(["settings"]);
 const { cleanup, render, screen, waitFor, within } = await import("@testing-library/react");
+const { ConfigProvider, Modal } = await import("antd");
 const userEvent = (await import("@testing-library/user-event")).default;
 const { api } = await import("../src/api.ts");
 const { default: DataRetentionCard, shortened } = await import("../src/pages/settings/DataRetentionCard.tsx");
@@ -58,7 +59,7 @@ test("shortened lists only the values a draft lowers", () => {
 test("a load error is shown instead of the form", async () => {
   setup(new Error("server unreachable"));
   assert.ok(await screen.findByText(/server unreachable/));
-  assert.equal(screen.queryByRole("spinbutton"), null);
+  assert.equal(screen.queryByRole("spinbutton") === null, true);
 });
 
 test("what each store holds is shown beside its retention, with the bounds the server sent", async () => {
@@ -70,7 +71,7 @@ test("what each store holds is shown beside its retention, with the bounds the s
   // The scheduling activity is always counted: its rows show, with no switch.
   assert.ok(screen.getByText(d.alwaysOn.scheduling));
   assert.ok(screen.getByText(i18n.t("settings:dataRetention.rows", { hourly: (4321).toLocaleString(), daily: "7" }), { exact: false }));
-  assert.equal(screen.queryByRole("switch", { name: d.alwaysOn.scheduling }), null);
+  assert.equal(screen.queryByRole("switch", { name: d.alwaysOn.scheduling }) === null, true);
   assert.equal((screen.getByLabelText(d.fields.usage_daily_days) as HTMLInputElement).value, "400");
   // Nothing changed: nothing to save.
   assert.equal((screen.getByRole("button", { name: locale.settings.common.save }) as HTMLButtonElement).disabled, true);
@@ -98,7 +99,16 @@ test("an emptied value keeps save disabled", async () => {
   assert.equal(puts.length, 0);
 });
 
-test("shortening asks first, names what shrinks, and cancelling saves nothing", async () => {
+test("shortening asks first, names what shrinks, and cancelling saves nothing", async (t) => {
+  // Static Ant Design dialogs render in a separate root. Disable motion there
+  // because jsdom does not finish the CSS animation.
+  ConfigProvider.config({
+    holderRender: (children) => <ConfigProvider theme={{ token: { motion: false } }}>{children}</ConfigProvider>,
+  });
+  t.after(() => {
+    Modal.destroyAll();
+    ConfigProvider.config({ holderRender: undefined });
+  });
   const { puts, user } = setup();
   const input = await screen.findByLabelText(d.fields.logs_hours);
   await user.clear(input);
@@ -107,12 +117,12 @@ test("shortening asks first, names what shrinks, and cancelling saves nothing", 
   const dialog = await screen.findByRole("dialog");
   assert.ok(within(dialog).getAllByText(d.shrinkTitle).length > 0);
   assert.ok(within(dialog).getByText(new RegExp(d.fields.logs_hours)));
-  await user.click(within(dialog).getAllByRole("button", { name: locale.settings.common.cancel }).at(-1)!);
+  await user.click(within(dialog).getByRole("button", { name: locale.settings.common.cancel }));
+  await waitFor(() => assert.equal(dialog.isConnected, false));
   assert.equal(puts.length, 0);
   await user.click(screen.getByRole("button", { name: locale.settings.common.save }));
-  // antd keeps a closing dialog in the page through its exit animation.
-  await waitFor(() => assert.ok(screen.getAllByRole("button", { name: d.shrinkOk }).length > 0));
-  await user.click(screen.getAllByRole("button", { name: d.shrinkOk }).at(-1)!);
+  const reopened = await screen.findByRole("dialog");
+  await user.click(within(reopened).getByRole("button", { name: d.shrinkOk }));
   await waitFor(() => assert.equal(puts.length, 1));
   assert.equal(puts[0].logs_hours, 48);
 });

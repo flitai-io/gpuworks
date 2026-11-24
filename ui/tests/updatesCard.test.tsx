@@ -21,11 +21,12 @@ const closeChannels = trackMessageChannels();
 
 const settingsLocale = JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/settings.json", import.meta.url), "utf8"));
 const commonLocale = JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/common.json", import.meta.url), "utf8"));
+const imagesLocale = JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/images.json", import.meta.url), "utf8"));
 const i18n = createInstance();
 await i18n.use(initReactI18next).init({
   lng: "en",
   fallbackLng: "en",
-  resources: { en: { nodes: JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/nodes.json", import.meta.url), "utf8")), settings: settingsLocale, common: commonLocale } },
+  resources: { en: { nodes: JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/nodes.json", import.meta.url), "utf8")), settings: settingsLocale, common: commonLocale, images: imagesLocale } },
   defaultNS: "settings",
   interpolation: { escapeValue: false },
 });
@@ -838,4 +839,74 @@ test("logging in again cannot restore the previous session's upgrade", async () 
     assert.equal(requests, 0);
     assert.ok(!screen.queryByRole("link", { name: u.viewNodes }));
   } finally { dom.window.localStorage.removeItem("gpuworks.session"); s.restore(); }
+});
+
+test("same-version conflicts remain visible and can be retried without enabling Update", async () => {
+  const complete = statusFixture();
+  const ref = "swr.example/runner:tag";
+  const s = stub([statusFixture({ image_catalog: { ...complete.image_catalog, skipped: [ref] } }), complete]);
+  apiModule.api.syncImages = async () => {
+    s.calls.push("syncImages");
+    return { catalog_version: complete.image_catalog.current, created: 1, updated: 0, deleted: 0, deprecated: 0, skipped: [], series: [] };
+  };
+  try {
+    renderCard();
+    const retry = await screen.findByRole("button", { name: u.retryImageCatalog });
+    const notice = screen.getByText(imagesLocale.page.catalog.conflicts.replace("{{n}}", "1")).closest<HTMLElement>("[role=status]");
+    assert.ok(notice);
+    const conflicts = within(notice);
+    await userEvent.click(conflicts.getByText(imagesLocale.page.catalog.conflictNames));
+    assert.ok(conflicts.getByText(ref));
+    const images = within(row(u.images));
+    assert.ok(images.getByText(u.imagesPartiallyApplied.replace("{{version}}", complete.image_catalog.current)));
+    assert.equal((images.getByRole("button", { name: u.apply }) as HTMLButtonElement).disabled, true);
+    retry.focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => assert.equal(screen.queryByRole("button", { name: u.retryImageCatalog }) === null, true));
+    assert.ok(images.getByText(u.upToDate));
+    assert.deepEqual(s.calls, ["syncImages"]);
+  } finally { s.restore(); }
+});
+
+test("offline catalog conflicts explain how to retry using a manifest", async () => {
+  const ref = "swr.example/runner:tag";
+  const imageCatalog = statusFixture().image_catalog;
+  const offline = statusFixture({
+    available: false, source: undefined, unavailable_reason: "unreachable",
+    sources: [{ url: "https://dl.gpuworks.ai", ok: false, latency_ms: 0, error: "i/o timeout" }],
+    image_catalog: { ...imageCatalog, latest: undefined, skipped: [ref] },
+  });
+  const s = stub([offline, { ...offline, image_catalog: { ...offline.image_catalog, skipped: [] } }]);
+  try {
+    const { container } = renderCard();
+    await screen.findByText(u.imageConflictsSourceUnavailable);
+    const notice = screen.getByText(imagesLocale.page.catalog.conflicts.replace("{{n}}", "1")).closest<HTMLElement>("[role=status]");
+    assert.ok(notice);
+    const conflicts = within(notice);
+    await userEvent.click(conflicts.getByText(imagesLocale.page.catalog.conflictNames));
+    assert.ok(conflicts.getByText(ref));
+    assert.equal(screen.queryByRole("button", { name: u.retryImageCatalog }) === null, true);
+    const upload = container.querySelector<HTMLInputElement>("input[accept='.json,application/json']");
+    assert.ok(upload);
+    await userEvent.upload(upload, new File([JSON.stringify({ schema_version: 3, catalog_version: imageCatalog.current })], "manifest.json", { type: "application/json" }));
+    await waitFor(() => assert.equal(screen.queryByText(u.imageConflictsSourceUnavailable) === null, true));
+    assert.deepEqual(s.calls, ["uploadImages:manifest.json"]);
+  } finally { s.restore(); }
+});
+
+test("a newer catalog remains available when the installed version has conflicts", async () => {
+  const current = statusFixture().image_catalog;
+  const ref = "swr.example/runner:tag";
+  const s = stub([statusFixture({
+    image_catalog: { ...current, latest: "2026-10-12.11111111", update_available: true, skipped: [ref] },
+  })]);
+  try {
+    renderCard();
+    await screen.findByText(u.imageConflictsOtherVersion);
+    const images = within(row(u.images));
+    assert.ok(images.getByText(u.available));
+    assert.equal((images.getByRole("button", { name: u.apply }) as HTMLButtonElement).disabled, false);
+    assert.equal(screen.queryByRole("button", { name: u.retryImageCatalog }) === null, true);
+    assert.ok(screen.getByText(ref));
+  } finally { s.restore(); }
 });

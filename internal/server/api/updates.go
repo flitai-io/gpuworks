@@ -115,7 +115,7 @@ func (a *apiHandlers) getUpdates(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	status.ImageCatalog = dto.CatalogUpdate{Current: state.ImageCatalogVersion, Compatible: true}
+	status.ImageCatalog = dto.CatalogUpdate{Current: state.ImageCatalogVersion, Compatible: true, Skipped: state.ImageCatalogSkipped}
 	currentDigest, err := a.d.Store.UpstreamInferencePackageDigest()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)

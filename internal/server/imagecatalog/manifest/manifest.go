@@ -13,6 +13,10 @@ import (
 	"strings"
 )
 
+// SWRRunnerRepository is the published runner inventory. Promoted matrix items
+// use the portable runner reference with this registry as a mirror.
+const SWRRunnerRepository = "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner"
+
 type Manifest struct {
 	SchemaVersion  int              `json:"schema_version"`
 	CatalogVersion string           `json:"catalog_version"`

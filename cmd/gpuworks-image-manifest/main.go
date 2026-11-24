@@ -33,12 +33,12 @@ const DefaultRegistry = "gpuworks/gpuworks-runner"
 // releases b<build> and is written llama.cpp-b<build>.
 var tagPattern = regexp.MustCompile(`^(?P<backend>cuda|cann|dtk|hggc|metal|rocm|xre)(?P<fwver>[0-9]+(\.[0-9]+)*)(-(?P<model>910b|a3|310p|950|v100|gfx1151))?-(?:(?P<engine>` +
 	regexp.QuoteMeta(engines.VLLMOmni) + `|` + regexp.QuoteMeta(engines.VLLM) + `|` + regexp.QuoteMeta(engines.SGLang) +
-	`|mlx-vlm|mlx-audio|systemone)(?P<engver>[0-9][0-9A-Za-z.]*)|(?P<llamacpp>llama\.cpp)-(?P<llamabuild>b[0-9]+))$`)
+	`|mlx-vlm|mlx-audio|systemone|strata)(?P<engver>[0-9][0-9A-Za-z.]*)|(?P<llamacpp>llama\.cpp)-(?P<llamabuild>b[0-9]+))$`)
 
 // callableServers are the runner tags whose engine is a server the inference
 // templates start through the callable engine (with the gpuworks adapter in
 // the package), named the way their projects write them.
-var callableServers = map[string]string{"mlx-vlm": "MLX-VLM", "mlx-audio": "MLX Audio", "llama.cpp": "llama.cpp", "systemone": "System One"}
+var callableServers = map[string]string{"mlx-vlm": "MLX-VLM", "mlx-audio": "MLX Audio", "llama.cpp": "llama.cpp", "systemone": "System One", "strata": "Strata"}
 
 // catalogEngine is the image catalog's engine for a tag's engine.
 func catalogEngine(tagEngine string) string {
@@ -87,7 +87,8 @@ type matrixFile struct {
 	Defaults struct {
 		Platforms []string `yaml:"platforms"`
 	} `yaml:"defaults"`
-	Items []matrixItem `yaml:"items"`
+	Items     []matrixItem    `yaml:"items"`
+	Published []publishedItem `yaml:"published"`
 }
 
 type matrixItem struct {
@@ -132,22 +133,13 @@ func generate(data []byte, opt options) ([]byte, error) {
 	if err := yaml.Unmarshal(data, &matrix); err != nil {
 		return nil, fmt.Errorf("parse matrix: %w", err)
 	}
-	if len(matrix.Items) == 0 {
-		return nil, fmt.Errorf("matrix has no items")
-	}
 	registry := strings.TrimSuffix(strings.TrimSpace(opt.Registry), "/")
 	if registry == "" {
 		registry = DefaultRegistry
 	}
 	seriesByName := map[string]*manifest.ManifestSeries{}
-	for _, item := range matrix.Items {
-		version, tag, err := versionFromItem(item, matrix.Defaults.Platforms, registry)
-		if err != nil {
-			return nil, err
-		}
-		if item.Catalog != nil && !*item.Catalog {
-			continue
-		}
+	listedTags := map[string]bool{}
+	addVersion := func(version manifest.ManifestVersion, tag parsedTag) {
 		name := seriesName(tag.Engine, tag.Backend)
 		series := seriesByName[name]
 		if series == nil {
@@ -155,6 +147,31 @@ func generate(data []byte, opt options) ([]byte, error) {
 			seriesByName[name] = series
 		}
 		series.Versions = append(series.Versions, version)
+	}
+	for _, item := range matrix.Items {
+		version, tag, err := versionFromItem(item, matrix.Defaults.Platforms, registry)
+		if err != nil {
+			return nil, err
+		}
+		if item.Catalog == nil || *item.Catalog {
+			addVersion(version, tag)
+			listedTags[version.Name] = true
+		}
+	}
+	// The inventory supplements a complete build catalog. Import reconciles missing rows.
+	if len(listedTags) == 0 {
+		return nil, fmt.Errorf("matrix has no catalogued build items")
+	}
+	for _, item := range matrix.Published {
+		if listedTags[item.Tag] {
+			return nil, fmt.Errorf("published tag %q is already listed", item.Tag)
+		}
+		listedTags[item.Tag] = true
+		version, tag, err := item.version()
+		if err != nil {
+			return nil, err
+		}
+		addVersion(version, tag)
 	}
 	series := make([]manifest.ManifestSeries, 0, len(seriesByName))
 	for _, value := range seriesByName {
@@ -241,7 +258,7 @@ func versionFromItem(item matrixItem, defaultPlatforms []string, registry string
 // that can reach it says so with a rule of its own.
 var publishedRegistries = []string{
 	"quay.io/gpuworks/gpuworks-runner",
-	"swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner",
+	swrRunner,
 }
 
 // mirrorSources lists the public copies of a runner tag.

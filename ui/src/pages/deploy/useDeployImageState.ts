@@ -7,6 +7,10 @@ import type {
   Node,
 } from "../../api";
 
+export function deploymentEngineForImage(engine?: string) {
+  return engine === "vllm-omni" ? "vllm" : engine;
+}
+
 // useDeployImageState answers the runtime-image facts the page renders: the
 // evaluated image resolution text, the chosen/evaluated image pair, and the
 // inference series list for the selected engine. Every value comes from a
@@ -76,8 +80,7 @@ export default function useDeployImageState({
         (series) =>
           series.purpose === "inference" &&
           series.enabled &&
-          (series.engine === selectedEngine ||
-            (selectedEngine === "vllm" && series.engine === "vllm-omni")),
+          deploymentEngineForImage(series.engine) === selectedEngine,
       ),
     [imageSeries, selectedEngine],
   );

@@ -11,6 +11,7 @@ export interface UpdateSourceStatus {
 
 /** An official catalog in force next to the published one. */
 export interface CatalogUpdate {
+  skipped?: string[];
   current: string;
   latest?: string;
   update_available: boolean;

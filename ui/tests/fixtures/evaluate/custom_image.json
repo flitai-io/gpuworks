@@ -358,6 +358,11 @@
           "compatible": true
         },
         {
+          "image": "gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.30.0-r4",
+          "reason": "catalog_match",
+          "compatible": true
+        },
+        {
           "image": "private.example/vllm:custom",
           "reason": "selected_image",
           "compatible": true

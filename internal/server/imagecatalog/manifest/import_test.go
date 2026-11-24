@@ -104,7 +104,7 @@ func TestImportOfficialSkipConflicts(t *testing.T) {
 	if result.Created != 2 || result.Updated != 0 {
 		t.Fatalf("result = %+v", result)
 	}
-	want := map[string]struct{}{"acme/b:v1": {}, "acme/c:v1": {}}
+	want := map[string]struct{}{"acme/a:v1": {}, "acme/b:v1": {}, "acme/c:v1": {}}
 	if !reflect.DeepEqual(sink.reconciled, want) {
 		t.Fatalf("seen = %v, want %v", sink.reconciled, want)
 	}

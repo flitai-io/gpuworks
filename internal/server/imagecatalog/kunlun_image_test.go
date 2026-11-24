@@ -17,7 +17,7 @@ func TestSyntheticXREManifestCandidateSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	if _, err := imagecatalog.ImportManifest(st, data); err != nil {
+	if _, err := imagecatalog.ImportManifest(st, data, false); err != nil {
 		t.Fatal(err)
 	}
 	row, err := st.ImageByRef("registry.example/synthetic:tested")

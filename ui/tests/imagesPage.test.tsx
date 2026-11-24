@@ -149,6 +149,16 @@ test("check for updates posts no body and reports the four counts", async () => 
   await waitFor(() => assert.ok(calls.filter((call) => call.path === "/api/v1/images").length > listReads, "the list is read again"));
 });
 
+test("catalog update shows the preserved custom reference", async () => {
+  const name = "swr.example/runner:manual";
+  const { user } = renderPage((call) => call.path === "/api/v1/images/sync"
+    ? json(200, { ...SYNC_RESULT, skipped: [{ kind: "image", name, reason: "conflict" }] }) : undefined);
+  await screen.findByRole("button", { name: systemSeries.name });
+  await user.click(screen.getByRole("button", { name: "检查更新" }));
+  await user.click(await screen.findByText(z.page.catalog.conflictNames));
+  assert.equal((await screen.findByText(name)).textContent, name);
+});
+
 test("an unreachable distribution channel shows the localized reason", async () => {
   const detail = "no distribution source served a valid nightly index (https://dl.gpuworks.ai: GET https://dl.gpuworks.ai/nightly/index.json: 503 Service Unavailable)";
   const { user } = renderPage((call) =>

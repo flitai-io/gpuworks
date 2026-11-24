@@ -2,6 +2,7 @@ package imagecatalog
 
 import (
 	"encoding/json"
+	"strings"
 
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog/manifest"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -47,7 +48,10 @@ func (s manifestSink) UpsertImage(in manifest.ImageInput) error {
 		return err
 	}
 	sources, _ := json.Marshal(in.RegistrySources)
-	_, err = s.store.UpsertImage(&store.Image{SeriesID: series.ID, Name: in.Name, Purpose: in.Purpose, Engine: in.Engine, EngineVersion: in.EngineVersion, Framework: in.Framework, FrameworkVersion: in.FrameworkVersion, Arch: in.Arch, ImageRef: in.ImageRef, Source: "official", RegistrySources: string(sources), OfflineBlobSHA256: in.BlobSHA256, RollingTag: in.RollingTag, SizeBytes: in.SizeBytes, Deprecated: in.Deprecated, DeprecatedSince: in.DeprecatedSince, Notes: in.Notes, Enabled: true})
+	// Inventory tags start as opt-in. A promoted runner uses its portable
+	// reference and lists SWR as a mirror. Upsert preserves existing switches.
+	inventory := in.RollingTag && strings.HasPrefix(in.ImageRef, manifest.SWRRunnerRepository+":")
+	_, err = s.store.UpsertImage(&store.Image{SeriesID: series.ID, Name: in.Name, Purpose: in.Purpose, Engine: in.Engine, EngineVersion: in.EngineVersion, Framework: in.Framework, FrameworkVersion: in.FrameworkVersion, Arch: in.Arch, ImageRef: in.ImageRef, Source: "official", RegistrySources: string(sources), OfflineBlobSHA256: in.BlobSHA256, RollingTag: in.RollingTag, SizeBytes: in.SizeBytes, Deprecated: in.Deprecated, DeprecatedSince: in.DeprecatedSince, Notes: in.Notes, Enabled: !inventory})
 	return err
 }
 

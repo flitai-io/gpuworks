@@ -224,7 +224,7 @@ func TestUpdatesComparesTheChannelWithThisServer(t *testing.T) {
 	channel := newTestChannel(t)
 	channel.publishImageCatalog([]byte(upstreamManifest))
 	run.useChannel(channel)
-	if err := run.store.RecordImageCatalogImport("2026-10-08.11111111"); err != nil {
+	if err := run.store.RecordImageCatalogImport("2026-10-08.11111111", nil); err != nil {
 		t.Fatal(err)
 	}
 

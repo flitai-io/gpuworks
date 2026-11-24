@@ -35,6 +35,8 @@
       "updateFailed": "目录更新失败",
       "upload": "上传 manifest",
       "version": "已导入目录 {{version}}",
+      "conflicts": "已保留 {{n}} 个同名本地条目",
+      "conflictNames": "查看冲突的名称",
       "result": {
         "created": "新增 {{n}}",
         "updated": "更新 {{n}}",

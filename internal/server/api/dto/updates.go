@@ -114,10 +114,11 @@ type ServerUpgradeProgress struct {
 // requires a catalog this server can read; CheckError distinguishes a failed
 // check from a package requiring a newer server.
 type CatalogUpdate struct {
-	Current         string `json:"current"`
-	Latest          string `json:"latest,omitempty"`
-	UpdateAvailable bool   `json:"update_available"`
-	Compatible      bool   `json:"compatible"`
+	Skipped         []string `json:"skipped,omitempty"` // Conflicting names from the last image catalog import.
+	Current         string   `json:"current"`
+	Latest          string   `json:"latest,omitempty"`
+	UpdateAvailable bool     `json:"update_available"`
+	Compatible      bool     `json:"compatible"`
 	// CheckError means compatibility could not be checked, rather than that
 	// the package requires a newer server. Other update offers remain usable.
 	CheckError *ProductMessage `json:"check_error,omitempty"`

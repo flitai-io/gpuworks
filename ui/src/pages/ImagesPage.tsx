@@ -15,6 +15,7 @@ import {
   type ImageSeries,
 } from "../api";
 import { apiErrorText } from "../apiError";
+import ImageCatalogConflicts from "./images/ImageCatalogConflicts";
 import ImageImportDrawer from "./images/ImageImportDrawer";
 import type { NodeArchive } from "./images/ImageNodeArchiveFields";
 import ImageDetailDrawer from "./images/ImageDetailDrawer";
@@ -79,6 +80,7 @@ export default function ImagesPage() {
     nodeUUID: string;
     result: ImageInspection;
   } | null>(null);
+  const [catalogConflicts, setCatalogConflicts] = useState<string[]>([]);
   const [catalogVersion, setCatalogVersion] = useState("");
   const [syncingCatalog, setSyncingCatalog] = useState(false);
   const [uploadingManifest, setUploadingManifest] = useState(false);
@@ -108,6 +110,7 @@ export default function ImagesPage() {
     setBusy(true);
     try {
       const result = await run();
+      setCatalogConflicts((result.skipped ?? []).map(entry => entry.name));
       setCatalogVersion(result.catalog_version || "");
       message.success(
         (["created", "updated", "deleted", "deprecated"] as const)
@@ -452,6 +455,7 @@ export default function ImagesPage() {
   }, t);
   return (
     <div className="resource-page">
+      {sourceTab === "official" && <ImageCatalogConflicts skipped={catalogConflicts} />}
       <ImagesPageOverview
         sourceTab={sourceTab}
         onSourceTabChange={(tab) => {

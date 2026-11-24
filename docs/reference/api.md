@@ -645,14 +645,14 @@ macOS 忽略 `no_systemd`。
 
 `POST /images/sync` 与带 `schema_version` 的 `POST /images/import` 导入系统目录，返回
 `{catalog_version, created, updated, deleted, deprecated, skipped:[], series:[...]}`。
-计数按版本行；`series` 是导入后的系统系列。manifest 未列出的系统版本，无引用时删除，有引用时弃用。
+计数按版本行；`series` 是导入后的系统系列。manifest 未列出的系统版本，有引用或已分发到节点时标记为弃用，其余删除。
 社区/自定义导入返回受影响的系列 `{items:[...], total}`。
 
-失败时不修改目录，按以下错误处理：
+通道同步遇到社区或自定义条目的名称或镜像引用冲突时返回 200，保留本地条目，在 `skipped` 中列出跳过项，并导入其余条目。手工上传的 manifest 遇到相同冲突时返回 400 `IMAGE_IMPORT_CONFLICT`，整批回滚。
 
-- 发布源均不可达：502 `UPDATE_SOURCES_UNAVAILABLE`；有索引但没有与索引一致的目录文件：502 `UPDATE_DOWNLOAD_FAILED`。
-- 通道未发布目录：404 `UPDATE_NOT_PUBLISHED`。
-- 内容非法：400 `IMAGE_MANIFEST_INVALID`；与社区/自定义行同名或同 ref 冲突：400 `IMAGE_IMPORT_CONFLICT`。
+manifest 内容非法时，导入前返回 400 `IMAGE_MANIFEST_INVALID`。通道同步还可能在下载阶段返回 502 `UPDATE_SOURCES_UNAVAILABLE`（发布源均不可达）、404 `UPDATE_NOT_PUBLISHED`（索引未发布目录）或 502 `UPDATE_DOWNLOAD_FAILED`（无法下载与索引一致的文件）。
+
+两种方式都在目录行提交后记录目录版本与跳过项。记录失败时 API 返回 500，此时目录行已经生效。排除存储错误后，重新导入同一份 manifest 即可刷新记录。
 
 版本行的 `rolling_tag`、`deprecated`、`deprecated_since` 描述滚动 tag 与弃用状态；
 `reference_count` 统计引用该 ref 的部署、未结束实例与模型数。
@@ -1963,7 +1963,7 @@ RunPod 需要开放端口或补平台公钥时，先返回 409 `INSTANCE_RESTART
 - 来源信息：胜出源，以及已答复来源的 `{url,ok,latency_ms,error}`；尚未答复的慢源不列出，界面不展示来源详情。
 - `server`、`image_catalog`、`template_catalog`：各含 `current`、`latest`、`update_available`。模板另有 `compatible`；server 另有 `installable`、`self_upgrade`、`self_upgrade_blocker`、`install_dir`（`server.yaml` 所在安装目录，无目录时省略）。
 
-server 只有渠道版本更新时才标记 `update_available`。两份目录还须与当前内容不同，且发布不早于当前构建，避免把旧目录标成更新。
+server 只有渠道版本更新时才标记 `update_available`。目录发布不早于当前构建且内容有变时可更新。系统镜像目录部分导入时，`image_catalog.skipped` 列出冲突名称。当前版本与渠道相同时，`update_available` 仍为 false。管理员解决冲突后可重试导入。完整导入后省略该字段。
 无可用源仍返回 200、`available=false`，由 `unavailable_reason` 区分：
 
 - `unpublished`：源可达，但该渠道没有索引。
