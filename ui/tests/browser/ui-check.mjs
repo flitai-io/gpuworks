@@ -22,7 +22,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright-core";
 import { tableLinkFindings } from "./table-link-rules.mjs";
-import { states, settle } from "./page-states.mjs";
+import { states, track } from "./page-states.mjs";
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((pairs, arg, index, all) => {
   if (arg.startsWith("--")) pairs.push([arg.slice(2), all[index + 1]?.startsWith("--") || all[index + 1] == null ? "1" : all[index + 1]]);
@@ -190,6 +190,7 @@ async function run() {
       const context = await browser.newContext({ viewport: { width, height: width >= 1280 ? 900 : 768 }, locale: locale === "en" ? "en-US" : "zh-CN" });
       await context.addInitScript((lang) => { try { localStorage.setItem("i18nextLng", lang); localStorage.setItem("gpuworks.navCollapsed", "0"); } catch {} }, locale);
       const page = await context.newPage();
+      track(page);
       const errors = [];
       page.on("console", (m) => { if (m.type() === "error" && !ignoredConsole.some((re) => re.test(m.text()))) errors.push(m.text().slice(0, 200)); });
       page.on("pageerror", (e) => errors.push(`pageerror: ${String(e).slice(0, 200)}`));
@@ -199,9 +200,22 @@ async function run() {
     const head = await make(base);
     const ref = compare ? await make(compare) : null;
     for (const route of routes) {
+      // Both builds walk to their next state at the same time; each waits out
+      // its own page, so walking them in turn doubled the time of every state.
+      const headStates = states(head.page, base, route);
       const refStates = ref ? states(ref.page, compare, route) : null;
       let pending = null;
-      for await (const state of states(head.page, base, route)) {
+      // The base build's next state, already on its way. The handler keeps a
+      // failure from being reported before the loop gets to await it.
+      const advance = () => { const next = refStates.next(); next.catch(() => {}); return next; };
+      let ahead = refStates ? advance() : null;
+      const nextRefState = async () => {
+        if (pending) { const state = pending; pending = null; return state; }
+        const next = ahead ?? advance(); ahead = null;
+        return (await next).value;
+      };
+      for (let step = await headStates.next(); !step.done; step = await headStates.next()) {
+        const state = step.value;
         head.errors.length = 0;
         await head.page.mouse.move(0, 0);
         const check = await head.page.evaluate(ruleScript);
@@ -215,16 +229,20 @@ async function run() {
           // Walk the base build to the same state; one missing there must not
           // use up the states after it.
           let match;
-          for (let candidate = pending ?? (await refStates.next()).value; candidate; candidate = (await refStates.next()).value) {
-            pending = null;
+          for (let candidate = await nextRefState(); candidate; candidate = await nextRefState()) {
             if (candidate.id === state.id) { match = candidate; break; }
             if (kindOrder[candidate.kind] > kindOrder[state.kind]) { pending = candidate; break; }
           }
           if (match) { await ref.page.mouse.move(0, 0); await ref.page.screenshot({ path: join(out, "shots", `${file}.base.png`) }); entry.base = `${file}.base.png`; }
+          // A base state held back for a later head state stays where it is.
+          if (!pending) ahead = advance();
         }
         results.push(entry);
         process.stdout.write(`${entry.findings.length ? "✗" : "✓"} ${locale} ${width} ${state.id}${entry.findings.length ? `  ${entry.findings.map((f) => f.rule).join(", ")}` : ""}\n`);
       }
+      // The base build may still be on its way to a state this build does not
+      // have. Let that step end before the next page drives the same tab.
+      if (ahead) await ahead.catch(() => {});
     }
     await head.context.close(); if (ref) await ref.context.close();
   }

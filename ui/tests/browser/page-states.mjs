@@ -1,5 +1,68 @@
+// Playwright's "networkidle" never arrives on a page that listens for live
+// changes: the request for the SharedWorker script that carries the stream is
+// reported as started and never as finished, so each such state waited out the
+// whole timeout. Count the requests a page still waits for here instead, and
+// leave out the ones that do not come back.
+const tracked = new WeakMap();
+const quietFor = 500, domQuietFor = 300, settleWithin = 8000, workerScriptAfter = 1000;
+
+// track starts counting a page's requests. Call it before the first
+// navigation; settle calls it too, for a page that was not registered.
+export function track(page) {
+  let net = tracked.get(page);
+  if (net) return net;
+  net = { open: new Map(), changed: Date.now() };
+  const touch = () => { net.changed = Date.now(); };
+  page.on("request", (request) => {
+    if (["eventsource", "websocket"].includes(request.resourceType())) return;
+    net.open.set(request, { at: Date.now(), answered: false }); touch();
+  });
+  page.on("response", (response) => {
+    const entry = net.open.get(response.request());
+    if (!entry) return;
+    // A stream read through fetch stays open for as long as the page does.
+    if ((response.headers()["content-type"] ?? "").includes("text/event-stream")) net.open.delete(response.request());
+    else entry.answered = true;
+    touch();
+  });
+  const end = (request) => { if (net.open.delete(request)) touch(); };
+  page.on("requestfinished", end); page.on("requestfailed", end);
+  tracked.set(page, net);
+  return net;
+}
+
+// A script that has had no answer for a second is a worker's: the document's
+// own scripts are answered at once by the local server the check runs against.
+const pendingRequests = (net, now) => [...net.open].filter(([request, entry]) => !(request.resourceType() === "script" && !entry.answered && now - entry.at >= workerScriptAfter)).length;
+
+// domQuiet resolves in the page once nothing in the document has changed for
+// quietMs, or after capMs. A response is followed by a render, and a render can
+// mount a part that asks for more, so the network alone does not say the page
+// has stopped.
+const domQuiet = ([quietMs, capMs]) => new Promise((resolve) => {
+  let timer;
+  const done = () => { observer.disconnect(); clearTimeout(cap); resolve(); };
+  const observer = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(done, quietMs); });
+  observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+  timer = setTimeout(done, quietMs);
+  const cap = setTimeout(done, capMs);
+});
+
+// settle returns once the page waits for no request, has asked for nothing
+// new for quietFor (counted from the call, so that a click's own requests are
+// seen) and has then stopped changing, or after settleWithin at the latest.
 export async function settle(page) {
-  await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
+  const net = track(page);
+  const start = Date.now();
+  const left = () => settleWithin - (Date.now() - start);
+  while (left() > 0) {
+    const now = Date.now();
+    if (pendingRequests(net, now) > 0 || now - Math.max(net.changed, start) < quietFor) { await page.waitForTimeout(50); continue; }
+    const seen = net.changed;
+    // A navigation under way replaces the document the observer runs in.
+    await page.evaluate(domQuiet, [domQuietFor, Math.max(left(), 0)]).catch(() => {});
+    if (net.changed === seen && pendingRequests(net, Date.now()) === 0) break;
+  }
   await page.waitForTimeout(500);
 }
 
