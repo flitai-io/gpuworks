@@ -17,6 +17,9 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
+// ErrorLocalImageCatalogChanged reports a catalog conflict while the node was confirming an import.
+const ErrorLocalImageCatalogChanged = "LOCAL_IMAGE_CATALOG_CHANGED"
+
 type selectedNodeImage struct {
 	NodeUUID                    string `json:"node_uuid" yaml:"node_uuid"`
 	proto.RuntimeImageSelection `yaml:",inline"`

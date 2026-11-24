@@ -8,8 +8,6 @@ import (
 // old clients receive an actionable error string; the UI translates the stable
 // code and params from common.json.
 const (
-	ErrorLocalImageCatalogChanged = "LOCAL_IMAGE_CATALOG_CHANGED"
-
 	// ErrorResponseEncodingFailed: a response's data could not be encoded
 	// as JSON, so the server answered this error instead.
 	ErrorResponseEncodingFailed   = "RESPONSE_ENCODING_FAILED"
