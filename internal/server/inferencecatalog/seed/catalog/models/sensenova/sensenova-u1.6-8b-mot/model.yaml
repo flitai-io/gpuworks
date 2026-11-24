@@ -1,0 +1,165 @@
+model_id: sensenova/sensenova-u1.6-8b-mot
+source: upstream
+display_title: SenseNova-U1.6-8B-MoT
+parameter_count: 8B
+architecture: NEOChatModel
+release_date: '2026-11-24'
+model_config: {kv_cache: false}
+specs:
+- name: fp8-vllm-nvidia-ampere-1x
+  display_name_zh_cn: Ampere 及以上 · 在线 FP8 · 单卡
+  display_name_en: Ampere+ · online FP8 · 1 GPU
+  scenario: balanced
+  engine: vllm
+  image: quay.io/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.32.0-r2-linux-amd64
+  image_sources:
+  - swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.32.0-r2-linux-amd64
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: sensenova/SenseNova-U1.6-8B-MoT
+        revision: 8f582699bac7f1e5362df2a776397d0e1a963b6c
+    - modelscope:
+        repo_id: SenseNova/SenseNova-U1.6-8B-MoT
+        revision: c03718b305258bbdc3994e132158ddfbda842268
+  weight_bytes: 35065860072
+  gpus:
+    vendor: nvidia
+    cc: '>=8.0'
+  args:
+  - --omni
+  - --quantization
+  - fp8
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.count != 1:
+              return reject("该档位需要正好 1 张 GPU")
+          if gpu.min_memory_gib < 22:
+              return reject("单卡显存至少需要 22 GiB")
+          return accept(gpu_memory_mib_per_device = 21504)
+  # vLLM-Omni quantizes the BF16 checkpoint to FP8 while loading, so the
+  # 35 GB of weights are read once and about 17.6 GiB stay resident. Measured
+  # nvidia-smi peak 21.7-22.0 GiB per card (RTX 4090 and RTX 3090); admission
+  # counts an omni launch as 90% of the card, which makes 21 GiB the largest
+  # claim a 24 GB card accepts. Ada runs W8A8 FP8; Ampere falls back to Marlin
+  # W8A16.
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.image.generate
+      endpoint: /v1/images/generations
+      mode: sync
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 1536x1536
+        - 2048x2048
+        - 1344x768
+        - 768x1344
+        default: 1024x1024
+      - name: num_inference_steps
+        kind: number
+      - name: guidance_scale
+        kind: number
+    - type: openai.image.edit
+      endpoint: /v1/images/edits
+      mode: sync
+      request_encoding: multipart
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 1536x1536
+        - 2048x2048
+        - 1344x768
+        - 768x1344
+        default: 1024x1024
+      - name: num_inference_steps
+        kind: number
+      - name: guidance_scale
+        kind: number
+- name: bf16-vllm-nvidia-ampere
+  display_name_zh_cn: Ampere 及以上 · BF16 · 1–2 卡
+  display_name_en: Ampere+ · BF16 · 1-2 GPUs
+  scenario: balanced
+  engine: vllm
+  image: quay.io/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.32.0-r2-linux-amd64
+  image_sources:
+  - swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.32.0-r2-linux-amd64
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: sensenova/SenseNova-U1.6-8B-MoT
+        revision: 8f582699bac7f1e5362df2a776397d0e1a963b6c
+    - modelscope:
+        repo_id: SenseNova/SenseNova-U1.6-8B-MoT
+        revision: c03718b305258bbdc3994e132158ddfbda842268
+  weight_bytes: 35065860072
+  gpus:
+    vendor: nvidia
+    cc: '>=8.0'
+  args:
+  - --omni
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.count == 1:
+              if gpu.min_memory_gib < 40:
+                  return reject("单卡部署需要显存至少 40 GiB")
+              return accept(gpu_memory_mib_per_device = 37888, prefer = 1)
+          if gpu.count == 2:
+              if gpu.min_memory_gib < 22:
+                  return reject("双卡部署每卡显存至少需要 22 GiB")
+              return accept(gpu_memory_mib_per_device = 20480)
+          return reject("该档位使用 1 或 2 张 GPU")
+  # One card holds the whole 35 GB checkpoint (36.0 GiB peak on an RTX 4090
+  # 48 GB). Two cards split it with tensor parallelism, which the platform sets
+  # from the placed GPU count (18.2 GiB peak per RTX 3090 at 2048x2048). When
+  # both layouts fit, one card is preferred.
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.image.generate
+      endpoint: /v1/images/generations
+      mode: sync
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 1536x1536
+        - 2048x2048
+        - 1344x768
+        - 768x1344
+        default: 1024x1024
+      - name: num_inference_steps
+        kind: number
+      - name: guidance_scale
+        kind: number
+    - type: openai.image.edit
+      endpoint: /v1/images/edits
+      mode: sync
+      request_encoding: multipart
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 1536x1536
+        - 2048x2048
+        - 1344x768
+        - 768x1344
+        default: 1024x1024
+      - name: num_inference_steps
+        kind: number
+      - name: guidance_scale
+        kind: number
+input_modalities: [text, image]
