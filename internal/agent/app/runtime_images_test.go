@@ -38,8 +38,9 @@ func TestRuntimeImageErrorDiagnostics(t *testing.T) {
 	lock.Lock()
 	defer lock.Unlock()
 	raw := fmt.Sprintf(`{"ref":"example:v1","identity":"sha256:%s","runtime":"docker"}`, strings.Repeat("a", 64))
-	_, err = runtimeImageRPC(t.Context(), docker.New(), &lock, proto.RPCImageRuntimeImport, []byte(raw))
-	if !errors.As(err, &rpc) || rpc.Code != proto.ErrorLocalImageBusy {
-		t.Fatalf("busy should have its own code: %v", err)
+	images := runtimeImageRPC{driver: docker.New(), lock: &lock, stateDir: t.TempDir()}
+	_, busyErr := images.selection(t.Context(), proto.RPCImageRuntimeImport, []byte(raw))
+	if !errors.As(busyErr, &rpc) || rpc.Code != proto.ErrorLocalImageBusy {
+		t.Fatalf("busy should have its own code: %v", busyErr)
 	}
 }

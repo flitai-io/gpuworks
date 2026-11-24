@@ -723,7 +723,7 @@ func (s *Store) ApplyImageNodeStatus(imageID, nodeID uint, st proto.ImageNodeSta
 	if err != nil {
 		return err
 	}
-	if st.TransferID != "" && current.TransferID != "" && st.TransferID != current.TransferID {
+	if !runtimeImageReportMatches(current, st) || (st.TransferID != "" && current.TransferID != "" && st.TransferID != current.TransferID) {
 		return nil
 	}
 	if st.TransferID != "" && current.TransferID == "" && current.LastTransferID != "" && st.TransferID != current.LastTransferID {

@@ -12,6 +12,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -298,6 +299,12 @@ func (a *apiHandlers) imageNodeDTOs(rows []store.ImageNode, nodes []store.Node) 
 			item.State, item.SizeBytes, item.TransferredBytes, item.RateBPS, item.RateLimitKiB, item.LastRateLimitKiB, item.TransferID, item.Source, item.Message = row.State, row.SizeBytes, row.TransferredBytes, row.RateBPS, row.RateLimitKiB, row.LastRateLimitKiB, row.TransferID, row.Source, row.Message
 			item.ImageDigestID = row.ImageDigestID
 			item.TransferErrorCode = row.TransferErrorCode
+			if row.Source == proto.RuntimeImageCopySource && row.State == store.ImageStateFailed && row.TransferErrorCode == "" {
+				switch row.Message {
+				case proto.ErrorLocalImageUnavailable, proto.ErrorLocalImageChanged, proto.ErrorLocalImageConflict, proto.ErrorLocalImageUnsupported, proto.ErrorLocalImageBusy, messages.ErrorAgentUpgradeRequired:
+					item.TransferErrorCode = row.Message
+				}
+			}
 			if row.Source == proto.ArchiveSourceLocal && row.State == store.ImageStateFailed && row.TransferErrorCode == "" {
 				// Rows written before local errors were classified can still contain a filesystem path.
 				item.TransferErrorCode = proto.ErrorArchiveLoad

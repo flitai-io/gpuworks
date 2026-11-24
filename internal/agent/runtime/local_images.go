@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 )
@@ -15,10 +16,30 @@ import (
 // inspection supplies the identity used for node presence.
 type LocalImageStore interface {
 	ListLocalImages(context.Context, string) (proto.RuntimeImageList, error)
-	ResolveLocalImage(context.Context, proto.RuntimeImageSelection, bool) (ImageInspection, error)
+	ResolveLocalImage(context.Context, proto.RuntimeImageSelection, *LocalImageCopy) (ImageInspection, error)
+}
+
+// LocalImageCopyTarget is implemented by a runtime with distinct source and
+// deployment namespaces. The selected source has already been verified.
+type LocalImageCopyTarget interface {
+	NeedsLocalImageCopy(ctx context.Context, ref, configID, stateDir string) (bool, error)
+}
+
+// LocalImageCopy authorizes a verified selection to be copied on this worker.
+// StateDir owns its recovery record. Bytes counts archive bytes sent to load.
+type LocalImageCopy struct {
+	StateDir string
+	Bytes    atomic.Int64
+}
+
+func (c *LocalImageCopy) Write(p []byte) (int, error) {
+	c.Bytes.Add(int64(len(p)))
+	return len(p), nil
 }
 
 var (
+	ErrLocalImageBusy = errors.New("another local image import is active")
+
 	ErrLocalImageChanged     = errors.New("selected runtime image changed; refresh the list")
 	ErrLocalImageConflict    = errors.New("the deployment namespace already contains a different image under this tag")
 	ErrLocalImageUnsupported = errors.New("this runtime does not support local image discovery")

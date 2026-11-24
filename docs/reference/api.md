@@ -642,7 +642,7 @@ const importBody = {
 };
 ```
 
-将 `inspectBody` 提交到同一节点的 `POST .../runtime-images/inspect` 读取元数据。补齐目录字段后，将 `importBody` 提交到 `POST /api/v1/images/import`。`nodeUUID` 与 GET 路径中的节点相同。示例中的引擎、框架和版本应使用该镜像的实际值。跨 namespace 复制只在导入时执行。
+将 `inspectBody` 提交到同一节点的 `POST .../runtime-images/inspect` 读取元数据。补齐目录字段后，将 `importBody` 提交到 `POST /api/v1/images/import`。`nodeUUID` 与 GET 路径中的节点相同。示例中的引擎、框架和版本应使用该镜像的实际值。需要跨 namespace 复制时，导入请求返回已登记的版本，节点在后台复制。通过节点分布查看传输状态、已复制字节或取消任务。
 
 ### 存储配置与缓存状态
 

@@ -42,14 +42,14 @@ ns=$2
 shift 2
 cd "$TEST_IMAGE_STORE/$ns"
 mkdir -p gpuworks.internal
-if [ "$1" = load ]; then read -r stage; cat > "$stage"; exit; fi
+if [ "$1" = load ]; then read -r stage; cat > "$stage"; [ "${FAIL_COPY:-}" != load ]; exit; fi
 case "$1 ${2:-}" in
   'namespace ls') printf 'default\nk8s.io\n' ;;
   'images --no-trunc') printf 'runner\tv1\t%s\t4 KiB\n<none>\t<none>\t%s\t1 KiB\n' "$TEST_TARGET" "$TEST_TARGET" ;;
   'image inspect') shift 5; [ ! -f "$1" ] || cat "$1" ;;
   'image rm') rm -f -- "$3" ;;
   'tag '*) cp -- "$2" "$3" ;;
-  'save '*) echo "$2"; cat "$2"; echo copied >> "$TEST_IMAGE_STORE/transfers" ;;
+  'save '*) [ "${FAIL_COPY:-}" != save ] || exit 2; echo "$2"; cat "$2"; echo copied >> "$TEST_IMAGE_STORE/transfers" ;;
   *) exit 2 ;;
 esac
 `
@@ -68,18 +68,83 @@ esac
 		t.Fatalf("list %+v: %v", list, err)
 	}
 	p := proto.RuntimeImageSelection{Runtime: list.Runtime, Namespace: list.Namespace, TargetNamespace: list.TargetNamespace, Ref: list.Items[0].Ref, Identity: list.Items[0].Identity}
-	preview, err := d.ResolveLocalImage(t.Context(), p, false)
+	job := &runtime.LocalImageCopy{StateDir: dir}
+	preview, err := d.ResolveLocalImage(t.Context(), p, nil)
 	if err != nil || preview.ID != config || preview.Labels["io.gpuworks.engine"] != "vllm" {
 		t.Fatalf("preview: %+v %v", preview, err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "k8s.io/runner:v1")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("preview copied an image: %v", err)
 	}
+	for _, failure := range []string{"save", "load", "socket"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Setenv("FAIL_COPY", failure)
+			driver := d
+			if failure == "socket" {
+				driver = NewInNamespace(d.ns).WithHostRoot(t.TempDir())
+			}
+			_, err := driver.ResolveLocalImage(t.Context(), p, job)
+			if err == nil {
+				t.Fatal("failed import reported success")
+			}
+			if _, err := os.Stat(finalPath); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("published target on failure: %v", err)
+			}
+			for _, ns := range []string{"default", "k8s.io"} {
+				stages, err := filepath.Glob(filepath.Join(dir, ns, localImportStagePrefix+"*"))
+				if err != nil || len(stages) > 0 {
+					t.Fatalf("stage left in %s: %v %v", ns, stages, err)
+				}
+			}
+			if failure == "socket" && job.Bytes.Load() != 0 {
+				t.Fatal("streamed before checking socket")
+			}
+			job.Bytes.Store(0)
+		})
+	}
+	// Simulate a process exit with a durable marker and both staged tags.
+	j, err := d.openImportJournal(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage, marker, err := journalImportTag(j.Name(), "default")
+	j.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ns := range []string{"default", "k8s.io"} {
+		write(filepath.Join(ns, stage), image)
+		write(filepath.Join(ns, localImportStagePrefix+"operator"), image)
+	}
+	os.Remove(filepath.Join(dir, "transfers")) // the failed load consumed a successful export
+	if needed, err := d.NeedsLocalImageCopy(t.Context(), p.Ref, config, dir); err != nil || !needed {
+		t.Fatal("missing destination", needed, err)
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("preflight did not recover the previous attempt", err)
+	}
 	for i := 0; i < 2; i++ {
-		installed, err := d.ResolveLocalImage(t.Context(), p, true)
+		installed, err := d.ResolveLocalImage(t.Context(), p, job)
 		if err != nil || installed.ID != config {
 			t.Fatalf("import %d: %+v %v", i, installed, err)
 		}
+	}
+	for _, ns := range []string{"default", "k8s.io"} {
+		if _, err := os.Stat(filepath.Join(dir, ns, stage)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("stale tag in %s", ns)
+		}
+		if _, err := os.Stat(filepath.Join(dir, ns, localImportStagePrefix+"operator")); err != nil {
+			t.Fatal("removed an unowned tag", err)
+		}
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("stale marker", err)
+	}
+	if needed, err := d.NeedsLocalImageCopy(t.Context(), p.Ref, config, dir); err != nil || needed {
+		t.Fatal("destination should be reused", needed, err)
+	}
+	if job.Bytes.Load() == 0 {
+		t.Fatal("no copy progress")
 	}
 	copies, err := os.ReadFile(filepath.Join(dir, "transfers"))
 	if err != nil || string(copies) != "copied\n" {
@@ -89,11 +154,11 @@ esac
 		t.Fatal(err)
 	}
 	atCreate.Store(true)
-	if _, err := d.ResolveLocalImage(t.Context(), p, true); !errors.Is(err, runtime.ErrLocalImageConflict) {
+	if _, err := d.ResolveLocalImage(t.Context(), p, job); !errors.Is(err, runtime.ErrLocalImageConflict) {
 		t.Fatalf("concurrent create should preserve the other image: %v", err)
 	}
 	// The ordinary conflict also leaves the competing tag intact.
-	if _, err := d.ResolveLocalImage(t.Context(), p, true); !errors.Is(err, runtime.ErrLocalImageConflict) {
+	if _, err := d.ResolveLocalImage(t.Context(), p, job); !errors.Is(err, runtime.ErrLocalImageConflict) {
 		t.Fatalf("expected conflict: %v", err)
 	}
 	body, err := os.ReadFile(filepath.Join(dir, "k8s.io/runner:v1"))
@@ -101,7 +166,7 @@ esac
 		t.Fatal("conflicting target was modified")
 	}
 	p.Identity = config
-	if _, err := d.ResolveLocalImage(t.Context(), p, true); !errors.Is(err, runtime.ErrLocalImageChanged) {
+	if _, err := d.ResolveLocalImage(t.Context(), p, job); !errors.Is(err, runtime.ErrLocalImageChanged) {
 		t.Fatalf("stale selection: %v", err)
 	}
 }
@@ -142,6 +207,10 @@ func testLocalImagePublisher(t *testing.T, dir, target, other string, atCreate *
 				}
 				return nil
 			})
+			if name == "docker.io/library/runner:v1" {
+				grpcwire.Fail(w, grpcwire.CodeNotFound, "image not found")
+				return
+			}
 			if err != nil || !strings.HasPrefix(name, localImportStagePrefix) {
 				fail(fmt.Errorf("stage %q: %v", name, err))
 				return

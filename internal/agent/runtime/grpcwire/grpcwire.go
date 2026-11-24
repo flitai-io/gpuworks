@@ -286,6 +286,7 @@ func Fail(w http.ResponseWriter, code int, message string) {
 // gRPC status codes used by the local services.
 const (
 	CodeInvalidArgument = 3
+	CodeNotFound        = 5
 	CodeAlreadyExists   = 6
 	CodeUnimplemented   = 12
 	CodeInternal        = 13

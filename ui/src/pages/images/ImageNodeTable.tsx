@@ -246,6 +246,7 @@ export default function ImageNodeTable({
           return <Text type="secondary">—</Text>;
         }
         if (row.source === "local") return <span className="text-fg-muted">{t("nodeTable.localLoading")}</span>;
+        if (row.source === "runtime") return <span className="text-fg-muted">{t("nodeTable.namespaceCopy", { size: bytes(row.transferred_bytes || 0) })}</span>;
         const expected = row.size_bytes || selectedVersion.size_bytes || 0;
         const done = row.transferred_bytes || 0;
         return (
@@ -279,8 +280,8 @@ export default function ImageNodeTable({
             <Tag>Huawei Cloud</Tag>
           ) : row.source === "mirror" ? (
             <Tag>{t("nodeTable.sourceMirror")}</Tag>
-          ) : row.source === "local" ? (
-            <Badge size="sm" status="neutral">{t("nodeTable.sourceLocal")}</Badge>
+          ) : row.source === "local" || row.source === "runtime" ? (
+            <Badge size="sm" status="neutral">{t(row.source === "runtime" ? "nodeTable.sourceRuntime" : "nodeTable.sourceLocal")}</Badge>
           ) : row.source === "offline" ? (
             <Tag>{t("nodeTable.offline")}</Tag>
           ) : row.source === "url" ? (
@@ -307,8 +308,8 @@ export default function ImageNodeTable({
             <Tag color="cyan">{t("nodeTable.peerFrom", {
               node: row.source_node_name || row.source_node_uuid.slice(0, 8),
             })}</Tag>
-          ) : row.source === "local" ? (
-            <Badge size="sm" status="info">{t("nodeTable.sourceLocal")}</Badge>
+          ) : row.source === "local" || row.source === "runtime" ? (
+            <Badge size="sm" status="info">{t(row.source === "runtime" ? "nodeTable.sourceRuntime" : "nodeTable.sourceLocal")}</Badge>
           ) : row.source && /[./]/.test(row.source) ? (
             <Tag color="processing" title={row.source}>{t("nodeTable.pullingFrom", { source: registryName(row.source) })}</Tag>
           ) : (

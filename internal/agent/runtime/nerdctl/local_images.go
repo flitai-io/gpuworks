@@ -2,15 +2,14 @@ package nerdctl
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"slices"
 	"strings"
-	"time"
 
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -47,7 +46,7 @@ func (d *Driver) ListLocalImages(ctx context.Context, ns string) (proto.RuntimeI
 	return proto.RuntimeImageList{Runtime: d.Name(), TargetNamespace: d.ns, Namespace: ns, Namespaces: spaces, Items: items}, nil
 }
 
-func (d *Driver) ResolveLocalImage(ctx context.Context, p proto.RuntimeImageSelection, adopt bool) (runtime.ImageInspection, error) {
+func (d *Driver) ResolveLocalImage(ctx context.Context, p proto.RuntimeImageSelection, copyJob *runtime.LocalImageCopy) (runtime.ImageInspection, error) {
 	if p.Runtime != d.Name() || p.TargetNamespace != d.ns || p.Namespace == "" || !runtime.ValidImageNamespace(p.Namespace) {
 		return runtime.ImageInspection{}, runtime.ErrLocalImageChanged
 	}
@@ -59,22 +58,42 @@ func (d *Driver) ResolveLocalImage(ctx context.Context, p proto.RuntimeImageSele
 	if target != p.Identity {
 		return image, runtime.ErrLocalImageChanged
 	}
-	if !adopt || src.ns == d.ns {
+	if copyJob == nil || src.ns == d.ns {
 		return image, nil
 	}
 
+	journal, err := d.openImportJournal(copyJob.StateDir)
+	if err != nil {
+		return image, err
+	}
+	defer journal.Close()
+	if err := d.recoverImportTags(ctx, journal.Name()); err != nil {
+		return image, err
+	}
 	// A target already usable on this node makes retrying a completed copy cheap.
 	if present, err := d.sameLocalImage(ctx, p.Ref, image.ID); err != nil || present {
 		return image, err
 	}
+	client, err := d.openImagePublisher(ctx, p.Ref)
+	if err != nil {
+		return image, err
+	}
+	defer client.Close()
 	// Pin the immutable descriptor under a private tag. The source's real tag
 	// may move while saving. Importing only the private tag also lets us check
 	// identity and conflicts after the potentially long transfer.
-	stage := localImportStagePrefix + strings.ToLower(rand.Text())
+	stage, marker, err := journalImportTag(journal.Name(), src.ns)
+	if err != nil {
+		return image, err
+	}
+	defer func() {
+		if err := d.clearImportTag(marker, src.ns, stage); err != nil {
+			slog.Warn("clean up local image import", "image", stage, "err", err)
+		}
+	}()
 	if err := src.TagImage(ctx, p.Ref, stage); err != nil {
 		return image, fmt.Errorf("pin source image: %w", err)
 	}
-	defer src.removeImportTag(stage)
 	// Some nerdctl versions can inspect a digest but can tag only by name.
 	// Verify the new, pinned name before any bytes go to the destination.
 	_, pinned, err := src.inspectImage(ctx, stage)
@@ -84,8 +103,7 @@ func (d *Driver) ResolveLocalImage(ctx context.Context, p proto.RuntimeImageSele
 	if pinned != target {
 		return image, runtime.ErrLocalImageChanged
 	}
-	defer d.removeImportTag(stage)
-	if err := streamLocalImage(ctx, src, d, stage); err != nil {
+	if err := streamLocalImage(ctx, src, d, stage, copyJob); err != nil {
 		return image, err
 	}
 	staged, err := d.InspectImage(ctx, stage)
@@ -95,7 +113,7 @@ func (d *Driver) ResolveLocalImage(ctx context.Context, p proto.RuntimeImageSele
 	if staged.ID != image.ID {
 		return image, runtime.ErrLocalImageChanged
 	}
-	return d.publishLocalImage(ctx, stage, p.Ref, image.ID)
+	return d.publishLocalImage(ctx, client, stage, p.Ref, image.ID)
 }
 
 func (d *Driver) sameLocalImage(ctx context.Context, ref, id string) (bool, error) {
@@ -110,14 +128,6 @@ func (d *Driver) sameLocalImage(ctx context.Context, ref, id string) (bool, erro
 		return false, runtime.ErrLocalImageConflict
 	}
 	return true, nil
-}
-
-func (d *Driver) removeImportTag(ref string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := d.RemoveImage(ctx, ref); err != nil && !errors.Is(err, runtime.ErrImageNotFound) {
-		slog.Warn("remove temporary local import tag", "namespace", d.ns, "image", ref, "err", err)
-	}
 }
 
 // Save writes the tar to stdout; keep bounded stderr for the agent diagnostic.
@@ -142,7 +152,7 @@ func runImageExport(cmd *exec.Cmd) error {
 
 // The archive travels through a kernel pipe on the worker, even when nerdctl
 // itself runs through the Kubernetes host wrapper. No layer visits the server.
-func streamLocalImage(ctx context.Context, source, dest *Driver, ref string) error {
+func streamLocalImage(ctx context.Context, source, dest *Driver, ref string, progress io.Writer) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	r, w, err := os.Pipe()
@@ -151,7 +161,7 @@ func streamLocalImage(ctx context.Context, source, dest *Driver, ref string) err
 	}
 	exported := make(chan error, 1)
 	go func() {
-		err := source.SaveImage(ctx, ref, w)
+		err := source.SaveImage(ctx, ref, io.MultiWriter(w, progress))
 		w.Close()
 		exported <- err
 	}()

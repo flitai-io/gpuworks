@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -36,11 +37,7 @@ func (a *apiHandlers) runtimeImageCall(w http.ResponseWriter, r *http.Request, n
 		writeProductError(w, http.StatusServiceUnavailable, ErrorImageInspectionUnavailable, "node image inspection is unavailable", nil)
 		return nil, false
 	}
-	timeout := time.Minute
-	if method == proto.RPCImageRuntimeImport {
-		timeout = proto.ImageOperationTimeout
-	}
-	ctx, cancel := rpccontext.WithTimeout(r.Context(), timeout)
+	ctx, cancel := rpccontext.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
 	result, err := a.d.CallNode(ctx, node.UUID, method, p)
 	if err != nil {
@@ -77,6 +74,10 @@ func (a *apiHandlers) inspectRuntimeImage(w http.ResponseWriter, r *http.Request
 	if !decodeJSONBody(w, r, &p) {
 		return
 	}
+	if p.Runtime == "" || p.Ref == "" || p.Identity == "" {
+		writeProductError(w, http.StatusBadRequest, proto.ErrorLocalImageChanged, "a tagged node image selection is required", nil)
+		return
+	}
 	var out proto.RuntimeImageDetails
 	if _, ok := a.runtimeImageCall(w, r, chi.URLParam(r, "uuid"), proto.RPCImageRuntimeInspect, p, &out); ok {
 		out.Metadata = imagecatalog.CatalogImageMetadata(out.Metadata)
@@ -101,21 +102,41 @@ func (a *apiHandlers) registerRuntimeImage(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var installed proto.RuntimeImageDetails
-	node, ok := a.runtimeImageCall(w, r, selection.NodeUUID, proto.RPCImageRuntimeImport, selection.RuntimeImageSelection, &installed)
+	var verified proto.RuntimeImageDetails
+	method := proto.RPCImageRuntimeImport
+	if selection.Namespace != selection.TargetNamespace {
+		method = proto.RPCImageRuntimePrepare
+	}
+	node, ok := a.runtimeImageCall(w, r, selection.NodeUUID, method, selection.RuntimeImageSelection, &verified)
 	if !ok {
 		return
 	}
-	if installed.ImageID == "" {
-		writeProductError(w, http.StatusBadGateway, proto.ErrorLocalImageUnavailable, "the node did not confirm the installed image", nil)
+	if verified.ImageID == "" {
+		writeProductError(w, http.StatusBadGateway, proto.ErrorLocalImageUnavailable, "the node did not identify the selected image", nil)
 		return
 	}
-	saved, id, err := a.d.Store.RegisterLocalImage(node.ID, expectedID, *series, *version, proto.ImagePresence{
-		ImageID: installed.ImageID, RuntimeSizeBytes: installed.RuntimeSizeBytes, Present: true,
-	})
+	var observation *proto.ImagePresence
+	if verified.CopyRequired {
+		if a.d.ImageFetch.Pull == nil {
+			writeProductError(w, http.StatusServiceUnavailable, ErrorImageSyncUnavailable, "node image transfers are unavailable", nil)
+			return
+		}
+	} else {
+		observation = &proto.ImagePresence{ImageID: verified.ImageID, RuntimeSizeBytes: verified.RuntimeSizeBytes, Present: true}
+	}
+	saved, id, err := a.d.Store.RegisterLocalImage(node.ID, expectedID, *series, *version, observation)
 	if err != nil {
 		writeLocalRegistrationError(w, in.ImageRef, err)
 		return
+	}
+	if verified.CopyRequired {
+		// Registration commits this request. A browser disconnect must not cancel dispatch.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), time.Minute)
+		defer cancel()
+		if _, err := a.d.ImageFetch.Pull(ctx, id, node.UUID, imagecatalog.FetchRequest{RuntimeImage: &selection.RuntimeImageSelection}); err != nil {
+			writeErr(w, http.StatusConflict, err)
+			return
+		}
 	}
 	result := a.imageSeriesDTO(saved, true)
 	if !slices.ContainsFunc(result.Versions, func(v dto.Image) bool { return v.ID == id }) {

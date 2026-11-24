@@ -69,6 +69,8 @@ type FetchRequest struct {
 	Force bool
 
 	ArchivePath string
+
+	RuntimeImage *proto.RuntimeImageSelection
 }
 
 func (r FetchRequest) IsLocalFetch() bool {

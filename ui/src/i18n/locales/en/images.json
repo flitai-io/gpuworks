@@ -151,6 +151,8 @@
   "nodeTable": {
     "localOption": "Import from node file…",
     "localAction": "Import local file…",
+    "sourceRuntime": "Existing node image",
+    "namespaceCopy": "Copied {{size}}",
     "sourceLocal": "Node file",
     "localLoading": "Loading image…",
     "localDialog": {
@@ -241,7 +243,8 @@
       "ready": "Image metadata loaded. Complete any missing fields before adding.",
       "empty": "No tagged images are available here.",
       "failed": "Could not read node images. Refresh and try again.",
-      "added": "Image added and confirmed present on this node."
+      "copying": "Image registered. See node distribution for copy progress.",
+      "added": "Image registered."
     },
     "method": "Import method",
     "local": {

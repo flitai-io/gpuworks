@@ -59,8 +59,9 @@ func bindLocalSeries(version *Image, series *ImageSeries) error {
 }
 
 // RegisterLocalImage creates only missing catalog rows. The final ref lookup,
-// optional insertion and node observation share one transaction with no node I/O.
-func (s *Store) RegisterLocalImage(nodeID, expectedID uint, defaults ImageSeries, version Image, observation proto.ImagePresence) (*ImageSeries, uint, error) {
+// optional insertion and confirmed presence share one transaction. A background
+// copy registers only the catalog version until its worker confirms presence.
+func (s *Store) RegisterLocalImage(nodeID, expectedID uint, defaults ImageSeries, version Image, observation *proto.ImagePresence) (*ImageSeries, uint, error) {
 	var series ImageSeries
 	var image Image
 	var createdSeries, createdVersion bool
@@ -93,8 +94,11 @@ func (s *Store) RegisterLocalImage(nodeID, expectedID uint, defaults ImageSeries
 			createdVersion = true
 			image = version
 		}
+		if observation == nil {
+			return nil
+		}
 		observation.ImageRef = image.ImageRef
-		return reconcileImagePresence(tx, nodeID, []proto.ImagePresence{observation})
+		return reconcileImagePresence(tx, nodeID, []proto.ImagePresence{*observation})
 	})
 	if err != nil {
 		return nil, 0, err
@@ -105,6 +109,14 @@ func (s *Store) RegisterLocalImage(nodeID, expectedID uint, defaults ImageSeries
 	if createdVersion {
 		s.Bus.PublishChange("image", image.ImageRef, "created")
 	}
-	s.Bus.PublishChange("image", uintKey(image.ID), "node")
+	if observation != nil {
+		s.Bus.PublishChange("image", uintKey(image.ID), "node")
+	}
 	return &series, image.ID, nil
+}
+
+// A delayed copy report for a deleted catalog version cannot attach to a new
+// version created under the same tag, even if inventory already added its row.
+func runtimeImageReportMatches(row ImageNode, st proto.ImageNodeStatus) bool {
+	return st.Source != proto.RuntimeImageCopySource || (row.Source == st.Source && st.TransferID != "" && (row.TransferID == st.TransferID || row.LastTransferID == st.TransferID))
 }

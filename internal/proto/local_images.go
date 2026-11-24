@@ -39,7 +39,20 @@ type RuntimeImageSelection struct {
 	Identity        string `json:"identity"`
 }
 
+type RuntimeImageCopyRequest struct {
+	RuntimeImageSelection
+	TransferID string `json:"transfer_id"`
+}
+
+const (
+	RPCImageRuntimePrepare = "image.runtime_prepare"
+	RPCImageRuntimeCopy    = "image.runtime_copy"
+	RuntimeImageCopySource = "runtime"
+)
+
 type RuntimeImageDetails struct {
+	CopyRequired bool `json:"copy_required,omitempty"`
+
 	RuntimeSizeBytes *int64               `json:"runtime_size_bytes,omitempty"`
 	ImageID          string               `json:"image_id"`
 	Metadata         ArchiveImageMetadata `json:"metadata"`

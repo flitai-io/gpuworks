@@ -109,3 +109,42 @@ func TestImagePresenceClearsAFailedTransferOnceTheImageArrives(t *testing.T) {
 		t.Fatalf("present after a failed copy: %+v", got)
 	}
 }
+
+func TestRuntimeImageCopyOwnsStatusUntilCompletion(t *testing.T) {
+	s, err := Open("file:runtime_copy_status?mode=memory&cache=shared", bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	image, err := s.UpsertImage(&Image{ImageRef: "runner:local", Engine: "vllm"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	node, err := s.RegisterNode("runtime-copy", HashToken("token"), "worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := s.UpsertImageNode(&ImageNode{ImageID: image.ID, NodeID: node.ID, Source: proto.RuntimeImageCopySource, State: ImageStateSyncing, TransferID: "attempt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.UpdateNodeStatus(node.UUID, proto.NodeStatus{Images: []proto.ImagePresence{{ImageRef: image.ImageRef, Present: false}}}); err != nil {
+		t.Fatal(err)
+	}
+	current, err := s.ImageNode(image.ID, node.ID)
+	if err != nil || current.State != ImageStateSyncing || !row.UpdatedAt.Equal(current.UpdatedAt) {
+		t.Fatal("inventory changed transfer heartbeat", current, err)
+	}
+	// A new entry may already have an inventory row when the old copy finishes.
+	if err = s.DB().Model(&ImageNode{}).Where("id = ?", row.ID).Updates(map[string]any{"state": ImageStateAbsent, "transfer_id": "", "source": ""}).Error; err != nil {
+		t.Fatal(err)
+	}
+	late := proto.ImageNodeStatus{State: "present", Source: proto.RuntimeImageCopySource, TransferID: "attempt", ImageID: "old-image"}
+	if err = s.ApplyImageNodeStatus(image.ID, node.ID, late); err != nil {
+		t.Fatal(err)
+	}
+	current, err = s.ImageNode(image.ID, node.ID)
+	if err != nil || current.State != ImageStateAbsent || current.ImageDigestID != "" {
+		t.Fatal("late status overwrote a new observation", current, err)
+	}
+}

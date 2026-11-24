@@ -493,7 +493,7 @@ test("a node runtime image is picked from its namespace, inspected and registere
       });
     }
     if (call.path === endpoint + "/inspect") return json(200, { image_id: identity, metadata: { engine: "vllm", engine_version: "0.30.0", framework: "cuda", framework_version: "13.0", arch: "amd64" } });
-    if (call.path === "/api/v1/images/import") return json(200, { items: [{ ...communitySeries, versions: [{ ...nightlyVersion, image_ref: ref }] }], total: 1 });
+    if (call.path === "/api/v1/images/import") return json(200, { items: [{ ...communitySeries, versions: [{ ...nightlyVersion, image_ref: ref, nodes: [{ node_uuid: "worker-id", state: "syncing", source: "runtime", transferred_bytes: 1024 }] }] }], total: 1 });
     return undefined;
   });
   const drawer = within(await openDrawer(user, "自定义镜像"));
@@ -522,6 +522,7 @@ test("a node runtime image is picked from its namespace, inspected and registere
   await user.click(submit);
   await waitFor(() => assert.equal(calls.filter(c => c.path === "/api/v1/images/import").length, 1));
   const payload = JSON.parse(calls.find(c => c.path === "/api/v1/images/import")!.body!);
+  await screen.findByText(ui.copying);
   assert.deepEqual(payload.runtime_image, {
     node_uuid: "worker-id", runtime: "nerdctl", namespace: "default", target_namespace: "gpuworks", ref, identity,
   });

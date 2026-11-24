@@ -72,6 +72,10 @@ func reconcileImagePresence(tx *gorm.DB, nodeID uint, reports []proto.ImagePrese
 				return err
 			}
 		}
+		// A namespace copy sends its own heartbeat. Inventory must not mask a dead worker.
+		if row.Source == proto.RuntimeImageCopySource && inImageTransfer(row.State) {
+			continue
+		}
 		// An inventory snapshot reports runtime presence, not transfer outcome.
 		// Preserve an active or failed transfer until an explicit retry/update;
 		// otherwise a snapshot racing the terminal result can hide the failure.

@@ -117,7 +117,8 @@ func imageRowActive(row *store.ImageNode) bool {
 // busy until the runtime's own cap, and fails the row: that is what gives the
 // operator a retry.
 func (h *Hub) abandonDirectImageTransfer(ctx context.Context, imageID, nodeID uint, row *store.ImageNode) {
-	if image, err := h.store.GetImage(imageID); err == nil {
+	// Existence by tag cannot confirm the identity selected for a namespace copy.
+	if image, err := h.store.GetImage(imageID); err == nil && row.Source != proto.RuntimeImageCopySource {
 		if node, nodeErr := h.store.NodeByID(nodeID); nodeErr == nil && h.Online(node.UUID) {
 			ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()

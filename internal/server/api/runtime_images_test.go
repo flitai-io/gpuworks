@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -28,31 +30,47 @@ func TestRuntimeImageImportVerifiesNodeBeforeRecordingPresence(t *testing.T) {
 	target := "sha256:" + strings.Repeat("b", 64)
 	var calls []string
 	conflict := false
-	router := Router(Deps{Store: st, AuthSigner: signer, CallNode: func(_ context.Context, uuid, method string, input any) (json.RawMessage, error) {
-		if uuid != node.UUID {
-			t.Fatalf("wrong node %s", uuid)
-		}
-		p := input.(proto.RuntimeImageSelection)
-		calls = append(calls, method)
-		switch method {
-		case proto.RPCImageRuntimeList:
-			if p.Namespace != "default" {
-				t.Fatalf("wrong namespace %s", p.Namespace)
+	online, legacy, copyRequired := true, false, false
+	transfers := 0
+	router := Router(Deps{Store: st, AuthSigner: signer, Online: func(string) bool { return online },
+		ImageFetch: ImageFetchHooks{Pull: func(ctx context.Context, id uint, uuid string, fetch imagecatalog.FetchRequest) (*store.ImageNode, error) {
+			transfers++
+			if item, err := st.GetImage(id); err != nil || fetch.RuntimeImage == nil || item.ImageRef != fetch.RuntimeImage.Ref || uuid != node.UUID {
+				t.Fatal("unregistered or incorrect copy request", id, uuid, fetch)
 			}
-			return json.Marshal(proto.RuntimeImageList{Runtime: "nerdctl", TargetNamespace: "gpuworks", Namespace: "default", Items: []proto.RuntimeImage{{Ref: ref, Identity: target}}})
-		case proto.RPCImageRuntimeInspect, proto.RPCImageRuntimeImport:
-			if p.Namespace != "default" || p.TargetNamespace != "gpuworks" || p.Identity != target || p.Ref != ref {
-				t.Fatalf("wrong selection %+v", p)
+			if _, err := st.ImageNode(id, node.ID); !errors.Is(err, store.ErrNotFound) {
+				t.Fatalf("presence already recorded: %v", err)
 			}
-			if conflict {
-				return nil, &proto.RPCError{Code: proto.ErrorLocalImageConflict}
+			return &store.ImageNode{State: store.ImageStateSyncing}, nil
+		}},
+		CallNode: func(_ context.Context, uuid, method string, input any) (json.RawMessage, error) {
+			if uuid != node.UUID {
+				t.Fatalf("wrong node %s", uuid)
 			}
-			return json.Marshal(proto.RuntimeImageDetails{ImageID: id, Metadata: proto.ArchiveImageMetadata{Engine: "vllm-dcu", EngineVersion: "0.30.0"}})
-		default:
-			t.Fatalf("unexpected RPC %s", method)
-			return nil, nil
-		}
-	}})
+			if legacy {
+				return nil, proto.ErrRPCUnknownMethod
+			}
+			p := input.(proto.RuntimeImageSelection)
+			calls = append(calls, method)
+			switch method {
+			case proto.RPCImageRuntimeList:
+				if p.Namespace != "default" {
+					t.Fatalf("wrong namespace %s", p.Namespace)
+				}
+				return json.Marshal(proto.RuntimeImageList{Runtime: "nerdctl", TargetNamespace: "gpuworks", Namespace: "default", Namespaces: []string{"default", "gpuworks"}, Items: []proto.RuntimeImage{{Ref: ref, Identity: target}}})
+			case proto.RPCImageRuntimeInspect, proto.RPCImageRuntimePrepare:
+				if p.Namespace != "default" || p.TargetNamespace != "gpuworks" || p.Identity != target || p.Ref != ref {
+					t.Fatalf("wrong selection %+v", p)
+				}
+				if conflict {
+					return nil, &proto.RPCError{Code: proto.ErrorLocalImageConflict}
+				}
+				return json.Marshal(proto.RuntimeImageDetails{ImageID: id, CopyRequired: copyRequired, Metadata: proto.ArchiveImageMetadata{Engine: "vllm-dcu", EngineVersion: "0.30.0"}})
+			default:
+				t.Fatalf("unexpected RPC %s", method)
+				return nil, nil
+			}
+		}})
 	request := func(method, path, token, body string, want int) string {
 		t.Helper()
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -73,7 +91,34 @@ func TestRuntimeImageImportVerifiesNodeBeforeRecordingPresence(t *testing.T) {
 	if len(calls) != 0 {
 		t.Fatal("unauthorized RPC")
 	}
-	request("GET", route+"?namespace=default", admin, "", http.StatusOK)
+	for _, endpoint := range []struct{ verb, suffix, body string }{{"GET", "", ""}, {"POST", "/inspect", selection}} {
+		request(endpoint.verb, strings.Replace(route, node.UUID, "missing", 1)+endpoint.suffix, admin, endpoint.body, http.StatusNotFound)
+		online = false
+		got := request(endpoint.verb, route+endpoint.suffix, admin, endpoint.body, http.StatusConflict)
+		if !strings.Contains(got, ErrorNodeOffline) {
+			t.Fatal(got)
+		}
+		online, legacy = true, true
+		got = request(endpoint.verb, route+endpoint.suffix, admin, endpoint.body, http.StatusConflict)
+		if !strings.Contains(got, messages.ErrorAgentUpgradeRequired) {
+			t.Fatal(got)
+		}
+		legacy = false
+	}
+	request("POST", route+"/inspect", admin, "{", http.StatusBadRequest)
+	request("POST", route+"/inspect", admin, "{}", http.StatusBadRequest)
+	list := request("GET", route+"?namespace=default", admin, "", http.StatusOK)
+	var gotList, wantList any
+	if err := json.Unmarshal([]byte(list), &gotList); err != nil {
+		t.Fatal(err)
+	}
+	wire := fmt.Sprintf(`{"runtime":"nerdctl","target_namespace":"gpuworks","namespace":"default","namespaces":["default","gpuworks"],"items":[{"ref":%q,"identity":%q,"size":""}]}`, ref, target)
+	if err := json.Unmarshal([]byte(wire), &wantList); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(gotList, wantList) {
+		t.Fatalf("list response: %s", list)
+	}
 	got := request("POST", route+"/inspect", admin, selection, http.StatusOK)
 	if !strings.Contains(got, `"engine":"vllm"`) {
 		t.Fatalf("preview %s", got)
@@ -87,6 +132,12 @@ func TestRuntimeImageImportVerifiesNodeBeforeRecordingPresence(t *testing.T) {
 		t.Fatalf("catalog changed on conflict: %v", err)
 	}
 	conflict = false
+	copyRequired = true
+	request("POST", "/api/v1/images/import", admin, body, http.StatusOK)
+	if transfers != 1 {
+		t.Fatalf("copy dispatches: %d", transfers)
+	}
+	copyRequired = false
 	request("POST", "/api/v1/images/import", admin, body, http.StatusOK)
 	image, err := st.ImageByRef(ref)
 	if err != nil {
@@ -108,9 +159,9 @@ func TestRuntimeImageImportVerifiesNodeBeforeRecordingPresence(t *testing.T) {
 	}
 }
 
-// The node RPC is the point at which another admin can change the catalog
-// while the first request is copying layers. Use the real store on both sides.
-func TestRuntimeImageRegistrationDuringCopy(t *testing.T) {
+// Another admin can change the catalog while the node verifies an image.
+// Use the real store on both sides of that RPC.
+func TestRuntimeImageCatalogChangesDuringVerification(t *testing.T) {
 	for _, scenario := range []string{"new version", "concurrent registration", "deleted", "replaced", "inherited framework missing version"} {
 		t.Run(scenario, func(t *testing.T) {
 			st, _, _ := newSessionRouter(t)
@@ -145,7 +196,7 @@ func TestRuntimeImageRegistrationDuringCopy(t *testing.T) {
 			calls := 0
 			router := Router(Deps{Store: st, AuthSigner: signer, CallNode: func(_ context.Context, uuid, method string, _ any) (json.RawMessage, error) {
 				calls++
-				if uuid != node.UUID || method != proto.RPCImageRuntimeImport {
+				if uuid != node.UUID || method != proto.RPCImageRuntimePrepare {
 					t.Fatal("unexpected RPC", uuid, method)
 				}
 				switch scenario {

@@ -151,6 +151,8 @@
   "nodeTable": {
     "localOption": "从节点本地文件导入…",
     "localAction": "导入本地文件…",
+    "sourceRuntime": "节点已有镜像",
+    "namespaceCopy": "已复制 {{size}}",
     "sourceLocal": "节点本地文件",
     "localLoading": "正在加载镜像…",
     "localDialog": {
@@ -241,7 +243,8 @@
       "ready": "已读取镜像信息，可补齐缺失字段后添加。",
       "empty": "此处没有可选的带标签镜像。",
       "failed": "读取节点镜像失败，请刷新后重试。",
-      "added": "已添加镜像，该节点已持有此镜像。"
+      "copying": "已登记镜像，可在节点分布查看复制进度。",
+      "added": "已登记镜像。"
     },
     "method": "导入方式",
     "local": {

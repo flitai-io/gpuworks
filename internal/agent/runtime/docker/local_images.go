@@ -20,7 +20,7 @@ func (d *Driver) ListLocalImages(ctx context.Context, ns string) (proto.RuntimeI
 	return proto.RuntimeImageList{Runtime: d.Name(), Items: runtime.ParseLocalImages(string(out))}, nil
 }
 
-func (d *Driver) ResolveLocalImage(ctx context.Context, p proto.RuntimeImageSelection, _ bool) (runtime.ImageInspection, error) {
+func (d *Driver) ResolveLocalImage(ctx context.Context, p proto.RuntimeImageSelection, _ *runtime.LocalImageCopy) (runtime.ImageInspection, error) {
 	if p.Runtime != d.Name() || p.Namespace != "" || p.TargetNamespace != "" {
 		return runtime.ImageInspection{}, runtime.ErrLocalImageChanged
 	}

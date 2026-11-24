@@ -364,7 +364,8 @@ export default function ImagesPage() {
         setDetail(series);
         setSelectedVersionID(version.id);
         if (!archive) {
-          toast.success(t("import.runtime.added"));
+          const node = version.nodes?.find((item) => item.node_uuid === selected?.node_uuid);
+          toast.success(t(node?.state === "syncing" ? "import.runtime.copying" : "import.runtime.added"));
           return;
         }
         setMode(version, archive.node, "local");

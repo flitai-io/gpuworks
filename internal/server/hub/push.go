@@ -50,6 +50,9 @@ func (h *Hub) PullImage(ctx context.Context, imageID uint, targetNodeUUID string
 	if !h.Online(target.UUID) {
 		return nil, errors.New("target node is offline")
 	}
+	if fetch.RuntimeImage != nil {
+		return h.copyRuntimeImage(ctx, image, target, *fetch.RuntimeImage)
+	}
 	if fetch.IsLocalFetch() {
 		return h.loadImageArchivePath(ctx, image, target, fetch)
 	}
