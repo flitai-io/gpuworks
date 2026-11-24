@@ -215,7 +215,9 @@ func NewWithModelEndpoint(t testing.TB, endpoint string) *Env {
 // NewOnDisk puts the control-plane database on a real file instead of in
 // memory. An in-memory database never fsyncs, so it cannot show what write
 // volume costs; a test that measures durable-write pressure has to use this.
-// The returned Env exposes the file path through DBPath.
+// It is also the harness for a test that restarts the server (RestartServer):
+// a file survives the connection that opened it. The returned Env exposes the
+// file path through DBPath.
 func NewOnDisk(t testing.TB) *Env {
 	t.Helper()
 	return newEnv(t, "", filepath.Join(t.TempDir(), "gpuworks.db"), false)
@@ -393,6 +395,12 @@ func (e *Env) StopServer(t testing.TB) {
 
 // RestartServer reuses the assembled app and its SQLite store, binding the
 // listener to its previous concrete address so existing agents reconnect.
+//
+// Create the Env with NewOnDisk. A ":memory:" database lives only as long as
+// its one connection, and database/sql discards a connection whose
+// transaction's context is canceled; stopping the server cancels the contexts
+// of the transactions still in flight, so the restarted server could find an
+// empty database ("no such table: nodes") and never bring its agents back.
 func (e *Env) RestartServer(t testing.TB) {
 	t.Helper()
 	e.StopServer(t)

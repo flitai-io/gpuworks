@@ -24,7 +24,7 @@ import (
 // the 5 s outage plus the time until the node came back online.
 func TestInstanceLogsWrittenWhileTheServerIsDownReachTheLogCenter(t *testing.T) {
 	const perSec = 20
-	env := testenv.New(t)
+	env := testenv.NewOnDisk(t)
 	node := env.AddNode("replay", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"))
 	node.Driver.ShareEnginePorts()
 	var mu sync.Mutex

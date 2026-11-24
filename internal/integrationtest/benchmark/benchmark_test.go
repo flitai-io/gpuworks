@@ -241,7 +241,7 @@ func TestAgentSaturationSearchStopsBeforeMaximumOnPlateau(t *testing.T) {
 func TestAgentBenchmarkStatusRecoversAfterServerRestart(t *testing.T) {
 	engine := httptest.NewServer(fakehandler.New(fakehandler.Options{Model: "fake-model", PromptTokens: 4, CompletionTokens: 2, ResponseText: "xy", TTFTDelay: 250 * time.Millisecond}))
 	defer engine.Close()
-	env := testenv.New(t)
+	env := testenv.NewOnDisk(t)
 	node := env.AddNode("benchmark-reconnect-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100"}), testenv.WithDriverName("fake"))
 	env.WaitNodeOnline(t, "benchmark-reconnect-node")
 	body, _ := json.Marshal(map[string]any{"name": "agent reconnect", "target_kind": "external", "base_url": engine.URL, "model": "fake-model", "load_origin": node.UUID, "tokenizer_ref": benchmarkTestTokenizer(t), "dataset": map[string]any{"kind": "random", "input_tokens": 4, "output_tokens": 2}, "mode": "grid", "search": map[string]any{"concurrency": []int{1}, "isl": []int{4}, "osl": []int{2}, "requests_per_point_multiplier": 4}})

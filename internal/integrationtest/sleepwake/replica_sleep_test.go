@@ -61,7 +61,7 @@ func TestOneReplicaSleepsWhileTheOtherServes(t *testing.T) {
 	seen := &arrivals{}
 	driver := testenv.NewFakeDriver("fake")
 	driver.SetEngineHandler(seen.handler)
-	env := testenv.New(t)
+	env := testenv.NewOnDisk(t)
 	env.AddNode("replica-sleep-node", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriver(driver))
 	env.WaitNodeOnline(t, "replica-sleep-node")
 	nodes, err := env.Store().ListNodes()

@@ -17,7 +17,7 @@ import (
 // TestSleepWakeRouteAndProxy exercises the complete L1 path with the real app,
 // controller, agent and proxy.  Only the GPU probe and runtime are simulated.
 func TestSleepWakeRouteAndProxy(t *testing.T) {
-	env := testenv.New(t)
+	env := testenv.NewOnDisk(t)
 	env.AddNode("sleep-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
 	env.WaitNodeOnline(t, "sleep-node")
 	nodes, err := env.Store().ListNodes()

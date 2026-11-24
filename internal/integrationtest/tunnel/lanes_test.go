@@ -333,7 +333,7 @@ func TestLanes_WeakNetworkMatrix(t *testing.T) {
 // and the data lane re-attaches to the new ctrl session (a fresh SessionID), so
 // no stale reject is left dangling.
 func TestLanes_RestartServer(t *testing.T) {
-	env := testenv.New(t)
+	env := testenv.NewOnDisk(t)
 	node := env.AddNode("restsrv", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}))
 	env.WaitNodeOnline(t, node.Name)
 	waitDataLane(t, env, node.UUID, "attached")
