@@ -358,7 +358,16 @@ func (h *Hub) trackImageTransfer(ctx context.Context, imageID, nodeID uint, tran
 			}
 			_, _ = h.store.UpdateImageSyncProgressIfActive(imageID, nodeID, transferID, sizeBytes, done, rate)
 		}
-		bytes, copyErr := copy(copyCtx, func(done int64) { persistProgress(done, false) })
+		bytes, copyErr := copy(copyCtx, func(done int64) {
+			// The counter that reaches the declared size is the final
+			// observation, and it must be written now: the copy callback runs
+			// before the last chunk is handed to the target, so the target's
+			// own present report cannot land first and deactivate the row.
+			// Throttled, the last sample the row keeps is whatever the first
+			// second happened to see, and a present image would be recorded as
+			// a few KiB transferred.
+			persistProgress(done, sizeBytes > 0 && done >= sizeBytes)
+		})
 		if copyErr != nil {
 			persistProgress(bytes, true)
 			_ = h.store.FailImageSyncIfActive(imageID, nodeID, transferID, copyErr.Error())
