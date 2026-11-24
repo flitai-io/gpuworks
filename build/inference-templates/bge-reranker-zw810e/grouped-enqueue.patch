@@ -1,0 +1,216 @@
+--- a/vllm/v1/engine/__init__.py
++++ b/vllm/v1/engine/__init__.py
+@@ -257,6 +257,7 @@
+     EXECUTOR_FAILED = b"\x04"
+     # Sentinel to wake up input_queue.get() during shutdown.
+     WAKEUP = b"\x05"
++    ADD_POOLING_BATCH = b"\x06"
+ 
+ 
+ class ReconfigureDistributedRequest(msgspec.Struct):
+--- a/vllm/v1/engine/core_client.py
++++ b/vllm/v1/engine/core_client.py
+@@ -1106,6 +1106,14 @@
+     async def add_request_async(self, request: EngineCoreRequest) -> None:
+         request.client_index = self.client_index
+         await self._send_input(EngineCoreRequestType.ADD, request)
++        self._ensure_output_queue_task()
++
++    async def add_pooling_batch_async(
++        self, requests: list[EngineCoreRequest]
++    ) -> None:
++        for request in requests:
++            request.client_index = self.client_index
++        await self._send_input(EngineCoreRequestType.ADD_POOLING_BATCH, requests)
+         self._ensure_output_queue_task()
+ 
+     async def abort_requests_async(self, request_ids: list[str]) -> None:
+--- a/vllm/v1/engine/core.py
++++ b/vllm/v1/engine/core.py
+@@ -1414,6 +1414,10 @@
+             if self._reject_add_in_shutdown(req):
+                 return
+             self.add_request(req, request_wave)
++        elif request_type == EngineCoreRequestType.ADD_POOLING_BATCH:
++            for req, request_wave in request:
++                if not self._reject_add_in_shutdown(req):
++                    self.add_request(req, request_wave)
+         elif request_type == EngineCoreRequestType.ABORT:
+             self.abort_requests(request)
+         elif request_type == EngineCoreRequestType.UTILITY:
+@@ -1527,6 +1531,7 @@
+         add_request_decoder = MsgpackDecoder(
+             EngineCoreRequest, oob_tensor_provider=self.tensor_ipc_receiver
+         )
++        pooling_batch_decoder = MsgpackDecoder(list[EngineCoreRequest])
+         generic_decoder = MsgpackDecoder(oob_tensor_provider=self.tensor_ipc_receiver)
+ 
+         with ExitStack() as stack, zmq.Context() as ctx:
+@@ -1597,6 +1602,16 @@
+                             request = self.preprocess_add_request(req)
+                         except Exception:
+                             self._handle_request_preproc_error(req)
++                            continue
++                    elif request_type == EngineCoreRequestType.ADD_POOLING_BATCH:
++                        pool_requests = pooling_batch_decoder.decode(data_frames)
++                        try:
++                            request = [
++                                self.preprocess_add_request(req) for req in pool_requests
++                            ]
++                        except Exception:
++                            for req in pool_requests:
++                                self._handle_request_preproc_error(req)
+                             continue
+                     else:
+                         request = generic_decoder.decode(data_frames)
+--- a/vllm/v1/engine/async_llm.py
++++ b/vllm/v1/engine/async_llm.py
+@@ -6,6 +6,7 @@
+ import time
+ import warnings
+ from collections.abc import AsyncGenerator, Iterable, Mapping
++from contextlib import suppress
+ from copy import copy
+ from typing import Any
+ 
+@@ -35,10 +36,10 @@
+ from vllm.tracing import init_tracer
+ from vllm.transformers_utils.config import maybe_register_config_serialize_by_value
+ from vllm.usage.usage_lib import UsageContext
+-from vllm.utils.async_utils import cancel_task_threadsafe
++from vllm.utils.async_utils import cancel_task_threadsafe, merge_async_iterators
+ from vllm.utils.collection_utils import as_list
+ from vllm.v1.engine import EngineCoreRequest, PauseMode
+-from vllm.v1.engine.core_client import EngineCoreClient
++from vllm.v1.engine.core_client import AsyncMPClient, EngineCoreClient
+ from vllm.v1.engine.exceptions import EngineDeadError, EngineGenerateError
+ from vllm.v1.engine.input_processor import InputProcessor
+ from vllm.v1.engine.output_processor import OutputProcessor, RequestOutputCollector
+@@ -294,6 +295,8 @@
+         prompt_text: str | None = None,
+         reasoning_ended: bool | None = None,
+         reasoning_parser_kwargs: dict[str, Any] | None = None,
++        *,
++        _pooling_batch: list[EngineCoreRequest] | None = None,
+     ) -> RequestOutputCollector:
+         """Add new request to the AsyncLLM."""
+ 
+@@ -378,6 +381,11 @@
+         # Use cloned params that may have been updated in process_inputs()
+         params = request.params
+ 
++        if _pooling_batch is not None:
++            assert is_pooling
++            self.output_processor.add_request(request, prompt_text, None, 0, queue)
++            _pooling_batch.append(request)
++            return queue
+         if is_pooling or params.n == 1:
+             await self._add_request(request, prompt_text, None, 0, queue)
+             return queue
+@@ -800,6 +808,56 @@
+         """Return whether the engine is currently paused."""
+         return await self.engine_core.is_scheduler_paused_async()
+ 
++    def supports_grouped_pooling(self) -> bool:
++        return (
++            self.vllm_config.parallel_config.data_parallel_size == 1
++            and type(self.engine_core) is AsyncMPClient
++        )
++
++    async def encode_pooling_batch(
++        self,
++        inputs: list[tuple[EngineInput, PoolingParams, str]],
++        trace_headers: Mapping[str, str] | None = None,
++        priority: int = 0,
++    ) -> AsyncGenerator[tuple[int, PoolingRequestOutput], None]:
++        """Stage all collectors, then send one message to one EngineCore."""
++        client = self.engine_core
++        assert type(client) is AsyncMPClient and self.supports_grouped_pooling()
++
++        async def outputs(queue: RequestOutputCollector):
++            while True:
++                out = queue.get_nowait() or await queue.get()
++                assert isinstance(out, PoolingRequestOutput)
++                yield out
++                if out.finished:
++                    return
++
++        batch: list[EngineCoreRequest] = []
++        queues: list[RequestOutputCollector] = []
++        complete = False
++        try:
++            for prompt, params, request_id in inputs:
++                queues.append(
++                    await self.add_request(
++                        request_id, prompt, params, trace_headers=trace_headers,
++                        priority=priority, _pooling_batch=batch,
++                    )
++                )
++            await client.add_pooling_batch_async(batch)
++            async for index, out in merge_async_iterators(*(outputs(q) for q in queues)):
++                yield index, out
++            complete = True
++        except (EngineDeadError, ValueError):
++            raise
++        except Exception as error:
++            raise EngineGenerateError() from error
++        finally:
++            if not complete and queues and not self.errored:
++                with suppress(Exception):
++                    await self.abort([q.request_id for q in queues], internal=True)
++            for q in queues:
++                q.close()
++
+     async def encode(
+         self,
+         prompt: PromptType | EngineInput,
+--- a/vllm/entrypoints/pooling/base/serving.py
++++ b/vllm/entrypoints/pooling/base/serving.py
+@@ -145,6 +145,21 @@
+         else:
+             pooling_params.verify(self.model_config)
+ 
++        from ..scoring.protocol import RerankRequest
++
++        engine = self.engine_client
++        supports_group = getattr(engine, "supports_grouped_pooling", None)
++        grouped = (
++            isinstance(ctx.request, RerankRequest)
++            and self.model_config.architecture == "XLMRobertaForSequenceClassification"
++            and isinstance(ctx.request.documents, list)
++            and len(ctx.request.documents) == len(ctx.engine_inputs) == 4
++            and all(isinstance(doc, str) for doc in ctx.request.documents)
++            and ctx.lora_request is None
++            and supports_group is not None
++            and supports_group()
++        )
++        batch = []
+         for i, engine_input in enumerate(ctx.engine_inputs):
+             prompt_request_id = (
+                 f"{ctx.request_id}-{i}"
+@@ -164,6 +179,10 @@
+                 params=params,
+                 lora_request=ctx.lora_request,
+             )
++
++            if grouped:
++                batch.append((engine_input, params, prompt_request_id))
++                continue
+ 
+             generator = self.engine_client.encode(
+                 engine_input,
+@@ -176,7 +195,13 @@
+ 
+             generators.append(generator)
+ 
+-        ctx.result_generator = merge_async_iterators(*generators)
++        if grouped:
++            ctx.result_generator = engine.encode_pooling_batch(
++                batch, trace_headers=trace_headers,
++                priority=getattr(ctx.request, "priority", 0),
++            )
++        else:
++            ctx.result_generator = merge_async_iterators(*generators)
+ 
+     async def _collect_batch(
+         self,
