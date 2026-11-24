@@ -103,7 +103,7 @@ func TestRestartRefusesAnAddressStillHeldAfterTheStop(t *testing.T) {
 	h := newHarnessWithPortProbe(t, t.TempDir(), nil)
 	h.writeExistingInstall("v1.0.0")
 	h.supervisedByNohup()
-	addr := holdAddr(t)
+	addr := listenOnLoopback(t).Addr().String()
 	h.listensOn(addr)
 
 	_, err := h.installer.Restart(context.Background())

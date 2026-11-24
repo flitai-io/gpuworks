@@ -418,7 +418,8 @@ func (h *harness) writeExistingInstall(releaseID string) existingInstall {
 	writeFile(h.t, h.layout.Binary(), "old binary", 0o755)
 	writeFile(h.t, filepath.Join(h.layout.DataDir, "gpuworks.db"), "old database", 0o600)
 	writeFile(h.t, filepath.Join(h.layout.DataDir, "master.key"), "old key", 0o600)
-	existing := existingInstall{ReleaseID: releaseID, Addr: net.JoinHostPort("127.0.0.1", serverconfig.DefaultPort)}
+	// A non-default port makes a lost console setting visible on read or restore.
+	existing := existingInstall{ReleaseID: releaseID, Addr: "127.0.0.1:19123"}
 	h.writeConfig(serverconfig.File{
 		Listen:  serverconfig.Listen{Console: []string{existing.Addr}},
 		DataDir: h.layout.DataDir,

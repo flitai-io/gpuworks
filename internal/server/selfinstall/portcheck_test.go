@@ -8,20 +8,19 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/serverconfig"
 )
 
-// holdAddr listens on a loopback port for the rest of the test, standing in
-// for another installation's server that keeps the address this one binds.
-func holdAddr(t *testing.T) string {
+func listenOnLoopback(t *testing.T) net.Listener {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	t.Cleanup(func() { _ = ln.Close() })
-	return ln.Addr().String()
+	return ln
 }
 
 // listensOn points the installation's server.yaml at addr.
@@ -32,6 +31,28 @@ func (h *harness) listensOn(addr string) {
 	h.writeConfig(cfg)
 }
 
+func TestWaitAddrReleasedAcceptsAPortReleasedBetweenProbes(t *testing.T) {
+	listener := listenOnLoopback(t)
+	h := newHarnessWithPortProbe(t, t.TempDir(), nil)
+	released := false
+	h.installer.deps.Sleep = func(context.Context, time.Duration) {
+		if released {
+			return
+		}
+		if err := listener.Close(); err != nil {
+			t.Fatal(err)
+		}
+		released = true
+	}
+
+	if err := h.installer.waitAddrReleased(context.Background(), listener.Addr().String(), "upgrade"); err != nil {
+		t.Fatal(err)
+	}
+	if !released {
+		t.Fatal("port reported as released while the listener was still open")
+	}
+}
+
 // Two installations on one host bound to one port: stopping this one leaves
 // the address held, so the new binary could never bind it. The upgrade names
 // the holder and stops before the backup, and brings back the service it
@@ -39,7 +60,7 @@ func (h *harness) listensOn(addr string) {
 func TestUpgradeRefusesAnAddressStillHeldAfterTheStop(t *testing.T) {
 	h := newHarnessWithPortProbe(t, t.TempDir(), nil)
 	h.writeExistingInstall("v1.0.0")
-	addr := holdAddr(t)
+	addr := listenOnLoopback(t).Addr().String()
 	h.listensOn(addr)
 	h.useSite("v2.0.0", []byte("new binary"))
 
@@ -84,7 +105,7 @@ func TestUpgradeLeavesAStoppedInstallationStoppedWhenItsAddressIsHeld(t *testing
 	h := newHarnessWithPortProbe(t, t.TempDir(), nil)
 	h.writeExistingInstall("v1.0.0")
 	h.supervisedByNohup()
-	h.listensOn(holdAddr(t))
+	h.listensOn(listenOnLoopback(t).Addr().String())
 	h.useSite("v2.0.0", []byte("new binary"))
 
 	if _, err := h.installer.Upgrade(context.Background(), h.upgradeReq()); err == nil || !strings.Contains(err.Error(), "still in use") {
