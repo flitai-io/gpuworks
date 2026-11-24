@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -26,12 +27,11 @@ func (h *attemptCaptureHub) OpenTunnel(ctx context.Context, node, dst string) (n
 	return h.dialTestHub.OpenTunnel(ctx, node, dst)
 }
 
-func TestCapturedAttemptsJoinEngineHeadersAndTunnel(t *testing.T) {
-	received := make(chan http.Header, 3)
+func TestCapturedAttemptsJoinGatewayAndTunnel(t *testing.T) {
+	var failNext atomic.Bool
 	engine := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
-		received <- r.Header.Clone()
-		if r.Header.Get(debugAttemptHeader) == "1" {
+		if failNext.Swap(false) {
 			conn, _, err := w.(http.Hijacker).Hijack()
 			if err != nil {
 				t.Error(err)
@@ -56,34 +56,33 @@ func TestCapturedAttemptsJoinEngineHeadersAndTunnel(t *testing.T) {
 	hub := &attemptCaptureHub{dialTestHub: p.hub.(dialTestHub), traces: make(chan *proto.TunnelTrace, 3)}
 	p.hub = hub
 	p.rp.Transport.(*retryTransport).hub = hub
-	sendRequest := func() {
+	sendRequest := func() string {
 		req := httptest.NewRequest("POST", chatPath, strings.NewReader(`{"model":"omni"}`))
 		req.Header.Set("Authorization", "Bearer "+key)
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Request-ID", "example-request")
-		req.Header.Set(debugAttemptHeader, "999")
 		out := httptest.NewRecorder()
 		p.Handler()(out, req)
 		if out.Code != http.StatusOK {
 			t.Fatalf("status %d", out.Code)
 		}
+		return out.Header().Get("X-Request-ID")
 	}
 	sendRequest()
-	if (<-received).Get(debugAttemptHeader) != "" || <-hub.traces != nil {
+	if <-hub.traces != nil {
 		t.Fatal("uncaptured request enabled attempt diagnostics")
 	}
 
 	recorder := &oneCaptureRecorder{}
 	p.SetRequestRecorder(recorder)
-	sendRequest()
-	if len(received) != 2 || len(hub.traces) != 2 {
-		t.Fatal("expected two captured engine and tunnel attempts")
+	failNext.Store(true)
+	id := sendRequest()
+	if id == "" || len(hub.traces) != 2 {
+		t.Fatal("expected a request ID and two captured tunnel attempts")
 	}
-	for i, number := range []string{"1", "2"} {
-		headers, trace := <-received, <-hub.traces
-		if headers.Get("X-Request-ID") != "example-request" || headers.Get(debugAttemptHeader) != number ||
-			trace == nil || trace.RequestID != "example-request" || trace.Attempt != i+1 {
-			t.Fatalf("unmatched attempt %d", i+1)
+	for number := 1; number <= 2; number++ {
+		trace := <-hub.traces
+		if trace == nil || trace.RequestID != id || trace.Attempt != number {
+			t.Fatalf("unmatched tunnel attempt %d: %v", number, trace)
 		}
 	}
 	attempts := capturedAttemptEvents(t, recorder)
@@ -91,7 +90,7 @@ func TestCapturedAttemptsJoinEngineHeadersAndTunnel(t *testing.T) {
 		t.Fatalf("logged attempts: %v", attempts)
 	}
 	for i, e := range attempts {
-		if e["request_id"] != "example-request" || e["attempt"] != float64(i+1) || e["client_canceled"] != false || e["body_replayable"] != true {
+		if e["request_id"] != id || e["attempt"] != float64(i+1) || e["client_canceled"] != false || e["body_replayable"] != true {
 			t.Fatalf("invalid attempt %v", e)
 		}
 	}

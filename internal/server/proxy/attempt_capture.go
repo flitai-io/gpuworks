@@ -4,13 +4,10 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptrace"
-	"strconv"
 	"sync/atomic"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 )
-
-const debugAttemptHeader = "X-GPUWorks-Debug-Attempt"
 
 func (t *retryTransport) roundTripAttempt(req *http.Request, c candidate, number int) (*http.Response, error) {
 	// DialContext can outlive RoundTrip on cancellation. Give it a snapshot
@@ -31,11 +28,8 @@ func (t *retryTransport) roundTripAttempt(req *http.Request, c candidate, number
 	ctx = proto.WithTunnelTrace(ctx, trace)
 	var firstByte atomic.Bool
 	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{GotFirstResponseByte: func() { firstByte.Store(true) }})
-	upstream := req.Clone(ctx)
-	upstream.Header.Set("X-Request-ID", trace.RequestID)
-	upstream.Header.Set(debugAttemptHeader, strconv.Itoa(number))
 
-	resp, err := t.guard.roundTrip(t.base, upstream, c)
+	resp, err := t.guard.roundTrip(t.base, req.WithContext(ctx), c)
 	event := map[string]any{
 		"t": "attempt", "request_id": trace.RequestID, "attempt": number, "instance_uuid": c.instanceUUID,
 		"received_first_byte": firstByte.Load(), "client_canceled": req.Context().Err() != nil,

@@ -235,7 +235,6 @@ func New(st *store.Store, networks Networks, hub Tunneler, log *slog.Logger, max
 				r.URL.Path, r.URL.RawPath = t.upstreamPath, ""
 			}
 			stripBrowserContext(r.Header)
-			r.Header.Del(debugAttemptHeader)
 			setTraceHeaders(r.Context(), r.Header)
 		},
 		FlushInterval: -1,
