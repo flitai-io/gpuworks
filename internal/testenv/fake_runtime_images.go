@@ -116,6 +116,9 @@ func (d *FakeDriver) LoadImage(_ context.Context, _ string, r io.Reader) error {
 	}
 	d.mu.Lock()
 	d.loadedAny = true
+	if d.imageFixedByLoad {
+		d.imageAbsent, d.imageFixedByLoad = false, false
+	}
 	d.mu.Unlock()
 	return nil
 }

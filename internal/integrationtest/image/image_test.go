@@ -97,7 +97,10 @@ func TestImageRelayTransfersArchiveAndVerifiesLoad(t *testing.T) {
 	// RetryImageSync must be a real recovery path, not merely an API alias for
 	// the first attempt.  Make the runtime image available and ask the public
 	// retry endpoint to re-run the source→target relay.
-	failing.Driver.SetImageAbsent(false)
+	// The image appears with the load the retry runs. Making it visible now
+	// would let the node's next presence report mark the row present before
+	// the retry arrives, and the retry would then pull instead of relaying.
+	failing.Driver.FixImageAtNextLoad()
 	retried, err := api.PostJSON("/api/v1/images/"+strconv.FormatUint(uint64(img.ID), 10)+"/nodes/"+failingNode.UUID+"/sync/retry", nil)
 	if err != nil || retried.StatusCode != http.StatusAccepted {
 		data := []byte{}
