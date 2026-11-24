@@ -345,6 +345,9 @@ var imageArchiveHandlers = map[string]func(*NodeRuntime, context.Context, json.R
 
 // OnRPC handles short-action RPCs.
 func (n *NodeRuntime) OnRPC(ctx context.Context, method string, params json.RawMessage) (any, error) {
+	if method == proto.RPCImageRuntimeList || method == proto.RPCImageRuntimeInspect || method == proto.RPCImageRuntimeImport {
+		return runtimeImageRPC(ctx, n.runtimeDriver(), &n.imagePullMu, method, params)
+	}
 	if handle := imageArchiveHandlers[method]; handle != nil {
 		return handle(n, ctx, params)
 	}

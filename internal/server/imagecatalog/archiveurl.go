@@ -40,9 +40,14 @@ type ArchiveContents = imagearchive.Contents
 // including metadata received from agents running an older version.
 func NormalizeArchiveEngines(byTag map[string]imagearchive.ImageMetadata) {
 	for tag, metadata := range byTag {
-		metadata.Engine = engines.CatalogEngineForLabel(metadata.Engine)
-		byTag[tag] = metadata
+		byTag[tag] = imagearchive.ImageMetadata(CatalogImageMetadata(proto.ArchiveImageMetadata(metadata)))
 	}
+}
+
+// CatalogImageMetadata keeps runtime and archive previews on the same engine dictionary.
+func CatalogImageMetadata(metadata proto.ArchiveImageMetadata) proto.ArchiveImageMetadata {
+	metadata.Engine = engines.CatalogEngineForLabel(metadata.Engine)
+	return metadata
 }
 
 // FetchRequest is how one node is asked to acquire an image. Source is empty

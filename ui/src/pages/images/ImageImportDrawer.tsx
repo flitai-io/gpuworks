@@ -15,12 +15,14 @@ import {
   api,
   type ImageArchivePreview,
   type ArchiveImageMetadata,
+  type NodeImageSelection,
   type ImageCatalogEntry,
   type ImageEngineOption,
 } from "../../api";
 import { useForm } from "react-hook-form";
 import { OptionSelect } from "../../ui-kit/OptionSelect";
 import ImageNodeArchiveFields, { type NodeArchive } from "./ImageNodeArchiveFields";
+import RuntimeImagePicker from "./RuntimeImagePicker";
 import ImageArchiveURLImport from "./ImageArchiveURLImport";
 import ImageCommunityBrowser from "./ImageCommunityBrowser";
 import { OutboundHostAccess, useOutboundHostAccess } from "../../components/OutboundHostAccess";
@@ -32,7 +34,7 @@ type Props = {
   onClose: () => void;
   form: FormInstance;
   importing: boolean;
-  importCustom: (archive?: NodeArchive) => Promise<void> | void;
+  importCustom: (source?: NodeArchive | NodeImageSelection) => Promise<void> | void;
   hasExplicitTag: (ref: string) => boolean;
   sourceTab: "community" | "custom";
   /** Catalog versions searched for a reference matching a pasted archive. */
@@ -67,6 +69,8 @@ export default function ImageImportDrawer({
   const [previewing, setPreviewing] = useState(false);
   const [importMethod, setImportMethod] = useState("local");
   const loadNodeFile = open && sourceTab === "custom" && importMethod === "local";
+  const fromRuntime = open && sourceTab === "custom" && importMethod === "runtime";
+  const [selectedImage, setSelectedImage] = useState<NodeImageSelection>();
   const archive = useForm<NodeArchive>({ defaultValues: { node: "", path: "" } });
   const previous = useRef<{ fields: ArchiveImageMetadata & { image_ref: string }; url?: string } | null>(null);
   const clearPreview = useCallback(() => {
@@ -81,6 +85,12 @@ export default function ImageImportDrawer({
       form.setFieldValue("registry_sources", sources.filter(source => source !== url));
     }
   }, [form]);
+  function clearRuntimeSelection() {
+    setSelectedImage(undefined);
+    clearPreview();
+    form.setFieldsValue({ image_ref: undefined, engine: undefined, engine_version: undefined,
+      framework: undefined, framework_version: undefined, arch: "multi" });
+  }
   const prefill = (ref: string, metadata?: ArchiveImageMetadata, url?: string) => {
     clearPreview();
     const fields = { ...metadata, image_ref: ref };
@@ -94,14 +104,19 @@ export default function ImageImportDrawer({
     if (!open) {
       clearPreview();
       setImportMethod("local");
+      setSelectedImage(undefined);
       archive.reset();
     }
   }, [open, archive, clearPreview]);
-  const sources = Form.useWatch("registry_sources", { form, preserve: true }) as string[] | undefined;
-  const access = useOutboundHostAccess((sources ?? []).filter(isArchiveURL), open);
+  const fields = Form.useWatch(values => ({
+    sources: (values.registry_sources ?? []) as string[],
+    hasMetadata: Boolean(values.engine && values.framework && values.framework_version?.trim()),
+  }), { form, preserve: true });
+  const runtimeReady = selectedImage && fields?.hasMetadata;
+  const access = useOutboundHostAccess((fields?.sources ?? []).filter(isArchiveURL), open && !fromRuntime);
   const saving = useRef(false);
   const save = async () => {
-    if (saving.current || importing || previewing) return;
+    if (saving.current || importing || previewing || (fromRuntime && !runtimeReady)) return;
     saving.current = true;
     setSavePhase("validating");
     try {
@@ -109,8 +124,8 @@ export default function ImageImportDrawer({
       await form.validateFields();
       setSavePhase("authorizing");
       const file = loadNodeFile ? archive.getValues() : undefined;
-      await access.authorize();
-      await importCustom(file);
+      if (!fromRuntime) await access.authorize();
+      await importCustom(fromRuntime ? selectedImage : file);
     } catch { /* The form and permission control retain their own errors. */ }
     finally { saving.current = false; setSavePhase("idle"); }
   };
@@ -155,19 +170,25 @@ export default function ImageImportDrawer({
               aria-label={t("import.method")}
               value={importMethod}
               onChange={method => {
-                clearPreview();
+                if (method === "runtime" || fromRuntime) clearRuntimeSelection();
+                else clearPreview();
                 setImportMethod(method);
               }}
               disabled={importing || savePhase !== "idle"}
               options={[
                 { value: "local", label: t("import.local.enable") },
                 { value: "url", label: t("import.url.title") },
+                { value: "runtime", label: t("import.runtime.title") },
               ]}
             />
           </div>
         )}
         <fieldset disabled={importing || savePhase !== "idle"}>
-          {loadNodeFile ? (
+          {fromRuntime ? (
+            <RuntimeImagePicker disabled={importing || savePhase !== "idle"}
+              onClear={clearRuntimeSelection}
+              onSelect={(selection, metadata) => { prefill(selection.ref, metadata); setSelectedImage(selection); }} />
+          ) : loadNodeFile ? (
             <ImageNodeArchiveFields
               archive={archive}
               busy={previewing}
@@ -189,12 +210,12 @@ export default function ImageImportDrawer({
             />
           )}
         </fieldset>
-        <Alert
+        {!fromRuntime && <Alert
           type="info"
           showIcon
           message={t("import.customNotice")}
           description={t("import.customDescription")}
-        />
+        />}
         <Form form={form} layout="vertical" initialValues={{ arch: "multi", rolling_tag: false }}>
           <Form.Item label={t("import.seriesName")} name="series_name">
             <Input placeholder={t("import.seriesNamePlaceholder")} />
@@ -202,6 +223,7 @@ export default function ImageImportDrawer({
           <Form.Item
             label={t("import.imageRef")}
             name="image_ref"
+            hidden={fromRuntime}
             rules={[
               { required: true, message: t("import.imageRefRequired") },
               {
@@ -296,13 +318,14 @@ export default function ImageImportDrawer({
           </Row>
           <Form.Item
             label={t("import.registrySources")}
+            hidden={fromRuntime}
             name="registry_sources"
             extra={t("import.registrySourcesHelp")}
           >
             <Select mode="tags" tokenSeparators={[",", " "]} placeholder="https://containerimages.example/runner.tar" />
           </Form.Item>
-          <OutboundHostAccess access={access} />
-          <Button type="primary" disabled={previewing} loading={importing || authorizing} onClick={() => void save()}>
+          {!fromRuntime && <OutboundHostAccess access={access} />}
+          <Button type="primary" disabled={previewing || (fromRuntime && !runtimeReady)} loading={importing || authorizing} onClick={() => void save()}>
             {t("import.addImage")}
           </Button>
         </Form>

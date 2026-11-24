@@ -88,6 +88,27 @@ export interface ArchiveImageMetadata {
   arch?: string;
 }
 
+export interface RuntimeImage {
+  ref: string;
+  identity: string;
+  size: string;
+}
+
+export interface RuntimeImageList {
+  runtime: string;
+  namespace: string;
+  target_namespace: string;
+  namespaces?: string[];
+  items: RuntimeImage[];
+}
+
+export interface NodeImageSelection extends Pick<RuntimeImage, "ref" | "identity"> {
+  node_uuid: string;
+  runtime: string;
+  namespace: string;
+  target_namespace: string;
+}
+
 export interface ArchiveContents {
   repo_tags: string[];
   metadata_by_tag?: Record<string, ArchiveImageMetadata>;

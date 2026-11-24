@@ -1,5 +1,5 @@
 import { getJSON, localizedResponseError, sendJSON, type List } from "../http";
-import { imageFetchBody, type ArchiveContents, type CommunityRepo, type CommunityRepoBrowse, type ImageArchivePreview, type ImageCatalogEntry, type ImageCatalogSyncResult, type ImageEngineOption, type ImageFetchOptions, type ImageInspection, type ImageNodeSyncResult, type ImageSeries } from "../images";
+import { imageFetchBody, type ArchiveContents, type ArchiveImageMetadata, type NodeImageSelection, type RuntimeImageList, type CommunityRepo, type CommunityRepoBrowse, type ImageArchivePreview, type ImageCatalogEntry, type ImageCatalogSyncResult, type ImageEngineOption, type ImageFetchOptions, type ImageInspection, type ImageNodeSyncResult, type ImageSeries } from "../images";
 
 export const imagesApi = {
   images: (source?: string) =>
@@ -29,8 +29,8 @@ export const imagesApi = {
     }),
   updateImageVersion: (id: number, body: Record<string, unknown>) =>
     sendJSON<ImageCatalogEntry>("PATCH", `/api/v1/images/versions/${id}`, body),
-  importImages: (series: unknown[]) =>
-    sendJSON<List<ImageSeries>>("POST", "/api/v1/images/import", { series }),
+  importImages: (series: unknown[], runtime_image?: NodeImageSelection) =>
+    sendJSON<List<ImageSeries>>("POST", "/api/v1/images/import", { series, runtime_image }),
   // A manifest upload is the manifest JSON itself; the server answers with
   // the same counts as a sync from the distribution channel.
   importImageCatalogFile: async (file: File) => {
@@ -51,6 +51,10 @@ export const imagesApi = {
   // The catalog comes from the distribution channel; the request has no body.
   syncImages: () =>
     sendJSON<ImageCatalogSyncResult>("POST", "/api/v1/images/sync"),
+  runtimeImages: (node: string, namespace: string, signal?: AbortSignal) =>
+    getJSON<RuntimeImageList>(`/api/v1/images/nodes/${encodeURIComponent(node)}/runtime-images?namespace=${encodeURIComponent(namespace)}`, signal),
+  inspectRuntimeImage: (selection: NodeImageSelection, signal?: AbortSignal) =>
+    sendJSON<{ metadata: ArchiveImageMetadata }>("POST", `/api/v1/images/nodes/${encodeURIComponent(selection.node_uuid)}/runtime-images/inspect`, selection, signal),
   previewImageArchivePath: (nodeUUID: string, path: string, signal?: AbortSignal) =>
     sendJSON<ArchiveContents>("POST", `/api/v1/images/nodes/${encodeURIComponent(nodeUUID)}/preview-archive-path`, { archive_path: path }, signal),
   previewImageArchiveURL: (url: string, signal?: AbortSignal) =>

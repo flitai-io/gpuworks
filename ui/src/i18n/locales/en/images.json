@@ -228,6 +228,21 @@
     "collapse": "Hide details"
   },
   "import": {
+    "runtime": {
+      "title": "Import an existing image from a compute node",
+      "namespace": "Source namespace",
+      "target": "Deployment namespace: {{ns}}. Images selected from another namespace are copied on this node when added.",
+      "list": "Local {{runtime}} images",
+      "name": "Image name",
+      "tag": "Tag",
+      "size": "Size",
+      "scanning": "Scanning node images…",
+      "reading": "Reading selected image metadata…",
+      "ready": "Image metadata loaded. Complete any missing fields before adding.",
+      "empty": "No tagged images are available here.",
+      "failed": "Could not read node images. Refresh and try again.",
+      "added": "Image added and confirmed present on this node."
+    },
     "method": "Import method",
     "local": {
       "noTags": "No tagged image reference was found. Enter the image reference manually.",

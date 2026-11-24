@@ -163,6 +163,7 @@ GET /api/v1/images
 GET /api/v1/images/community/browse
 GET /api/v1/images/community/repos
 GET /api/v1/images/engines
+GET /api/v1/images/nodes/{uuid}/runtime-images
 GET /api/v1/images/versions
 GET /api/v1/images/{id}
 GET /api/v1/inference-templates
@@ -337,6 +338,7 @@ POST /api/v1/experience/password
 POST /api/v1/experience/reset
 POST /api/v1/images/import
 POST /api/v1/images/nodes/{uuid}/preview-archive-path
+POST /api/v1/images/nodes/{uuid}/runtime-images/inspect
 POST /api/v1/images/preview-archive-url
 POST /api/v1/images/sync
 POST /api/v1/images/{id}/nodes/{uuid}/cancel

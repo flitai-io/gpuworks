@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -15,9 +14,6 @@ import (
 // reference. This survives later retags, but cannot detect a concurrent retag
 // between inspection and creation by nerdctl.
 const imageTargetLabel = "gpuworks.image-target"
-
-// OCI SHA-2 digests use lowercase hex with the algorithm-defined length.
-var imageDigestPattern = regexp.MustCompile(`^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})$`)
 
 func (d *Driver) InspectWorkload(ctx context.Context, id string) (runtime.WorkloadInspection, error) {
 	out, err := d.output(ctx, 10*time.Second, "container", "inspect", "--format", "{{json .}}", id)
@@ -103,10 +99,10 @@ func parseWorkloadInspection(data []byte) (runtime.WorkloadInspection, error) {
 // Even an immutable raw.Image is a lookup reference, not necessarily a config
 // digest, so it is never reported as ImageID directly.
 func recordedImageTarget(image, target string) string {
-	if !imageDigestPattern.MatchString(target) {
+	if !runtime.ValidImageDigest(target) {
 		return ""
 	}
-	if imageDigestPattern.MatchString(image) && image != target {
+	if runtime.ValidImageDigest(image) && image != target {
 		return ""
 	}
 	return target
@@ -127,4 +123,28 @@ func nonNilStrings(values []string) []string {
 		return []string{}
 	}
 	return values
+}
+
+// Fields from nerdctl image inspect --mode=native for the node platform.
+type nativeImageInspection struct {
+	Image struct {
+		Target struct {
+			Digest string `json:"digest"`
+		} `json:"target"`
+	} `json:"Image"`
+	ImageConfigDesc struct {
+		Digest string `json:"digest"`
+	} `json:"ImageConfigDesc"`
+	ImageConfig *struct {
+		Architecture string
+
+		Config struct {
+			Labels map[string]string
+
+			Entrypoint []string       `json:"Entrypoint"`
+			Cmd        []string       `json:"Cmd"`
+			Env        []string       `json:"Env"`
+			Volumes    map[string]any `json:"Volumes"`
+		} `json:"config"`
+	} `json:"ImageConfig"`
 }

@@ -253,6 +253,9 @@ type Status struct {
 // immutable image id after pull/load, and the OCI config runtime observation
 // and on-demand inspection report.
 type ImageInspection struct {
+	Architecture string            `json:"-"`
+	Labels       map[string]string `json:"-"`
+
 	// RuntimeSizeBytes is the runtime-reported per-image size, including shared layers.
 	// It is neither transfer archive bytes nor uniquely allocated disk space.
 	RuntimeSizeBytes *int64

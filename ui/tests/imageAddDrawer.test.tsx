@@ -184,7 +184,7 @@ test("switching methods discards a late URL preview and allows a fresh one after
   assert.equal(add.disabled, true, "adding must wait for the active HTTP preview");
   await user.click(add);
   assert.equal(calls.filter(call => call.path === "/api/v1/images/import").length, 0);
-  assert.deepEqual(await openSelect(method), [zhImages.import.local.enable, zhImages.import.url.title]);
+  assert.deepEqual(await openSelect(method), [zhImages.import.local.enable, zhImages.import.url.title, zhImages.import.runtime.title]);
   await user.keyboard("{Home}{Enter}");
   assert.equal(method.textContent, zhImages.import.local.enable);
   const imageRef = drawer.getByRole("textbox", { name: zhImages.import.imageRef }) as HTMLInputElement;
@@ -192,10 +192,9 @@ test("switching methods discards a late URL preview and allows a fresh one after
   await act(async () => { pending.resolve(); });
   assert.equal(imageRef.value, "example/node:v1");
   await waitFor(() => assert.equal(method.getAttribute("aria-expanded"), "false"));
-  await openSelect(method);
-  await user.keyboard("{End}{Enter}");
+  await chooseOption(method, zhImages.import.url.title);
   assert.equal(method.textContent, zhImages.import.url.title);
-  assert.equal(drawer.queryByRole("textbox", { name: zhImages.nodeTable.localDialog.path }), null);
+  assert.equal(Boolean(drawer.queryByRole("textbox", { name: zhImages.nodeTable.localDialog.path })), false);
   await preview();
   await waitFor(() => assert.equal(imageRef.value, "example/archive:v1"));
   const version = drawer.getByRole("textbox", { name: zhImages.import.engineVersion }) as HTMLInputElement;
@@ -477,4 +476,55 @@ test("the engine list shows it is loading, and a failed read leaves it empty wit
   fireEvent.mouseDown(engine);
   await waitFor(() => assert.ok(document.querySelector(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-empty"), "the dropdown is empty"));
   assert.deepEqual(selectOptions(), [], "no engine is made up when the dictionary cannot be read");
+});
+
+test("a node runtime image is picked from its namespace, inspected and registered", async () => {
+  const ui = zhImages.import.runtime;
+  const ref = "registry.example:5000/team/runner:v1";
+  const identity = "sha256:" + "a".repeat(64);
+  const endpoint = "/api/v1/images/nodes/worker-id/runtime-images";
+  const { user, calls } = renderPage(call => {
+    if (call.path.startsWith("/api/v1/nodes?")) return json(200, { items: [{ uuid: "worker-id", name: "GPU Worker", state: "online" }], total: 1 });
+    if (call.path.startsWith(endpoint + "?")) {
+      const ns = new URLSearchParams(call.path.split("?")[1]).get("namespace") || "gpuworks";
+      return json(200, {
+        runtime: "nerdctl", target_namespace: "gpuworks", namespace: ns, namespaces: ["gpuworks", "default"],
+        items: ns === "gpuworks" ? [] : [{ ref, identity, size: "7.9 GB" }],
+      });
+    }
+    if (call.path === endpoint + "/inspect") return json(200, { image_id: identity, metadata: { engine: "vllm", engine_version: "0.30.0", framework: "cuda", framework_version: "13.0", arch: "amd64" } });
+    if (call.path === "/api/v1/images/import") return json(200, { items: [{ ...communitySeries, versions: [{ ...nightlyVersion, image_ref: ref }] }], total: 1 });
+    return undefined;
+  });
+  const drawer = within(await openDrawer(user, "自定义镜像"));
+  await chooseOption(drawer.getByRole("combobox", { name: zhImages.import.method }), ui.title);
+  await pickNodes(drawer.getByRole("combobox", { name: zhImages.nodeTable.column.node }), "GPU Worker");
+  await drawer.findByText(ui.empty);
+  const submit = drawer.getByRole("button", { name: zhImages.import.addImage }) as HTMLButtonElement;
+  assert.equal(submit.disabled, true);
+  const namespace = drawer.getByRole("combobox", { name: ui.namespace });
+  await chooseOption(namespace, "default");
+  const radio = await drawer.findByRole("radio", { name: ref }) as HTMLInputElement;
+  assert.equal(radio.checked, false);
+  await user.click(radio);
+  await drawer.findByText(ui.ready);
+  const engineVersion = drawer.getByRole("textbox", { name: zhImages.import.engineVersion }) as HTMLInputElement;
+  assert.equal(engineVersion.value, "0.30.0");
+  await user.clear(engineVersion);
+  await user.type(engineVersion, "0.31.0");
+  await chooseOption(namespace, "gpuworks");
+  await drawer.findByText(ui.empty);
+  assert.equal(engineVersion.value, "");
+  assert.equal(submit.disabled, true);
+  await chooseOption(namespace, "default");
+  await user.click(await drawer.findByRole("radio", { name: ref }));
+  await drawer.findByText(ui.ready);
+  await user.click(submit);
+  await waitFor(() => assert.equal(calls.filter(c => c.path === "/api/v1/images/import").length, 1));
+  const payload = JSON.parse(calls.find(c => c.path === "/api/v1/images/import")!.body!);
+  assert.deepEqual(payload.runtime_image, {
+    node_uuid: "worker-id", runtime: "nerdctl", namespace: "default", target_namespace: "gpuworks", ref, identity,
+  });
+  assert.equal(payload.series[0].versions[0].image_ref, ref);
+  assert.equal(calls.filter(c => c.path.endsWith("/sync")).length, 0);
 });

@@ -9,6 +9,7 @@ import {
   type ImageArchivePreview,
   type ImageCatalogEntry,
   type List,
+  type NodeImageSelection,
   type ImageCatalogSyncResult,
   type ImageInspection,
   type ImageNode,
@@ -314,7 +315,9 @@ export default function ImagesPage() {
       message.error(e instanceof Error ? e.message : t("import.url.failed"));
     }
   };
-  const importCustom = async (archive?: NodeArchive) => {
+  const importCustom = async (source?: NodeArchive | NodeImageSelection) => {
+    const selected = source && "node_uuid" in source ? source : undefined;
+    const archive = source && "path" in source ? source : undefined;
     let value;
     try {
       value = await importForm.validateFields();
@@ -341,16 +344,16 @@ export default function ImagesPage() {
               image_ref: imageRef,
               source: importSource,
               rolling_tag: Boolean(value.rolling_tag),
-              registry_sources: value.registry_sources || [],
+              registry_sources: selected ? [] : value.registry_sources || [],
             },
           ],
         },
-      ]);
+      ], selected);
       importForm.resetFields();
       setImportOpen(false);
       refetch();
       versions.refetch();
-      if (archive) {
+      if (archive || selected) {
         const [series] = imported.items;
         const version = series?.versions?.find((entry) => entry.image_ref === imageRef);
         if (!version) {
@@ -360,6 +363,10 @@ export default function ImagesPage() {
         detailRef.current = series;
         setDetail(series);
         setSelectedVersionID(version.id);
+        if (!archive) {
+          toast.success(t("import.runtime.added"));
+          return;
+        }
         setMode(version, archive.node, "local");
         try {
           await importFromPath(version, archive.node, archive.path.trim(), false);

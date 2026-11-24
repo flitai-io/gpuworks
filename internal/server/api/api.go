@@ -202,6 +202,8 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 			r.With(a.managementAdmin).Post("/images/sync", a.syncImagesManifest)
 			r.With(a.managementAdmin).Post("/images/preview-archive-url", a.previewImageArchiveURL)
 			r.With(a.managementAdmin).Post("/images/nodes/{uuid}/preview-archive-path", a.previewImageArchivePath)
+			r.With(a.managementAdmin).Get("/images/nodes/{uuid}/runtime-images", a.listRuntimeImages)
+			r.With(a.managementAdmin).Post("/images/nodes/{uuid}/runtime-images/inspect", a.inspectRuntimeImage)
 			r.Post("/images/{id}/nodes/{uuid}/sync", a.syncImageToNode)
 			r.Post("/images/{id}/nodes/{uuid}/sync/probe", a.probeImageToNode)
 			r.Post("/images/{id}/nodes/{uuid}/sync/retry", a.retryImageToNode)

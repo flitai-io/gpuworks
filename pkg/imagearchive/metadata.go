@@ -93,14 +93,7 @@ func (m *archiveMetadata) record(name string, data []byte) bool {
 			m.configPaths[name] = path
 			return true
 		}
-		labels := blob.Config.Labels
-		info := ImageMetadata{
-			Arch:             blob.Architecture,
-			Engine:           labels["io.gpuworks.engine"],
-			EngineVersion:    labels["io.gpuworks.engine.version"],
-			Framework:        labels["io.gpuworks.framework"],
-			FrameworkVersion: labels["io.gpuworks.framework.version"],
-		}
+		info := MetadataFromConfig(blob.Architecture, blob.Config.Labels)
 		if info == (ImageMetadata{}) {
 			return false
 		}
@@ -153,4 +146,15 @@ func (m *archiveMetadata) contents() Contents {
 		}
 	}
 	return result
+}
+
+// MetadataFromConfig reads the catalog fields shared by archived and installed OCI images.
+func MetadataFromConfig(arch string, labels map[string]string) ImageMetadata {
+	return ImageMetadata{
+		Arch:             arch,
+		Engine:           labels["io.gpuworks.engine"],
+		EngineVersion:    labels["io.gpuworks.engine.version"],
+		Framework:        labels["io.gpuworks.framework"],
+		FrameworkVersion: labels["io.gpuworks.framework.version"],
+	}
 }

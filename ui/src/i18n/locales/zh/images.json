@@ -228,6 +228,21 @@
     "collapse": "收起详情"
   },
   "import": {
+    "runtime": {
+      "title": "从计算节点已有镜像导入",
+      "namespace": "来源 namespace",
+      "target": "部署 namespace 为 {{ns}}。从其他 namespace 添加时，节点会先复制所选镜像。",
+      "list": "节点上的 {{runtime}} 镜像",
+      "name": "镜像名称",
+      "tag": "标签",
+      "size": "大小",
+      "scanning": "正在扫描节点镜像…",
+      "reading": "正在读取所选镜像的信息…",
+      "ready": "已读取镜像信息，可补齐缺失字段后添加。",
+      "empty": "此处没有可选的带标签镜像。",
+      "failed": "读取节点镜像失败，请刷新后重试。",
+      "added": "已添加镜像，该节点已持有此镜像。"
+    },
     "method": "导入方式",
     "local": {
       "noTags": "归档中未找到带 tag 的镜像引用，请手动填写。",

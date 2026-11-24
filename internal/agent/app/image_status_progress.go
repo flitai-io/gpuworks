@@ -3,7 +3,8 @@ package app
 import (
 	"context"
 	"errors"
-	"time"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 // imageOperationTimeout bounds one image operation end to end — a registry
@@ -13,7 +14,7 @@ import (
 // It is a backstop, not the first line of defence: an operator can cancel a
 // transfer, and the server abandons one that stops reporting. This bounds the
 // node's image slot even when nobody is watching.
-const imageOperationTimeout = 12 * time.Hour
+const imageOperationTimeout = proto.ImageOperationTimeout
 
 // imageOperationError turns the two sentinel failures into something an
 // operator can act on. Everything else keeps the runtime's own words.

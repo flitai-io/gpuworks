@@ -57,7 +57,8 @@ type manifestSeriesInput struct {
 }
 
 type imageImportPayload struct {
-	Series []manifestSeriesInput `json:"series" yaml:"series"`
+	RuntimeImage *selectedNodeImage    `json:"runtime_image,omitempty" yaml:"runtime_image,omitempty"`
+	Series       []manifestSeriesInput `json:"series" yaml:"series"`
 }
 
 // importImages accepts two bodies. A manifest (schema_version 2 or 3) is the
@@ -95,6 +96,10 @@ func (a *apiHandlers) importImages(w http.ResponseWriter, r *http.Request) {
 		if !validateName(w, input.Name) || !validateTextField(w, "series_name", input.SeriesName, deployment.MaxNameRunes) {
 			return
 		}
+	}
+	if req.RuntimeImage != nil {
+		a.registerRuntimeImage(w, r, *req.RuntimeImage, inputs)
+		return
 	}
 	result, err := a.upsertImageInputs(inputs)
 	if err != nil {

@@ -145,9 +145,11 @@ func (d *Driver) InspectImage(ctx context.Context, image string) (runtime.ImageI
 		return runtime.ImageInspection{}, fmt.Errorf("docker image inspect: %w: %s", err, strings.TrimSpace(out))
 	}
 	var raw struct {
-		ID     string `json:"Id"`
-		Size   *int64 `json:"Size"`
-		Config struct {
+		Architecture string
+		ID           string `json:"Id"`
+		Size         *int64 `json:"Size"`
+		Config       struct {
+			Labels     map[string]string
 			Entrypoint []string       `json:"Entrypoint"`
 			Cmd        []string       `json:"Cmd"`
 			Env        []string       `json:"Env"`
@@ -170,7 +172,7 @@ func (d *Driver) InspectImage(ctx context.Context, image string) (runtime.ImageI
 	if raw.Size != nil && *raw.Size < 0 {
 		raw.Size = nil
 	}
-	return runtime.ImageInspection{RuntimeSizeBytes: raw.Size, ID: raw.ID, Entrypoint: raw.Config.Entrypoint, Cmd: raw.Config.Cmd, Env: env, Volumes: vols}, nil
+	return runtime.ImageInspection{Architecture: raw.Architecture, Labels: raw.Config.Labels, RuntimeSizeBytes: raw.Size, ID: raw.ID, Entrypoint: raw.Config.Entrypoint, Cmd: raw.Config.Cmd, Env: env, Volumes: vols}, nil
 }
 
 // PullImage pulls an image, streaming progress lines to onLine.

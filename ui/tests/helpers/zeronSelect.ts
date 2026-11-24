@@ -14,7 +14,7 @@ export async function openSelect(trigger: HTMLElement): Promise<string[]> {
   const { screen, waitFor } = await rtl();
   trigger.focus();
   await keyboard("{ArrowDown}");
-  await waitFor(() => assert.ok(highlighted(), "the list opens with an option highlighted"));
+  await waitFor(() => assert.ok(Boolean(highlighted()), "the list opens with an option highlighted"));
   return screen.getAllByRole("option").map((option) => option.textContent ?? "");
 }
 
@@ -23,11 +23,16 @@ export async function chooseOption(trigger: HTMLElement, label: string) {
   const { waitFor } = await rtl();
   const labels = await openSelect(trigger);
   assert.ok(labels.includes(label), `"${label}" is offered among ${JSON.stringify(labels)}`);
-  for (let step = 0; step < labels.length && highlighted()?.textContent !== label; step++) {
-    const before = highlighted();
-    await keyboard("{ArrowDown}");
-    await waitFor(() => assert.notEqual(highlighted(), before));
+  const target = labels.indexOf(label);
+  let index = labels.indexOf(highlighted()?.textContent ?? "");
+  assert.ok(index >= 0, "the focused option belongs to the list");
+  while (index !== target) {
+    const direction = index < target ? 1 : -1;
+    index += direction;
+    await keyboard(direction > 0 ? "{ArrowDown}" : "{ArrowUp}");
+    await waitFor(() => assert.equal(highlighted()?.textContent, labels[index], "the highlight moved"));
   }
   assert.equal(highlighted()?.textContent, label);
   await keyboard("{Enter}");
+  await waitFor(() => assert.equal(trigger.getAttribute("aria-expanded"), "false", "the select closed"));
 }
