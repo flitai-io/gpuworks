@@ -24,7 +24,7 @@ register(
 // sizes (node count, TP, the units of each PD role), shows the nodes the
 // server would pick now as a preview, and renders the server's refusals beside
 // the switch. Manual shows the node pickers as before. Driven end to end
-// through the real page, like deployPdForm.test.tsx.
+// through the real page, like deployPdFormDraft.test.tsx.
 
 const closeChannels = trackMessageChannels();
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
