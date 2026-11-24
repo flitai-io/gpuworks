@@ -115,7 +115,7 @@ func (a *apiHandlers) getUpdates(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	status.ImageCatalog = dto.CatalogUpdate{Current: state.ImageCatalogVersion, Compatible: true}
+	status.ImageCatalog = dto.CatalogUpdate{Current: state.ImageCatalogVersion, Uploaded: state.ImageCatalogUploaded, Compatible: true}
 	currentDigest, err := a.d.Store.UpstreamInferencePackageDigest()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -188,7 +188,10 @@ func (a *apiHandlers) getUpdates(w http.ResponseWriter, r *http.Request) {
 	catalogsBehind := index.Server.OlderThan(version.Version, version.BuildDate)
 	if catalog := index.ImageCatalog; catalog != nil {
 		status.ImageCatalog.Latest = catalog.Version
-		status.ImageCatalog.UpdateAvailable = catalog.Version != state.ImageCatalogVersion && !catalogsBehind
+		// An uploaded catalog differs from the channel's because someone chose
+		// it: the channel's is not offered as its update, and applying it is a
+		// replacement the sync refuses unless asked for (syncImagesManifest).
+		status.ImageCatalog.UpdateAvailable = catalog.Version != state.ImageCatalogVersion && !catalogsBehind && !state.ImageCatalogUploaded
 	}
 	if catalog := index.TemplateCatalog; catalog != nil {
 		status.TemplateCatalog.Latest = catalog.Version

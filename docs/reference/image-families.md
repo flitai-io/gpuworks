@@ -107,6 +107,8 @@ image catalog synced catalog_version=2026-10-09.f085e40b created=0 updated=25 de
   在能联网的机器上从任一发布源下载当前渠道的 `<channel>/manifest.json`（如 `https://dl.gpuworks.ai/release/manifest.json`，与渠道索引里的镜像目录是同一文件）再上传。
 
 两条路径都把本次的 `catalog_version` 记为当前目录版本，设置页「版本与更新」据此显示是否有更新。
+上传的目录与渠道目录不同时不算「有更新」，该行显示「已上传」。这时「检查更新」和「改用渠道目录」都先弹确认，确认后渠道目录才按下面的规则替换它，只在上传目录里的版本随之删除或转为旧版本；接口不带 `replace_uploaded=true` 时返回 409 `IMAGE_CATALOG_UPLOADED`。
+升级到带这项记录的版本之前上传的目录没有「已上传」的记录，需要重新上传一次；server 升级后应用内嵌目录时仍会替换上传的目录。
 
 两条路径与启动同步共用一套导入规则：
 

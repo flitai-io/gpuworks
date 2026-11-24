@@ -548,6 +548,7 @@
     "NOTICE_IDS_INVALID": "请指定 1 到 128 条要标为已读的通知。",
     "IMAGE_MANIFEST_INVALID": "镜像 manifest 无效：{{detail}}",
     "IMAGE_IMPORT_CONFLICT": "manifest 与已有的社区或自定义镜像冲突：{{detail}}",
+    "IMAGE_CATALOG_UPLOADED": "当前系统镜像目录 {{current}} 是手工上传的；改用渠道目录 {{latest}} 需要确认，只在上传目录里的镜像版本会被删除，仍在使用的转为旧版本。",
     "IMAGE_REF_REQUIRED": "请输入镜像引用。",
     "IMAGE_TAG_REQUIRED": "镜像引用“{{image}}”必须包含明确的 tag。",
     "IMAGE_PURPOSE_INVALID": "镜像用途“{{purpose}}”无效，请使用 inference（推理）或 evaluation（评测）。",

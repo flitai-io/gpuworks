@@ -82,7 +82,7 @@ func TestEmbeddedCatalogsApplyOncePerBuild(t *testing.T) {
 	if _, err := imagecatalog.ImportManifest(st, []byte(onlineImageCatalog)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.RecordImageCatalogImport("2026-10-11.0nl1ne00"); err != nil {
+	if err := st.RecordImageCatalogImport("2026-10-11.0nl1ne00", false); err != nil {
 		t.Fatal(err)
 	}
 	online := strings.Repeat("ab", 32)

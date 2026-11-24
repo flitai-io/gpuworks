@@ -1,5 +1,6 @@
 import { VersionDrawer } from "./VersionDrawer";
 import { Button } from "../../components/ui/button";
+import ReplaceUploadedCatalogDialog from "../../components/ReplaceUploadedCatalogDialog";
 import { Switch } from "../../components/ui/switch";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import CopyButton from "../../components/CopyButton";
@@ -32,6 +33,8 @@ interface Row {
   current: string;
   latest?: string;
   updateAvailable: boolean;
+  /** The channel's catalog would replace one uploaded by hand: applying it asks first. */
+  replacesUpload: boolean;
   compatible: boolean;
   checkError?: ProductMessage;
 }
@@ -42,10 +45,11 @@ function rowsOf(status: UpdateStatus, names: Record<Row["key"], string>): Row[] 
   const catalog = (key: "images" | "templates", value: CatalogUpdate): Row => ({
     key, name: names[key], current: value.current, latest: status.available ? value.latest : undefined,
     updateAvailable: value.update_available, compatible: value.compatible,
+    replacesUpload: Boolean(value.uploaded && status.available && value.latest && value.latest !== value.current),
     checkError: value.check_error,
   });
   return [
-    { key: "server", name: names.server, current: status.server.current, latest: status.available ? status.server.latest : undefined, updateAvailable: status.server.update_available, compatible: true },
+    { key: "server", name: names.server, current: status.server.current, latest: status.available ? status.server.latest : undefined, updateAvailable: status.server.update_available, replacesUpload: false, compatible: true },
     catalog("images", status.image_catalog),
     catalog("templates", status.template_catalog),
   ];
@@ -143,8 +147,8 @@ export default function UpdatesCard() {
     }
   };
 
-  const updateImages = () => apply("images", async () => {
-    const result = await api.syncImages();
+  const updateImages = (replaceUploaded = false) => apply("images", async () => {
+    const result = await api.syncImages(replaceUploaded);
     return t("updates.imagesApplied", { version: result.catalog_version });
   });
   const uploadImages = (file: File) => apply("imagesUpload", async () => {
@@ -178,6 +182,7 @@ export default function UpdatesCard() {
   const [choice, setChoice] = useState("");
   const [problem, setProblem] = useState("");
   const [confirmed, setConfirmed] = useState<{ channel: string; release: ServerVersionChoice } | null>(null);
+  const [replacing, setReplacing] = useState<Row | null>(null);
   const submitting = useRef(false);
   const openVersions = () => { setProblem(""); setChoice(""); setPicker(true); };
   const returnToPicker = () => { setConfirmed(null); setPicker(true); };
@@ -211,6 +216,7 @@ export default function UpdatesCard() {
     if (row.checkError) return <Text type="danger">{productMessageText(tCommon, row.checkError)}</Text>;
     if (!row.latest) return <Text type="secondary">{t("updates.notPublished")}</Text>;
     if (row.key === "server" && serverState === "differentChannelVersion") return <Badge size="sm" status="neutral">{t("updates.differentChannelVersion")}</Badge>;
+    if (row.replacesUpload) return <Badge size="sm" status="neutral">{t("updates.uploaded")}</Badge>;
     if (!row.updateAvailable) return <Badge size="sm" status="success">{t("updates.upToDate")}</Badge>;
     if (!row.compatible) return <Badge size="sm" status="danger">{t("updates.needsServer")}</Badge>;
     return <Badge size="sm" status="warning">{t("updates.available")}</Badge>;
@@ -270,9 +276,11 @@ export default function UpdatesCard() {
     const images = row.key === "images";
     return (
       <Space wrap>
-        <Button variant="secondary" size="sm" disabled={!canApply || busy !== ""}
-          loading={busy === (images ? "images" : "templates")} onClick={() => void (images ? updateImages() : updateTemplates())}>
-          {t("updates.apply")}
+        {/* The channel's catalog replaces an uploaded one only on request: it would delete the versions only the upload has. */}
+        <Button variant="secondary" size="sm" disabled={!(canApply || row.replacesUpload) || busy !== ""}
+          loading={busy === (images ? "images" : "templates")}
+          onClick={() => row.replacesUpload ? setReplacing(row) : void (images ? updateImages() : updateTemplates())}>
+          {t(row.replacesUpload ? "updates.useChannel" : "updates.apply")}
         </Button>
         <UploadButton label={images ? t("updates.uploadManifest") : t("updates.uploadPackage")}
           accept={images ? ".json,application/json" : ".tgz,.gz,application/gzip"}
@@ -390,6 +398,7 @@ export default function UpdatesCard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ReplaceUploadedCatalogDialog versions={replacing} onCancel={() => setReplacing(null)} onConfirm={() => { setReplacing(null); void updateImages(true); }} />
     </Card>
   );
 }

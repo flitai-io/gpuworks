@@ -117,7 +117,10 @@ type CatalogUpdate struct {
 	Current         string `json:"current"`
 	Latest          string `json:"latest,omitempty"`
 	UpdateAvailable bool   `json:"update_available"`
-	Compatible      bool   `json:"compatible"`
+	// Uploaded: the catalog in force was uploaded by hand (the image catalog
+	// only). The channel's catalog is then not an update of it.
+	Uploaded   bool `json:"uploaded,omitempty"`
+	Compatible bool `json:"compatible"`
 	// CheckError means compatibility could not be checked, rather than that
 	// the package requires a newer server. Other update offers remain usable.
 	CheckError *ProductMessage `json:"check_error,omitempty"`

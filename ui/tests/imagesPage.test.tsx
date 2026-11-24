@@ -149,6 +149,33 @@ test("check for updates posts no body and reports the four counts", async () => 
   await waitFor(() => assert.ok(calls.filter((call) => call.path === "/api/v1/images").length > listReads, "the list is read again"));
 });
 
+// The server refuses to replace an uploaded catalog from the channel until asked to. The page
+// then says what the replacement deletes, and asks again with the flag only after a confirmation.
+test("check for updates over an uploaded catalog asks before the channel's catalog replaces it", async () => {
+  const { calls, user } = renderPage((call) => {
+    if (call.method !== "POST" || !call.path.startsWith("/api/v1/images/sync")) return undefined;
+    return call.path.endsWith("?replace_uploaded=true")
+      ? json(200, SYNC_RESULT)
+      : json(409, { error: "the system image catalog in force was uploaded", code: "IMAGE_CATALOG_UPLOADED", params: { current: "2026-11-23.swr-p1-p2-demo", latest: "2026-11-22.80600a3e" } });
+  });
+  await screen.findByRole("button", { name: systemSeries.name });
+  const syncs = () => calls.filter((call) => call.path.startsWith("/api/v1/images/sync")).map((call) => call.path);
+
+  await user.click(screen.getByRole("button", { name: "检查更新" }));
+  let dialog = await screen.findByRole("dialog", { name: "改用渠道的系统镜像目录？" });
+  assert.ok(within(dialog).getByText("渠道目录 2026-11-22.80600a3e 将替换已上传的 2026-11-23.swr-p1-p2-demo，仅上传目录有的版本会被删除或转为旧版本。"));
+  // Declining sends nothing more.
+  await user.click(within(dialog).getByRole("button", { name: "取消" }));
+  await waitFor(() => assert.equal(screen.queryByRole("dialog", { name: "改用渠道的系统镜像目录？" }), null));
+  assert.deepEqual(syncs(), ["/api/v1/images/sync"]);
+
+  // antd keeps the button's finished loading icon in the DOM under jsdom (no transition end), in its name.
+  await user.click(screen.getByRole("button", { name: /检查更新/ }));
+  dialog = await screen.findByRole("dialog", { name: "改用渠道的系统镜像目录？" });
+  await expectNewToast(RESULT_TOAST, () => user.click(within(dialog).getByRole("button", { name: "改用渠道目录" })));
+  assert.deepEqual(syncs(), ["/api/v1/images/sync", "/api/v1/images/sync", "/api/v1/images/sync?replace_uploaded=true"]);
+});
+
 test("an unreachable distribution channel shows the localized reason", async () => {
   const detail = "no distribution source served a valid nightly index (https://dl.gpuworks.ai: GET https://dl.gpuworks.ai/nightly/index.json: 503 Service Unavailable)";
   const { user } = renderPage((call) =>

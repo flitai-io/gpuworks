@@ -107,6 +107,8 @@ There are only two update paths for the system catalog, both on the Images page'
   on a machine with internet access, download the current channel's `<channel>/manifest.json` from any release source (such as `https://dl.gpuworks.ai/release/manifest.json`, the same file as the image catalog in the channel's index), then upload it.
 
 Both paths record the imported `catalog_version` as the current catalog version. The settings page's Version and updates section uses it to show whether updates are available.
+An uploaded catalog that differs from the channel's is not an available update; its row reads "Uploaded". "Check for updates" and "Use the channel's catalog" then both ask for confirmation first; only after it does the channel's catalog replace the upload under the rules below, and versions that only the uploaded catalog has are deleted or become old versions. Without `replace_uploaded=true` the API answers 409 `IMAGE_CATALOG_UPLOADED`.
+A catalog uploaded before upgrading to a version that keeps this record is not marked as uploaded and has to be uploaded once more; a server upgrade that applies its embedded catalog still replaces an uploaded one.
 
 Both paths share the following import rules with startup sync:
 
@@ -252,7 +254,7 @@ runtime explanation.
 <!-- translation-source-sha256: 883ab9f8b2d790c67dcf7570053662a81dc49f9ffb70f511ff169cbee4275bd2 ## Node Image Identity and Periodic Inventory -->
 <!-- translation-source-sha256: 291ca20401780bf2346ef75fa028d8a4fa1e952aa3208f6de3b0f618f265c4fe ## System Images -->
 <!-- translation-source-sha256: 39168c329fca1b60b4dac45940c92fb95a7eac8dab8b30e86e9ea76fcc060e2a ### Startup Sync -->
-<!-- translation-source-sha256: 9c257d0e90fb08b1d44411cbd6b9f9ea179b57560836ea3c1cd6ae87603a805d ### Updating the Catalog -->
+<!-- translation-source-sha256: 68bed54e3458c74443e91677b50b6f95dc701fc08b2e692fad5d1ded8957aecb ### Updating the Catalog -->
 <!-- translation-source-sha256: 08cbd3a68161bac743ed7d8cb6f162c396865921af93b019a514f113f24a1a3a ### Manifest Format -->
 <!-- translation-source-sha256: da92f9dfca846e8a1b55ab4708a4b1f01f97ccd6dd44145d4619b20fd54ee18e ## Community Images -->
 <!-- translation-source-sha256: 77522a45a9d473abc1fd18744cbf1bd083213fe1c1c54f96fe725d892d366f57 ## Custom Images -->

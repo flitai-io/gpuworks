@@ -83,7 +83,7 @@ function stub(answers: Array<UpdateStatus | Error>) {
     if (answer instanceof Error) throw answer;
     return answer;
   };
-  apiModule.api.syncImages = async () => { calls.push("syncImages"); return { catalog_version: "2026-10-12.11111111", created: 0, updated: 1, deleted: 0, deprecated: 0, skipped: [], series: [] }; };
+  apiModule.api.syncImages = async (replaceUploaded = false) => { calls.push(replaceUploaded ? "syncImages:replaceUploaded" : "syncImages"); return { catalog_version: "2026-10-12.11111111", created: 0, updated: 1, deleted: 0, deprecated: 0, skipped: [], series: [] }; };
   apiModule.api.syncInferenceTemplates = async () => { calls.push("syncTemplates"); return { models: 382, package_digest: "aabbccdd", version: "2026-10-11.aabbccdd" }; };
   apiModule.api.uploadOfficialInferenceCatalog = async (file: File) => { calls.push(`uploadTemplates:${file.name}`); return { models: 382, package_digest: "eeff", version: "2026-10-11.eeff0011" }; };
   apiModule.api.importImageCatalogFile = async (file: File) => { calls.push(`uploadImages:${file.name}`); return { catalog_version: "2026-10-12.22222222", created: 1, updated: 0, deleted: 0, deprecated: 0, skipped: [], series: [] }; };
@@ -150,6 +150,51 @@ test("updating a catalog applies it and checks again", async () => {
     await waitFor(() => assert.deepEqual(s.calls, ["syncTemplates"]));
     await waitFor(() => assert.equal(s.checks(), 2));
     await waitFor(() => assert.ok(within(row(u.templates)).getByText(u.upToDate)));
+  } finally {
+    s.restore();
+  }
+});
+
+// An uploaded system image catalog differs from the channel's because an administrator chose it:
+// the row says so instead of offering an update, and the channel's catalog replaces it only after
+// the administrator is told what that deletes.
+test("an uploaded image catalog is not shown as out of date, and the channel's replaces it only after a confirmation", async () => {
+  const uploaded = { current: "2026-11-23.swr-p1-p2-demo", latest: "2026-11-22.80600a3e", update_available: false, uploaded: true, compatible: true };
+  const s = stub([statusFixture({ image_catalog: uploaded }), statusFixture({ image_catalog: { current: "2026-11-22.80600a3e", latest: "2026-11-22.80600a3e", update_available: false, compatible: true } })]);
+  try {
+    renderCard();
+    const images = await waitFor(() => row(u.images));
+    assert.ok(within(images).getByText(u.uploaded));
+    assert.equal(within(images).queryByText(u.available), null);
+    assert.equal(within(images).queryByRole("button", { name: u.apply }), null);
+
+    // Declining leaves the uploaded catalog in force.
+    await userEvent.click(within(images).getByRole("button", { name: u.useChannel }));
+    let dialog = await screen.findByRole("dialog", { name: u.useChannelTitle });
+    assert.ok(within(dialog).getByText("The channel's catalog 2026-11-22.80600a3e replaces the uploaded 2026-11-23.swr-p1-p2-demo. Versions only the upload has are deleted, or kept as old versions while in use."));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => assert.equal(screen.queryByRole("dialog", { name: u.useChannelTitle }), null));
+    assert.deepEqual(s.calls, []);
+
+    await userEvent.click(within(row(u.images)).getByRole("button", { name: u.useChannel }));
+    dialog = await screen.findByRole("dialog", { name: u.useChannelTitle });
+    await userEvent.click(within(dialog).getByRole("button", { name: u.useChannel }));
+    // The server replaces an uploaded catalog only when told to.
+    await waitFor(() => assert.deepEqual(s.calls, ["syncImages:replaceUploaded"]));
+    await waitFor(() => assert.ok(within(row(u.images)).getByText(u.upToDate)));
+    assert.equal(within(row(u.images)).queryByRole("button", { name: u.useChannel }), null);
+  } finally {
+    s.restore();
+  }
+});
+
+// An uploaded catalog that is the channel's own is simply current.
+test("an uploaded image catalog equal to the channel's is up to date", async () => {
+  const s = stub([statusFixture({ image_catalog: { current: "2026-10-09.f085e40b", latest: "2026-10-09.f085e40b", update_available: false, uploaded: true, compatible: true } })]);
+  try {
+    renderCard();
+    await waitFor(() => assert.ok(within(row(u.images)).getByText(u.upToDate)));
+    assert.equal(within(row(u.images)).queryByRole("button", { name: u.useChannel }), null);
   } finally {
     s.restore();
   }

@@ -224,7 +224,7 @@ func TestUpdatesComparesTheChannelWithThisServer(t *testing.T) {
 	channel := newTestChannel(t)
 	channel.publishImageCatalog([]byte(upstreamManifest))
 	run.useChannel(channel)
-	if err := run.store.RecordImageCatalogImport("2026-10-08.11111111"); err != nil {
+	if err := run.store.RecordImageCatalogImport("2026-10-08.11111111", false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -252,6 +252,54 @@ func TestUpdatesComparesTheChannelWithThisServer(t *testing.T) {
 	}
 	if c := getUpdateStatus(t, run).ImageCatalog; c.Current != "2026-10-09.abcdef12" || c.UpdateAvailable {
 		t.Fatalf("image catalog after sync = %+v", c)
+	}
+}
+
+// An image catalog uploaded by hand differs from the channel's because someone
+// chose it. The channel's catalog is not offered as its update (applying it
+// would delete the versions only the upload has), the status says the catalog
+// was uploaded, and applying the channel's on request makes it a channel
+// catalog again.
+func TestAnUploadedImageCatalogIsNotOfferedTheChannelsAsAnUpdate(t *testing.T) {
+	run := newImageManifestRun(t)
+	channel := newTestChannel(t)
+	channel.publishImageCatalog([]byte(upstreamManifest))
+	run.useChannel(channel)
+	uploaded := strings.Replace(strings.Replace(upstreamManifest, "2026-10-09.abcdef12", "2026-10-10.offline-site", 1),
+		`]}]}`, `,{"name":"cuda13.0-vllm0.31.0-site","image_ref":"gpuworks/gpuworks-runner:cuda13.0-vllm0.31.0-site","engine_version":"0.31.0","framework_version":"13.0","arch":"multi"}]}]}`, 1)
+	if rec := run.do(http.MethodPost, "/api/v1/images/import", "application/json", uploaded); rec.Code != http.StatusOK {
+		t.Fatalf("upload = %d %s", rec.Code, rec.Body.String())
+	}
+
+	rec := run.do(http.MethodGet, "/api/v1/updates", "", "")
+	if !strings.Contains(rec.Body.String(), `"image_catalog":{"current":"2026-10-10.offline-site","latest":"2026-10-09.abcdef12","update_available":false,"uploaded":true,"compatible":true}`) {
+		t.Fatalf("image catalog after an upload = %s", rec.Body.String())
+	}
+	if _, err := run.store.ImageByRef("gpuworks/gpuworks-runner:cuda13.0-vllm0.31.0-site"); err != nil {
+		t.Fatalf("the uploaded version: %v", err)
+	}
+
+	// "Check for updates" does not replace the upload: it would delete the
+	// version only the upload has.
+	rec = run.do(http.MethodPost, "/api/v1/images/sync", "", "")
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"code":"IMAGE_CATALOG_UPLOADED"`) ||
+		!strings.Contains(rec.Body.String(), `"params":{"current":"2026-10-10.offline-site","latest":"2026-10-09.abcdef12"}`) {
+		t.Fatalf("sync over an upload = %d %s", rec.Code, rec.Body.String())
+	}
+	if _, err := run.store.ImageByRef("gpuworks/gpuworks-runner:cuda13.0-vllm0.31.0-site"); err != nil {
+		t.Fatalf("the uploaded version after a refused sync: %v", err)
+	}
+
+	// Asked to replace it, the channel's catalog does.
+	if rec := run.do(http.MethodPost, "/api/v1/images/sync?replace_uploaded=true", "", ""); rec.Code != http.StatusOK {
+		t.Fatalf("sync = %d %s", rec.Code, rec.Body.String())
+	}
+	if _, err := run.store.ImageByRef("gpuworks/gpuworks-runner:cuda13.0-vllm0.31.0-site"); err == nil {
+		t.Fatal("the version only the upload had is still listed after the channel's catalog replaced it")
+	}
+	rec = run.do(http.MethodGet, "/api/v1/updates", "", "")
+	if !strings.Contains(rec.Body.String(), `"image_catalog":{"current":"2026-10-09.abcdef12","latest":"2026-10-09.abcdef12","update_available":false,"compatible":true}`) {
+		t.Fatalf("image catalog after the channel's = %s", rec.Body.String())
 	}
 }
 

@@ -586,7 +586,7 @@ the endpoint returns 409 and does not replace the existing registration. If the 
 | DELETE | `/api/v1/images/{id}` | Delete a community/custom image version; system images return 400 `OFFICIAL_IMAGE_DELETE_FORBIDDEN`. Returns 409 `IMAGE_IN_USE` if still referenced by deployments, unfinished instances, or models (using the same reference criteria as system image deletion/deprecation) | JWT(admin) |
 | DELETE | `/api/v1/image-series/{id}` | Delete a community/custom image series; returns 409 `IMAGE_IN_USE` if any version is still referenced | JWT(admin) |
 | POST | `/api/v1/images/import` | Accepts two request body types: a system catalog manifest with `schema_version` (schema 2/3; other values return 400), or `{"series":[...]}` for community/custom additions (cannot set `source=official`) | JWT(admin) |
-| POST | `/api/v1/images/sync` | Update the system image catalog from the release channel; ignores the request body and returns version counts and series. For errors, see [Catalog Import Results](#目录导入结果) | JWT(admin) |
+| POST | `/api/v1/images/sync` | Update the system image catalog from the release channel; ignores the request body and returns version counts and series. When the catalog in force was uploaded by hand and differs from the channel's, it is replaced only with `?replace_uploaded=true`. For errors, see [Catalog Import Results](#目录导入结果) | JWT(admin) |
 | POST | `/api/v1/images/preview-archive-url` | Parse a `docker save` archive URL before downloading: `{"url"}` → `url`, `size_bytes`, `repo_tags`, `previewable`, and optional `metadata_by_tag` with the engine, framework, their versions, and host architecture per reference | JWT(admin) |
 | GET | `/api/v1/images/nodes/{uuid}/runtime-images` | List tagged node images. Optional query parameter `namespace`. Returns references, immutable identities, sizes, and source and deployment namespaces. | JWT(admin) |
 | POST | `/api/v1/images/nodes/{uuid}/runtime-images/inspect` | Inspect the selected image configuration for catalog fields. Submit the same selection plus `node_uuid` as `runtime_image` alongside one custom version to `POST /api/v1/images/import`. | JWT(admin) |
@@ -681,6 +681,8 @@ Failures leave the catalog unchanged. Handle the following errors:
 - All release sources are unreachable: 502 `UPDATE_SOURCES_UNAVAILABLE`; an index exists but no catalog file matches it: 502 `UPDATE_DOWNLOAD_FAILED`.
 - The channel has not published a catalog: 404 `UPDATE_NOT_PUBLISHED`.
 - Invalid content: 400 `IMAGE_MANIFEST_INVALID`; a name or ref conflicts with a community/custom row: 400 `IMAGE_IMPORT_CONFLICT`.
+
+`POST /images/sync` over a catalog uploaded by hand, when the channel's catalog differs and `replace_uploaded=true` is absent, returns 409 `IMAGE_CATALOG_UPLOADED` (`params.current` and `params.latest` are the two catalog versions) and leaves the catalog unchanged.
 
 The version row's `rolling_tag`, `deprecated`, and `deprecated_since` describe rolling tags and deprecation status;
 `reference_count` counts deployments, unfinished instances, and models that reference the ref.
@@ -1976,7 +1978,7 @@ Sync-group create and rename require an exact case-sensitive unique name after t
 - `channel`, `channel_editable`: the current channel and whether switching is allowed.
 - `auto_check`: the automatic check switch. When `false`, returns only the result of the last manual check; if no check has ever run, returns an empty response without `sources` or `unavailable_reason`. A forced refresh still performs a check.
 - Source information: the winning source and `{url,ok,latency_ms,error}` for sources that have responded. Slow sources that have not responded are omitted; the UI does not display source details.
-- `server`, `image_catalog`, `template_catalog`: each includes `current`, `latest`, and `update_available`. Templates also include `compatible`; the server also includes `installable`, `self_upgrade`, `self_upgrade_blocker`, and `install_dir` (the installation directory containing `server.yaml`; omitted when there is no such directory).
+- `server`, `image_catalog`, `template_catalog`: each includes `current`, `latest`, and `update_available`. `image_catalog` also has `uploaded: true` when the catalog in force was uploaded by hand, and `update_available` is then always `false`. Templates also include `compatible`; the server also includes `installable`, `self_upgrade`, `self_upgrade_blocker`, and `install_dir` (the installation directory containing `server.yaml`; omitted when there is no such directory).
 
 The server marks `update_available` only when the channel version is newer. The two catalogs must also differ from the current content and have a release date no earlier than the current build, to avoid marking old catalogs as updates.
 When no source is available, the response is still 200 with `available=false`; `unavailable_reason` distinguishes the cases:
@@ -2478,11 +2480,11 @@ An unknown `target_vendor` on `/api/v1/engines` returns 400. If custom-command f
 <!-- translation-source-sha256: eb0d2ff341e8c1ae82bcc18e67d0720a647009973d4a5c9b9394f4b3c57c737d ## Models -->
 <!-- translation-source-sha256: 2818637fc41db824cf8851d4bd0bc2cb1e90e978da76ce1c2cb5098d8aeece25 ### List Filtering and Presence Summary -->
 <!-- translation-source-sha256: 536c79e56bf4d787dec94eef14773f9e978accf7d42427e195db79e5fa0ac045 ### Register an Existing Node Path -->
-<!-- translation-source-sha256: a8ebc8f569b4695db5d7e80450a6e843689abd8b2724c44a3c54d53df4c178bc ## Images / Storages (Image Catalog and Storage Policies) -->
+<!-- translation-source-sha256: d6e0454e5b9786f76756fd05f5a8910b36c3a416df848d787506a6b893575848 ## Images / Storages (Image Catalog and Storage Policies) -->
 <!-- translation-source-sha256: 5a937a0329b1aabd619bac36afbe45ff963584a7031b8588b3c6d1c9ebabdbe0 ### Register an image already on a node -->
 <!-- translation-source-sha256: 04f403145369bea2e0886af6fd3a84add59d07299152c9a53cc09ef3d598fdf0 ### Storage Configuration and Cache Status -->
 <!-- translation-source-sha256: 76495aa0a302fbe279f354b4207253de032639c11e8498c2041f1b8a373a248c ### Storage File Operation Scope and Errors -->
-<!-- translation-source-sha256: 28ab68c5e446f16a186a6ea1ad5e2fe940b67e51a2098b9d556108ede3a22d09 ### Catalog Import Results -->
+<!-- translation-source-sha256: f4f0defdfe3cd167b8c9ac3826dcbaa54ff444000832f56f6b4a360024229c77 ### Catalog Import Results -->
 <!-- translation-source-sha256: c162aaa85f62dfb49b9c18ed8540144b49d74ede563ca77a776b437d0b8a1125 ## Inference Templates (Inference Catalog/Templates) -->
 <!-- translation-source-sha256: 4b7e28c06adfbce76189556587fc94653baf4749acae30f34cec3772bf431f37 ### Pre-Import Checks -->
 <!-- translation-source-sha256: f3c254df3774c7c48ee5ebf7cc4861e55fd88aed33f8cc457ecb4190f5c41377 ## Deployments / Instances (Deployments and Instances) -->
@@ -2524,7 +2526,7 @@ An unknown `target_vendor` on `/api/v1/engines` returns 400. If custom-command f
 <!-- translation-source-sha256: dff84f5e2e143ca7701c66cd40683e1ca6428f5d803325e20c3a4e6b759a19ae ## Web Terminal -->
 <!-- translation-source-sha256: 7858bdfd14670c6316f95db08d7f9198accf3451a7e655c9513ff13cf428941c ## Networks -->
 <!-- translation-source-sha256: 996230365d7f304ba6d5b55ec19068b5aae5e436538dd5f988dba762660e75c0 ## Settings / Network Presets -->
-<!-- translation-source-sha256: 0d6096536d010c9fb3e99a7c9823f000f224ee23f15072817338937928739331 ### Update Check Results -->
+<!-- translation-source-sha256: a20867e2be7379bb4faebdc5b27ec67250f6f147bb9daab99cd4b941accdc4db ### Update Check Results -->
 <!-- translation-source-sha256: 0e96eaf91ec4ceaa489e42f4bc76c90f1ae38793c3dc6f511af1e5a915929772 ### Server Upgrade Restrictions -->
 <!-- translation-source-sha256: 407e22173bef80c6affe537b15efce4491e1e75938bc45fc92a2c73d4679d528 ### Trace Export Settings and Status -->
 <!-- translation-source-sha256: 63ec2229bea726b68dd009f914f6f8e306163df675d1f05e3c10b6615073a778 ### Source Rule Connectivity Test -->

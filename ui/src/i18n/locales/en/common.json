@@ -548,6 +548,7 @@
     "NOTICE_IDS_INVALID": "Name between 1 and 128 notices to mark as read.",
     "IMAGE_MANIFEST_INVALID": "The image manifest is invalid: {{detail}}",
     "IMAGE_IMPORT_CONFLICT": "The manifest conflicts with a community or custom image: {{detail}}",
+    "IMAGE_CATALOG_UPLOADED": "The system image catalog in force, {{current}}, was uploaded by hand. Replacing it with the channel's catalog {{latest}} needs confirming: image versions that only the upload has are deleted, or kept as old versions while still in use.",
     "IMAGE_REF_REQUIRED": "Enter an image reference.",
     "IMAGE_TAG_REQUIRED": "Image reference “{{image}}” must include an explicit tag.",
     "IMAGE_PURPOSE_INVALID": "Image purpose “{{purpose}}” is invalid. Use inference or evaluation.",
