@@ -112,14 +112,24 @@ func newPeerRelayRigWithTarget(t *testing.T, h *Hub, sourceDriver runtime.Driver
 	return r
 }
 
-func (r *peerRelayRig) prepare(t *testing.T, kind, id string) (string, any) {
+// unreachableEndpoint is a loopback address nothing listens on: a port that was
+// bound and released. It is taken only after the target's receiver has bound
+// its own port, because a port released earlier can be handed to that receiver
+// and the "unreachable" direct dial would then reach it and succeed (the
+// failing CI runs show a send that never saw a refused dial).
+func unreachableEndpoint(t *testing.T) string {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	unreachable := listener.Addr().String()
+	addr := listener.Addr().String()
 	listener.Close()
+	return addr
+}
+
+func (r *peerRelayRig) prepare(t *testing.T, kind, id string) (string, any) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if kind == "model" {
@@ -145,7 +155,7 @@ func (r *peerRelayRig) prepare(t *testing.T, kind, id string) (string, any) {
 			defer cancel()
 			_, _ = r.target.call(ctx, proto.RPCModelSyncStop, proto.ModelSyncStopParams{TransferID: id, Key: id})
 		})
-		return proto.RPCModelSyncSend, proto.ModelSyncSendParams{TransferID: id, SourcePath: "source", Token: "once", Endpoints: []string{unreachable}, Fingerprint: ready.Fingerprint, AllowRelay: true}
+		return proto.RPCModelSyncSend, proto.ModelSyncSendParams{TransferID: id, SourcePath: "source", Token: "once", Endpoints: []string{unreachableEndpoint(t)}, Fingerprint: ready.Fingerprint, AllowRelay: true}
 	}
 	wire, err := r.target.call(ctx, proto.RPCImageSyncListen, proto.ImageSyncListenParams{TransferID: id, ImageRef: "example/relay:" + id, Token: "once", BindIP: "127.0.0.1"})
 	if err != nil {
@@ -160,7 +170,7 @@ func (r *peerRelayRig) prepare(t *testing.T, kind, id string) (string, any) {
 		defer cancel()
 		_, _ = r.target.call(ctx, proto.RPCImageSyncStop, proto.ImageSyncStopParams{TransferID: id})
 	})
-	return proto.RPCImageSyncSend, proto.ImageSyncSendParams{TransferID: id, ImageRef: "example/relay:" + id, Token: "once", Endpoints: []string{unreachable}, Fingerprint: ready.Fingerprint, AllowRelay: true}
+	return proto.RPCImageSyncSend, proto.ImageSyncSendParams{TransferID: id, ImageRef: "example/relay:" + id, Token: "once", Endpoints: []string{unreachableEndpoint(t)}, Fingerprint: ready.Fingerprint, AllowRelay: true}
 }
 
 func TestPeerRelayIntegrationDirectFailureProbeAndConfirmedArchive(t *testing.T) {
