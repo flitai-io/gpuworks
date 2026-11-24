@@ -219,6 +219,10 @@ test("an ordinary deployment renders exactly as before: no PD summary, no role g
     </I18nextProvider>,
   );
   await screen.findAllByText("ordinary-deployment");
+  // The list row shows the name before the detail with its instances lands;
+  // selectInstance is synchronous and needs the instance records rendered.
+  fireEvent.click(await screen.findByRole("tab", { name: /^Instance details \(1\)/ }));
+  await screen.findByRole("button", { name: "All 1" });
   selectInstance("inst-plain");
   const records = await screen.findByRole("group", { name: deploymentsLocale.detail.switchInstance });
   assert.ok(within(records).getByText("inst-plain"));
