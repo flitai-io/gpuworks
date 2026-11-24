@@ -91,6 +91,28 @@
 
 `engine` 与 `image-entry` 不是例外：它们的引擎参数全部来自那一份启动配置。
 
+### 手工命令的端口与平台变量
+
+手工命令用带 `GPUWORKS_` 前缀的平台变量写出这次启动分配的值，服务端在启动前把它们换成实际值。单机最常用的几个：
+
+| 变量 | 值 |
+|---|---|
+| `${GPUWORKS_API_PORT}` | 平台为本实例保留、网关与健康检查访问的端口 |
+| `${GPUWORKS_API_HOST}` | 服务应绑定的地址 |
+| `${GPUWORKS_MODEL_PATH}` | 主权重在容器里的挂载路径，缺省 `/model` |
+| `${GPUWORKS_TP_SIZE}` | 部署的张量并行度，与表单一致 |
+
+完整词表与出现条件见[推理目录语法 · 变量展开](../reference/inference-catalog-spec.md#变量展开)。vLLM 的单机手工命令可以这样写：
+
+```sh
+exec vllm serve ${GPUWORKS_MODEL_PATH} \
+  --host ${GPUWORKS_API_HOST} --port ${GPUWORKS_API_PORT} \
+  --tensor-parallel-size ${GPUWORKS_TP_SIZE}
+```
+
+- **一定要写端口。** 命令里没有 `--port` 时，引擎监听自己的默认端口（vLLM 是 8000，SGLang 是 30000），健康检查和网关访问的却是平台分配的端口，实例会一直停在启动中，网关返回 `MODEL_NOT_READY`。评估对这种命令给出 `MANUAL_COMMAND_PORT_UNSTATED` 提醒；headless rank 不监听 API，不检查。
+- **写死的端口号会被改写。** 写的端口号在提供 API 的节点上已被占用（本节点其他未停止的实例占着，或 agent 上报有程序在监听）时，评估给出 `MANUAL_COMMAND_PORT_TAKEN` 提醒；只查得到引擎端口段内的占用。两条都只是提醒，不拦截创建，部署页把它们显示在命令框下方。
+
 ### 多机与 PD 的手工命令
 
 一个部署只存一段手工命令，多机的每个 rank、PD 的每个实例都运行它；各 rank 的差别靠平台变量表达：

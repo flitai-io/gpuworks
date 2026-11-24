@@ -91,6 +91,28 @@ Command mode selects **how to interpret the launch command** for a deployment. T
 
 `engine` and `image-entry` are not exceptions: all their engine parameters come from the single launch configuration.
 
+### Ports and Platform Variables in a Manual Command
+
+A manual command writes the values assigned to this launch with platform variables carrying the `GPUWORKS_` prefix; the server replaces them with the actual values before the launch. The ones a single-node command uses most:
+
+| Variable | Value |
+|---|---|
+| `${GPUWORKS_API_PORT}` | The port the platform reserves for this instance, which the gateway and the health check dial |
+| `${GPUWORKS_API_HOST}` | The address the server should bind |
+| `${GPUWORKS_MODEL_PATH}` | Where the primary weights are mounted in the container, `/model` by default |
+| `${GPUWORKS_TP_SIZE}` | The deployment's tensor parallel size, as the form states it |
+
+For the full vocabulary and when each variable exists, see [Inference Catalog Syntax · Variable Expansion](../reference/inference-catalog-spec.md#变量展开). A single-node vLLM manual command can read:
+
+```sh
+exec vllm serve ${GPUWORKS_MODEL_PATH} \
+  --host ${GPUWORKS_API_HOST} --port ${GPUWORKS_API_PORT} \
+  --tensor-parallel-size ${GPUWORKS_TP_SIZE}
+```
+
+- **Always state the port.** Without `--port`, the engine listens on its own default port (8000 for vLLM, 30000 for SGLang) while the health check and the gateway dial the port the platform assigned: the instance stays starting and the gateway answers `MODEL_NOT_READY`. Evaluate warns about such a command with `MANUAL_COMMAND_PORT_UNSTATED`; headless ranks serve no API and are not checked.
+- **A hard-coded port number is rewritten.** When the port number is already taken on the node that serves the API (another instance on the node that is not stopped holds it, or the agent reported a listener on it), evaluate warns with `MANUAL_COMMAND_PORT_TAKEN`; only ports inside the engine port range can be seen as taken. Both are warnings, not refusals: the create still succeeds, and the deploy page shows them under the command editor.
+
 ### Manual Commands for Multi-Node and PD Deployments
 
 A deployment stores one manual command, and every rank of a multi-node group and every PD instance runs it; platform variables express how the ranks differ:
@@ -128,6 +150,7 @@ The deployment's launch configuration is determined by materializing and resolvi
 <!-- translation-source-sha256: 23655fc4b8a0b7940d08317bd21f9d003819164b91c3ea431a8c4bea59d172d0 ## Parameters Left to the Engine -->
 <!-- translation-source-sha256: fd91912ae3a4712ca5e41d49ca964ff7b7326d8d6a9ad16c3fdbf96b1ab9ed05 ## The Three Command Modes -->
 <!-- translation-source-sha256: 374ada004f44f962f0986cc7dd81c7a9627036a26ae654772e7d5e63dc36687d ### Manual Is the Only Way to Take Over the Complete Command -->
+<!-- translation-source-sha256: 625d97afe2584ee2fdf816cf302eb94e9b66e165cf71b922467875d115e625d2 ### Ports and Platform Variables in a Manual Command -->
 <!-- translation-source-sha256: 71995a467d55f734f2196e6946ed49953054a23909052a712bb62382067ff313 ### Manual Commands for Multi-Node and PD Deployments -->
 <!-- translation-source-sha256: e15ec7f5155bb2bbd0be97c1c445d0daee9fe90c5001f80f8573d189fc0670b4 ## Configured Environment and Image Environment -->
 <!-- translation-source-sha256: 13bbc4704a862ca8d5fb0060a6509f670cb73adad7d647d7a71376b34627ab92 ## The Image Catalog Carries No Launch Configuration -->

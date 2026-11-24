@@ -205,7 +205,8 @@ sleep、LoRA、投机解码、KV 卸载等特性只在对应字典字段被声�
 
 手写命令勾选「命令已包含准备脚本」后，模板的准备脚本不再执行，避免重复。多机与 PD 的手写命令由所有 rank 共用，
 必须引用能区分 rank 的变量，否则评估与创建返回 `MANUAL_COMMAND_RANK_BLIND`，见
-[多机与 PD 的手工命令](../explanation/launch-config.md#多机与-pd-的手工命令)。
+[多机与 PD 的手工命令](../explanation/launch-config.md#多机与-pd-的手工命令)。手写命令要写 `--port ${GPUWORKS_API_PORT}`；没写端口或写的端口已被占用时，
+评估分别给出 `MANUAL_COMMAND_PORT_UNSTATED`、`MANUAL_COMMAND_PORT_TAKEN` 提醒，见[手工命令的端口与平台变量](../explanation/launch-config.md#手工命令的端口与平台变量)。
 
 ### 容器覆盖字段
 
