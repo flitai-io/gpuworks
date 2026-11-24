@@ -48,10 +48,13 @@ func installedAddrs(cfg serverconfig.File) []string {
 }
 
 func (i *Installer) waitAddrReleased(ctx context.Context, addr, command string) error {
+	probe := i.deps.probeStoppedAddr
+	if probe == nil {
+		probe = probeTCPBind
+	}
 	for attempt := 0; attempt < addrReleaseAttempts; attempt++ {
-		ln, err := net.Listen("tcp", addr)
+		err := probe(addr)
 		if err == nil {
-			_ = ln.Close()
 			return nil
 		}
 		// Only "in use" is a holder; anything else (an address this host no
@@ -65,6 +68,14 @@ func (i *Installer) waitAddrReleased(ctx context.Context, addr, command string) 
 		i.deps.sleep(ctx, addrReleaseInterval)
 	}
 	return i.addrHeldError(ctx, addr, command)
+}
+
+func probeTCPBind(addr string) error {
+	ln, err := net.Listen("tcp", addr)
+	if err == nil {
+		_ = ln.Close()
+	}
+	return err
 }
 
 // addrHeldError explains a held address: which process holds it and, when

@@ -37,7 +37,7 @@ func (h *harness) listensOn(addr string) {
 // the holder and stops before the backup, and brings back the service it
 // stopped.
 func TestUpgradeRefusesAnAddressStillHeldAfterTheStop(t *testing.T) {
-	h := newHarness(t, t.TempDir())
+	h := newHarnessWithPortProbe(t, t.TempDir(), nil)
 	h.writeExistingInstall("v1.0.0")
 	addr := holdAddr(t)
 	h.listensOn(addr)
@@ -81,7 +81,7 @@ func TestUpgradeRefusesAnAddressStillHeldAfterTheStop(t *testing.T) {
 // different installation serves. Nothing of this one is started, since it was
 // not running before.
 func TestUpgradeLeavesAStoppedInstallationStoppedWhenItsAddressIsHeld(t *testing.T) {
-	h := newHarness(t, t.TempDir())
+	h := newHarnessWithPortProbe(t, t.TempDir(), nil)
 	h.writeExistingInstall("v1.0.0")
 	h.supervisedByNohup()
 	h.listensOn(holdAddr(t))

@@ -100,7 +100,7 @@ func TestRestartUsesTheInstallationsServiceMode(t *testing.T) {
 // A restart stops first and checks the address, so another server answering
 // /healthz there is not taken for this one coming back.
 func TestRestartRefusesAnAddressStillHeldAfterTheStop(t *testing.T) {
-	h := newHarness(t, t.TempDir())
+	h := newHarnessWithPortProbe(t, t.TempDir(), nil)
 	h.writeExistingInstall("v1.0.0")
 	h.supervisedByNohup()
 	addr := holdAddr(t)

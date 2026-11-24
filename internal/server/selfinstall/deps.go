@@ -66,6 +66,9 @@ type Deps struct {
 	// Host is the machine's addresses, for picking the address a fresh
 	// install binds.
 	Host serverconfig.Host
+
+	// probeStoppedAddr overrides the TCP bind probe for a simulated service.
+	probeStoppedAddr func(addr string) error
 }
 
 // NewDeps returns the production dependency set.
