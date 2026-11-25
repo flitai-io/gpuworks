@@ -43,7 +43,7 @@ For external endpoints, prepare the address, model name, and required API key. S
    Random token-length and Agentic workloads fail before warmup or measured inference if their tokenizer is missing or cannot be loaded; they no longer fall back to character estimates. Natural corpus and imported datasets can omit the tokenizer, with estimated local counts. `exact` means sampling from the tokenizer vocabulary and still does not guarantee that server-reported usage matches local counts; the chat template also adds input. Endpoint-reported usage and local estimates are retained separately.
 5. Click **Start Evaluation** and view progress, errors, and results for each point in the details. If a warning says that an evaluation is already running on the target or load origin, assess whether resource contention affects the comparison before deciding to wait or continue.
    You can cancel long-running tasks; completed points are retained. A node can take over a task after reconnecting. Successful creation or a finished Run does not mean that every request succeeded.
-6. When the run ends, first check counts, failure reasons, and actual lengths in **Request and session evidence**, then review latency, throughput, and qualifying points as described below, and finally export the report.
+6. When the run ends, first expand **Request and session evidence** (collapsed by default) and check its counts, failure reasons, and actual lengths, then review latency, throughput, and qualifying points as described below, and finally export the report.
    If all requests fail or sessions remain incomplete, resolve connection, workload, or endpoint errors first, then rerun under the same conditions.
 
 For command-line load generation, you can also use `gpuworks-agent bench`. Supply both `--url` and `--model`, and confirm endpoint reachability from the machine running the command.
@@ -135,7 +135,7 @@ and all selected table columns are included. Online actions such as back, rerun,
 notices; exported files do not continue to update.
 
 The **request timeline** is interactive on the online result page. After choosing a point, inspect requests by session, turn, and attempt, from send through first generated output,
-first visible content, last output, and stream completion. Click a bar or use the keyboard to select a request and inspect its sources, latency, and errors.
+first visible content, last output, and stream completion. No request is selected by default; click a bar or use the keyboard to select a request and inspect its sources, latency, and errors.
 Long records are paginated, with the current page and retained record count stated explicitly. The exported preview retains the timeline page and request selected at export time.
 
 In HTML, turn on **Show full metrics** to see the original columns on the same point rows. Expand the detailed results below the preview for all retained points, percentiles, samples and warnings.
@@ -155,10 +155,10 @@ Information that cannot be obtained automatically from external endpoints, such 
 images, and startup arguments. Configuration values cannot substitute for logs or profiler evidence of the kernel actually running.
 
 <!-- translation-source-sha256: f9739b38f9f61cd86aadbd5a826ad69c9d2be2d06af88ef48c6ce0da975faf06 # Run Evaluations and Interpret Reports -->
-<!-- translation-source-sha256: 9047e3a68ea00909b4d83dbf31e066fd6c7a9e8e46be8a06d14a53af726c5670 ## Create and Complete an Evaluation Run -->
+<!-- translation-source-sha256: 1d05411397dcdd3927345d0f9a140fee0b49713968069e0fe397c7d45ebefc14 ## Create and Complete an Evaluation Run -->
 <!-- translation-source-sha256: 31e536c2a0ab236e8edb522663d6ea858d86f46947b21739891a061b81312a0e ## Metric Definitions -->
 <!-- translation-source-sha256: 871cc2986b1a6760bc8e1ecc6f88d9a205d64ae4ead29ea543600667846329a3 ## Advanced Settings -->
 <!-- translation-source-sha256: ccc5f7a7ffa359583469d7f8fbb4edb89fc3eb27359ca9031ad7ce3825f316ba ### Choose a Load Mode -->
 <!-- translation-source-sha256: c5b36f04f4e5e599581d9aab784a1b91ed28bd76d637cf34e519a5fcbbb50973 ### Set Experience Thresholds -->
 <!-- translation-source-sha256: c3b231348f08f97ababe242abec0e4617299abc20e50ce15ffeb73d2ea31f888 ## Request and Session Evidence -->
-<!-- translation-source-sha256: f2335209bf43280e33d64f4663ee1e64be39381c877424c41afcdf2cc6882a22 ## Export and Compare -->
+<!-- translation-source-sha256: 9a602f5c6614aa956670c2b2240f069094d97b51555ec2e08a6b9d723167c497 ## Export and Compare -->

@@ -25,3 +25,26 @@ func TestAdmissionCloseCausesAreDocumented(t *testing.T) {
 		}
 	}
 }
+
+// The troubleshooting pages name a refusal code and log strings for a revoked
+// member; they are the ones the server gives.
+func TestRevokedMemberTroubleshootingNamesWhatTheServerGives(t *testing.T) {
+	for _, page := range []string{"../../../docs/how-to/troubleshooting.md", "../../../docs-en/how-to/troubleshooting.md"} {
+		raw, err := os.ReadFile(page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(raw)
+		for _, want := range []string{
+			"`" + refusalMemberRevoked + "`", "`" + refusalIdentityConflict + "`", "`" + refusalProofMissing + "`", "`" + refusalProofExpired + "`",
+			businessRefusalHeader,
+			"closed business admission caller=" + string(closeProofFailed),
+			"candidate material proof failed while business admission is closed",
+			"err_class=admission_rejected", "err_class=identity_conflict", "`failure_stage`", "caller=" + string(closeProofExpired),
+		} {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s does not name %s", page, want)
+			}
+		}
+	}
+}

@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 // ascendSmokeTarget is the host CANN installation used to create an ACL
@@ -210,4 +212,28 @@ func environmentWith(base []string, overrides map[string]string) []string {
 		out = append(out, name+"="+value)
 	}
 	return out
+}
+
+// HostRuntimeCheck asks ACL on the host to use one die.
+func (p *AscendProber) HostRuntimeCheck() HostRuntimeCheck {
+	return HostRuntimeCheck{
+		CLI:          "npu-smi",
+		Prerequisite: AscendCLSmokePrerequisite,
+		// ACL initialization on a die that cannot create a context can spend
+		// almost the scheduler's default 30 seconds before returning its
+		// vendor error.
+		Timeout: 45 * time.Second,
+		Visible: func(g proto.GPUInfo) (string, bool) {
+			if g.Index < 0 {
+				return "", false
+			}
+			return strconv.Itoa(g.Index), true
+		},
+		Try: AscendRuntimeSmokeOn,
+	}
+}
+
+// ContainerSmokeVerdict grades the ACL check run inside a CANN image.
+func (p *AscendProber) ContainerSmokeVerdict(out string, exitErr error) error {
+	return ascendSmokeVerdict([]byte(out), exitErr)
 }

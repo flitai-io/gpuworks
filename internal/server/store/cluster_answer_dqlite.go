@@ -28,10 +28,15 @@ import (
 type AnswerCause uint32
 
 const (
-	// CauseRefused is a refusal of this member or of the cluster's state:
-	// admission rejected, identity conflict, a maintenance phase that does
-	// not serve, or business writes closed.
-	CauseRefused AnswerCause = 1 << iota
+	// CauseAdmissionRejected is a member's admission the database refused.
+	CauseAdmissionRejected AnswerCause = 1 << iota
+	// CauseIdentityConflict is a cluster identity that is not the
+	// database's.
+	CauseIdentityConflict
+	// CauseMaintenanceNotServing is a maintenance phase that does not serve.
+	CauseMaintenanceNotServing
+	// CauseBusinessWritesClosed is business writes closed on this member.
+	CauseBusinessWritesClosed
 	// CausePhaseChanged is a maintenance phase that moved under the caller.
 	CausePhaseChanged
 	// CauseNoRow is a row that is not there.
@@ -81,13 +86,41 @@ const (
 	CauseFailedRequest
 )
 
+// What a refusal is, for every caller. A member is refused when its
+// admission is rejected or its cluster identity conflicts; whose admission
+// it was is RefusesMember's question. The cluster is not serving during a
+// maintenance phase or while business writes are closed, which is no verdict
+// on any member.
+const (
+	CauseMemberRefused     = CauseAdmissionRejected | CauseIdentityConflict
+	CauseClusterNotServing = CauseMaintenanceNotServing | CauseBusinessWritesClosed
+	CauseRefused           = CauseMemberRefused | CauseClusterNotServing
+)
+
+// RefusesMember reports whether err is the database's verdict against the
+// member with this key: the cluster identity the member holds is not the
+// database's, or the admission the database refused is this member's. A
+// refusal of another member's key, one that names no key, and a cluster that
+// is not serving say nothing against this member. Of several keyed refusals
+// in one error only the first is read; a grant returns one.
+func RefusesMember(err error, key string) bool {
+	if key == "" {
+		return false
+	}
+	if Causes(err, CauseIdentityConflict) != 0 {
+		return true
+	}
+	var refusal *ClusterAdmissionRefusal
+	return errors.As(err, &refusal) && refusal.Key == key
+}
+
 // CauseLostConnection is the ways a peer's connection goes away under a
 // request, as the material paths take them when no file is involved.
 const CauseLostConnection = CauseNetTimeout | CausePeerUnreachable | CauseBrokenPipe | CauseIODeadline
 
-// carries reports which of the causes in among err carries anywhere in it,
+// Causes reports which of the causes in among err carries anywhere in it,
 // wrapped or joined.
-func carries(err error, among AnswerCause) AnswerCause {
+func Causes(err error, among AnswerCause) AnswerCause {
 	if err == nil {
 		return 0
 	}
@@ -105,9 +138,14 @@ func carries(err error, among AnswerCause) AnswerCause {
 
 func carriesOne(err error, cause AnswerCause) bool {
 	switch cause {
-	case CauseRefused:
-		return errors.Is(err, ErrClusterAdmissionRejected) || errors.Is(err, ErrClusterIdentityConflict) ||
-			errors.Is(err, ErrMaintenanceNotServing) || errors.Is(err, ErrBusinessWritesClosed)
+	case CauseAdmissionRejected:
+		return errors.Is(err, ErrClusterAdmissionRejected)
+	case CauseIdentityConflict:
+		return errors.Is(err, ErrClusterIdentityConflict)
+	case CauseMaintenanceNotServing:
+		return errors.Is(err, ErrMaintenanceNotServing)
+	case CauseBusinessWritesClosed:
+		return errors.Is(err, ErrBusinessWritesClosed)
 	case CausePhaseChanged:
 		return errors.Is(err, ErrMaintenancePhaseChanged)
 	case CauseNoRow:
@@ -232,10 +270,9 @@ func EveryBranch(err error, holds func(error) bool) (held, joined bool) {
 	return len(branches) > 0, true
 }
 
-// JoinRule is how a policy reads an error with several causes. The four
-// rules are the four readings the callers had; only EveryBranchAlone lets
-// no cause excuse another's verdict, and the others are to be folded into it
-// one policy at a time, each with the table's diff as its evidence.
+// JoinRule is how a policy reads an error with several causes. A join is
+// found along the error's single-wrapper chain, so a wrapper around a join
+// never changes the answer.
 type JoinRule uint8
 
 const (
@@ -245,12 +282,7 @@ const (
 	// EveryBranchAlone asks each branch of a join on its own, so one branch
 	// without an answer does not excuse another branch's verdict.
 	EveryBranchAlone
-	// EveryBranchUnderWrapper is EveryBranchAlone for an error that is
-	// itself a join. Under a wrapper, an accepted cause found anywhere
-	// answers before the join beneath it is looked at.
-	EveryBranchUnderWrapper
-	// NotJoined accepts a cause found anywhere only when the error itself
-	// is not a join; a join is left to its leaf, and has none.
+	// NotJoined never accepts a join; its caller asks about each branch.
 	NotJoined
 )
 
@@ -296,22 +328,12 @@ func (p AnswerPolicy) Unanswered(err error) bool {
 		if held, joined := EveryBranch(err, p.Unanswered); joined {
 			return held
 		}
-	case EveryBranchUnderWrapper:
-		if _, top := err.(interface{ Unwrap() []error }); top {
-			held, _ := EveryBranch(err, p.Unanswered)
-			return held
-		}
-		if p.accepted(err) {
-			return true
-		}
-		held, _ := EveryBranch(err, p.Unanswered)
-		return held
 	case NotJoined:
-		if _, top := err.(interface{ Unwrap() []error }); top {
+		if _, joined := JoinedBranches(err); joined {
 			return false
 		}
 	}
-	if p.Verdict != 0 && carries(err, p.Verdict) != 0 {
+	if p.Verdict != 0 && Causes(err, p.Verdict) != 0 {
 		return false
 	}
 	return p.accepted(err)
@@ -323,12 +345,12 @@ func (p AnswerPolicy) accepted(err error) bool {
 	if p.also != nil && p.also(err) {
 		return true
 	}
-	if p.Requires != 0 && carries(err, p.Requires) != p.Requires {
+	if p.Requires != 0 && Causes(err, p.Requires) != p.Requires {
 		return false
 	}
 	accept := p.NoAnswer
-	if p.UnlessFile != 0 && carries(err, CauseFile) != 0 {
+	if p.UnlessFile != 0 && Causes(err, CauseFile) != 0 {
 		accept &^= p.UnlessFile
 	}
-	return (accept != 0 && carries(err, accept) != 0) || leafCause(err)&p.NoAnswerLeaf != 0
+	return (accept != 0 && Causes(err, accept) != 0) || leafCause(err)&p.NoAnswerLeaf != 0
 }

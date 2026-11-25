@@ -60,6 +60,8 @@ func testHygonUnavailableReconnect(t *testing.T, sku string) {
 			"GPUWORKS_FAKE_GPU_FRAMEWORK_VERSION=25.04",
 			"GPUWORKS_FAKE_GPU_NO_INJECT=1",
 			"GPUWORKS_FAKE_RUNTIME_RECORD="+recordPath,
+			// Hygon dGPU is not offered on nerdctl.
+			"GPUWORKS_FAKE_RUNTIME_NAME=nerdctl",
 			"GPUWORKS_LOG_LEVEL=warn",
 		)
 		cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
@@ -88,7 +90,7 @@ func testHygonUnavailableReconnect(t *testing.T, sku string) {
 			if cap.Backend == "hygon-dgpu" {
 				found = true
 				if cap.DisplayName != "Hygon dGPU" || cap.ReasonCode != messages.ErrorPartitionRuntimeUnsupported ||
-					cap.ReasonParams.Runtime != "recording" || !slices.Equal(cap.ReasonParams.SupportedRuntimes, []string{"docker", "udocker"}) {
+					cap.ReasonParams.Runtime != "nerdctl" || !slices.Equal(cap.ReasonParams.SupportedRuntimes, []string{"docker", "udocker"}) {
 					t.Fatalf("Hygon capability = %+v, want runtime-unavailable with server display name", cap)
 				}
 			}

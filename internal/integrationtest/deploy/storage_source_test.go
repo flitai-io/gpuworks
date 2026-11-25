@@ -25,8 +25,8 @@ import (
 func TestReplicasReadWhicheverCopyTheirNodeHas(t *testing.T) {
 	env := testenv.New(t)
 	gpu := testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576})
-	env.AddNode("team-node", gpu, testenv.WithDriverName("fake"))
-	env.AddNode("other-node", gpu, testenv.WithDriverName("fake"))
+	env.AddNode("team-node", gpu, testenv.WithDriverName("docker"))
+	env.AddNode("other-node", gpu, testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "team-node")
 	env.WaitNodeOnline(t, "other-node")
 	byName := map[string]store.Node{}

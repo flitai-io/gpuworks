@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -178,22 +179,32 @@ func TestAscendSmokePrerequisiteNamesTheMissingHalf(t *testing.T) {
 	}
 }
 
-func TestHostRuntimeCheckTableCoversTheHostRuntimes(t *testing.T) {
-	for vendor, want := range map[string]bool{
-		"nvidia": true, "NVIDIA": true,
-		"ascend": true, "ASCEND": true,
-		"hygon": true, "HYGON": true,
-		"ppu": false, "apple": false, "": false,
+// Which vendors' runtimes can be asked about one card on the host, and with
+// which tool and time limit: a driver that gains or loses the check, or
+// answers with another vendor's, changes what the periodic check does.
+func TestHostRuntimeCheckIsEachDriversOwn(t *testing.T) {
+	for _, tc := range []struct {
+		vendor  string
+		cli     string
+		timeout time.Duration
+	}{
+		{"nvidia", "nvidia-smi", 0}, {"NVIDIA", "nvidia-smi", 0},
+		{"ascend", "npu-smi", 45 * time.Second}, {"ASCEND", "npu-smi", 45 * time.Second},
+		{"hygon", "hy-smi", 0}, {"HYGON", "hy-smi", 0},
+		{"ppu", "", 0}, {"amd", "", 0}, {"kunlunxin", "", 0}, {"apple", "", 0}, {"", "", 0},
 	} {
-		check, ok := HostRuntimeCheckFor(vendor)
-		if ok != want {
-			t.Fatalf("HostRuntimeCheckFor(%q) = %v, want %v", vendor, ok, want)
+		check, ok := HostRuntimeCheckFor(tc.vendor)
+		if ok != (tc.cli != "") {
+			t.Fatalf("HostRuntimeCheckFor(%q) = %v, want %v", tc.vendor, ok, tc.cli != "")
 		}
 		if !ok {
 			continue
 		}
-		if check.CLI == "" || check.Try == nil || check.Visible == nil || check.Prerequisite == nil {
-			t.Fatalf("%q has an incomplete entry: %+v", vendor, check)
+		if check.CLI != tc.cli || check.Timeout != tc.timeout {
+			t.Errorf("%q is checked with %q within %v, want %q within %v", tc.vendor, check.CLI, check.Timeout, tc.cli, tc.timeout)
+		}
+		if check.Try == nil || check.Visible == nil || check.Prerequisite == nil {
+			t.Fatalf("%q has an incomplete check: %+v", tc.vendor, check)
 		}
 	}
 }

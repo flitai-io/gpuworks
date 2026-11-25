@@ -347,6 +347,7 @@ var functionalArgsExempt = map[string]string{
 	"qwen/qwen3.8-flash-next/int8-vllm-910b-tp4-mtp":         "vLLM-Ascend's Qwen3.8 recipe, run on 910B4, uses --tool-call-parser qwen3_xml; the vLLM recipe for NVIDIA uses qwen3_coder",
 	"qwen/qwen3.8-flash-next/w4a8-vllm-910b-tp4":             "vLLM-Ascend's Qwen3.8 recipe, run on 910B4, uses --tool-call-parser qwen3_xml; the vLLM recipe for NVIDIA uses qwen3_coder",
 	"qwen/qwen3.8-flash-next/w4a8-vllm-910b-tp4-mtp":         "vLLM-Ascend's Qwen3.8 recipe, run on 910B4, uses --tool-call-parser qwen3_xml; the vLLM recipe for NVIDIA uses qwen3_coder",
+	"qwen/qwen3.8-flash-next/w4a8-vllm-910b-tp8-mtp":         "the published eight-card vLLM-Ascend recipe uses --tool-call-parser qwen3_xml; the vLLM recipe for NVIDIA uses qwen3_coder",
 }
 
 func TestNonNVIDIAChatSpecsInheritModelFunctionalArgs(t *testing.T) {

@@ -870,7 +870,7 @@
     "ACCELERATOR_SM_LIMIT_UNSUPPORTED": "{{vendor}} 不支持算力（SM）上限。请去掉该设置，或选择支持算力上限的 dGPU 后端。",
     "LAUNCH_FEATURES_UNKNOWN": "无法确认自定义启动命令在 {{vendor}} 上请求的功能。请提供可识别的引擎入口或结构化启动参数。",
     "SLEEP_TARGET_UNRESOLVED": "无法确认实例 {{instance}} 在节点 {{node}} 上的 GPU 选择：{{detail}}。",
-    "ACCELERATOR_RUNTIME_UNSUPPORTED": "{{vendor}} 需要 {{required_os}}/{{required_arch}} 和 {{required_runtime}}；节点当前为 {{os}}/{{arch}} 和 {{runtime}}。",
+    "ACCELERATOR_RUNTIME_UNSUPPORTED": "{{vendor}} 需要 {{required}}；节点当前为 {{os}}/{{arch}} 和 {{runtime}}。",
     "ACCELERATOR_RUNTIME_UNREPORTED": "节点尚未完整上报 {{vendor}} 所需的运行时信息，请刷新节点信息后重试。",
     "ACCELERATOR_DEVICE_UNAVAILABLE": "无法核验所选 {{vendor}} 设备，请检查设备身份和驱动诊断信息。",
     "ACCELERATOR_INVENTORY_UNAVAILABLE": "无法读取 {{vendor}} 驱动设备清单，请检查厂商命令和驱动。",

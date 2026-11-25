@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 )
 
 // Only compiled into the gpu test package. Integration tests can exercise the
@@ -79,12 +80,12 @@ func NativeAMDForTest() Prober {
 // Exercise that real validator, not a fake returning its input as output.
 type ppuSelectionForTest struct{ PPUProber }
 
-func (p *ppuSelectionForTest) RuntimeInjectionForDriver(indexes []int, driver string) RuntimeInjection {
+func (p *ppuSelectionForTest) RuntimeInjectionForDriver(indexes []int, target runtime.Target) RuntimeInjection {
 	return p.runtimeInjection(indexes, "8, GPU-00000000-0000-0000-0000-000000000008", func(index int, id string) (string, error) {
 		if index != 8 || !strings.HasSuffix(id, "0008") {
 			return "", os.ErrNotExist
 		}
 		return "/dev/alixpu_ppu9", nil
-	}, driver)
+	}, target)
 }
 func NativePPUForTest() Prober { return &ppuSelectionForTest{} }

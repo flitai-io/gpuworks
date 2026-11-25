@@ -136,7 +136,17 @@ func ReconcileClusterRaftMarker(ctx context.Context, cfg Config, target ClusterJ
 // membership is observed to contain this exact identity. If that observation
 // fails, the marker stays and no database is started. WaitReady is left to
 // the caller so a failed wait can be retried on the same running node.
-func StartClusterRaft(ctx context.Context, cfg Config, target ClusterJoinTarget) (_ *ClusterRaftSession, resultErr error) {
+func StartClusterRaft(ctx context.Context, cfg Config, target ClusterJoinTarget) (*ClusterRaftSession, error) {
+	return startClusterRaft(ctx, cfg, target, true)
+}
+
+// startClusterRaft starts the member's node. A join tells its process the
+// cluster's tier first (joining), as a server is told its installation's:
+// the node, the membership grants and the connections this process dials
+// then follow one timing. Reopening a joined identity does not: the tier
+// the member was given when it joined may since have been changed in its
+// installation's record, which is what the process was told.
+func startClusterRaft(ctx context.Context, cfg Config, target ClusterJoinTarget, joining bool) (_ *ClusterRaftSession, resultErr error) {
 	hold, err := lockClusterJoinMaterials(ctx, cfg, target)
 	if err != nil {
 		return nil, err
@@ -146,6 +156,9 @@ func StartClusterRaft(ctx context.Context, cfg Config, target ClusterJoinTarget)
 			resultErr = errors.Join(resultErr, hold.release())
 		}
 	}()
+	if joining {
+		cluster.UseStorageTier(joinedStorageTier(hold.snapshot))
+	}
 	raftDir := hold.path + ".dqlite"
 	seeds, fetchErr := hold.remoteSeeds(ctx)
 	if fetchErr != nil {
@@ -169,7 +182,7 @@ func StartClusterRaft(ctx context.Context, cfg Config, target ClusterJoinTarget)
 		return nil, err
 	}
 	db, err := cluster.StartAuthorizedDatabase(ctx, cluster.DatabaseConfig{
-		Dir: raftDir, Address: hold.info.Address, Seeds: seeds, Name: filepath.Base(hold.path), StorageTier: joinedStorageTier(hold.snapshot),
+		Dir: raftDir, Address: hold.info.Address, Seeds: seeds, Name: filepath.Base(hold.path),
 	}, filepath.Join(hold.dir, "transport-policy.json"), trust, []byte(hold.snapshot.CertificatePEM), hold.key)
 	if err != nil {
 		return nil, err
@@ -231,9 +244,8 @@ func (h *clusterJoinHold) reconcileExactMembership(ctx context.Context, raftDir 
 	return err
 }
 
-// joinedStorageTier is the tier a joining member starts its node with: the one
-// the cluster told it. A node always names its tier here, so the join does not
-// depend on what else this process may have been told.
+// joinedStorageTier is the tier a joining member runs: the one the cluster
+// told it with its certificate.
 func joinedStorageTier(snapshot joinMaterialSnapshot) storagetier.Tier {
 	tier, err := storagetier.Parse(snapshot.StorageTier)
 	if err != nil {

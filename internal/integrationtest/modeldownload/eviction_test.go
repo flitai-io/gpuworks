@@ -144,7 +144,7 @@ func newEvictionFixture(t *testing.T, name string) *evictionFixture {
 	upstream := testenv.FakeModelHub(t)
 	hub := newStallingHub(t, upstream.Endpoint)
 	env := testenv.NewWithModelEndpoint(t, hub.URL)
-	env.AddNode(name+"-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	env.AddNode(name+"-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, name+"-node")
 	rows, err := env.Store().ListNodes()
 	if err != nil || len(rows) != 1 {

@@ -28,7 +28,7 @@ func TestFleetSettingsSaveDoesNotWaitForTheFleet(t *testing.T) {
 	nodeCount := EnvInt("GPUWORKS_FLEET_NODES", 1000)
 	env := testenv.NewOnDisk(t)
 	for i := 0; i < nodeCount; i++ {
-		node := env.AddNode(fmt.Sprintf("fanout-%04d", i), testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+		node := env.AddNode(fmt.Sprintf("fanout-%04d", i), testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 		node.Driver.ShareEnginePorts()
 	}
 	client, err := Login(env.URL(), "admin", testenv.AdminPassword)

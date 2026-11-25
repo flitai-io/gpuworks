@@ -9,14 +9,14 @@ package store
 // succeeds. Callers may retry only side-effect-free reads on it.
 // go-dqlite returns driver.Error as a value, which errors.As matches here.
 func ReplicatedReadInterrupted(err error) bool {
-	return carries(err, CauseFailureResponse) != 0
+	return Causes(err, CauseFailureResponse) != 0
 }
 
 // ReplicatedLeaderUnavailable reports a dial that found no elected leader.
 // go-dqlite returns this sentinel as the root cause when a connection cannot
 // be opened during an election.
 func ReplicatedLeaderUnavailable(err error) bool {
-	return carries(err, CauseNoLeader) != 0
+	return Causes(err, CauseNoLeader) != 0
 }
 
 // ReplicatedWriterBusy reports a dqlite failure whose primary code is
@@ -25,7 +25,7 @@ func ReplicatedLeaderUnavailable(err error) bool {
 // was in progress). It says nothing about the data the statement would have
 // read or written.
 func ReplicatedWriterBusy(err error) bool {
-	return carries(err, CauseWriterBusy) != 0
+	return Causes(err, CauseWriterBusy) != 0
 }
 
 func (replicatedRuntimeDatabase) leaderUnavailable(err error) bool {

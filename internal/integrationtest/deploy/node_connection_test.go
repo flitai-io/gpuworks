@@ -15,7 +15,7 @@ import (
 // A historical persisted online row must not claim a live session. A real
 // agent reconnects independently while runtime-owned containers survive.
 func TestNodeReconnectionDoesNotDuplicateSurvivingContainers(t *testing.T) {
-	driver := testenv.NewFakeDriver("fake")
+	driver := testenv.NewFakeDriver("docker")
 	env, api, deployment := lifecycleEnv(t, driver)
 	instances := waitRunning(t, env, deployment, 2, nil)
 	before, err := driver.RunningContainers(t.Context())

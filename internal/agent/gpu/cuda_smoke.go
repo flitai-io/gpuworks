@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 // cudaSmokeCommand runs the check, with only one card visible to it when
@@ -115,4 +116,16 @@ var cudaLibraryPaths = []string{
 	"/usr/lib/aarch64-linux-gnu/libcuda.so.1",
 	"/run/nvidia/driver/usr/lib/x86_64-linux-gnu/libcuda.so.1",
 	"/run/nvidia/driver/usr/lib64/libcuda.so.1",
+}
+
+// HostRuntimeCheck asks CUDA on the host to use one card.
+func (p *SMIProber) HostRuntimeCheck() HostRuntimeCheck {
+	return HostRuntimeCheck{
+		CLI:          "nvidia-smi",
+		Prerequisite: CUDASmokePrerequisite,
+		// A UUID cannot drift to another card when the set of working cards
+		// changes, while a device index can.
+		Visible: func(g proto.GPUInfo) (string, bool) { return g.UUID, g.UUID != "" },
+		Try:     CUDARuntimeSmokeOn,
+	}
 }

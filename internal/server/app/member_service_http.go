@@ -30,7 +30,12 @@ func memberServiceHandler(next http.Handler, member *App, refusals *businessRefu
 			return
 		}
 		if service := member.memberService(r.Context(), false); !service.BusinessReady {
-			refusals.refuse(w, r, service.BusinessRefusal)
+			reason := service.BusinessRefusal
+			if code := member.proofRefusedAs(); code != "" && reason == refusalProofNotEligible {
+				// The same code the gate in front gives for this state.
+				reason = code
+			}
+			refusals.refuse(w, r, reason)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -67,6 +72,18 @@ func (a *App) materialsSurviveFault() bool {
 		return true
 	}
 	return eligibility.Eligible()
+}
+
+// proofRefusedAs is the refusal code of the database's refusal this member's
+// last proof ended on, or empty.
+func (a *App) proofRefusedAs() string {
+	if a == nil {
+		return ""
+	}
+	a.materialEligibilityMu.Lock()
+	eligibility := a.materialEligibility
+	a.materialEligibilityMu.Unlock()
+	return eligibility.refusedAs()
 }
 
 // sessionsRoutable is true when this process serves its own sessions. A noted

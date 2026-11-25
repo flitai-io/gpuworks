@@ -8,7 +8,8 @@ import { Badge } from "../../components/ui/badge";
 import { Tooltip } from "../../components/ui/tooltip";
 import { compactModelMetadata } from "../inferenceTemplateFlat";
 import { inputModalitiesOf, inputModalityLabelKey } from "../../modelInference";
-import { compareVendors } from "../../vendors";
+import { useVendorDictionary } from "../../hooks/useVendorDictionary";
+import { compareVendors, vendorFallbackName } from "../../vendors";
 
 // One spelling per value, shared by a column's filter options, its filter test
 // and its cell, so what a cell shows is always something its filter can pick.
@@ -52,6 +53,7 @@ export function TemplateCatalogTable({ models, catalogQuery, onRefresh }: {
   models: InferenceTemplate[]; catalogQuery: string; onRefresh: () => void;
 }) {
   const { t } = useTranslation("inferenceTemplates");
+  useVendorDictionary();
   const vendors = [...new Set(models.flatMap(modelVendors))].sort(compareVendors);
   const quantizations = [...new Set(models.flatMap(model => model.specs.map(specQuantization)))];
   const columns: ResourceColumn<InferenceTemplate>[] = [
@@ -60,7 +62,7 @@ export function TemplateCatalogTable({ models, catalogQuery, onRefresh }: {
       <span className="resource-table-sub" title={model.model_id}>{compactModelMetadata(model) || model.model_id}</span>
     </> },
     { key: "vendor", title: t("columns.vendor"), width: 230,
-      filters: vendors.map(value => ({ value, text: t(`vendor.${value}`, { defaultValue: value }) })),
+      filters: vendors.map(value => ({ value, text: t(`vendor.${value}`, { defaultValue: vendorFallbackName(value) }) })),
       onFilter: (value, model) => model.specs.some(spec => specVendor(spec) === value),
       render: (_, model) => <div className="template-table-vendors">{modelVendors(model).map(vendor => <VendorLogo key={vendor} vendor={vendor} size={18} />)}</div> },
     { key: "input", title: t("columns.inputModalities"), width: 150, render: (_, model) => <div className="template-table-tags">{inputModalitiesOf(model.input_modalities).map(value => <Badge key={value} size="sm">{t(inputModalityLabelKey[value])}</Badge>)}</div> },

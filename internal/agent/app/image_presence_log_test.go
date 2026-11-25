@@ -33,7 +33,7 @@ func TestImagePresenceLogsOnlyChanges(t *testing.T) {
 		t.Fatalf("an image never seen and absent is not news: %q", got)
 	}
 	seen.observe(ctx, log, driver, "img:v1", true)
-	if got := lines(); len(got) != 1 || !strings.Contains(got[0], `msg="image present" image=img:v1 runtime=recording image_id=sha256:abc`) {
+	if got := lines(); len(got) != 1 || !strings.Contains(got[0], `msg="image present" image=img:v1 runtime=docker image_id=sha256:abc`) {
 		t.Fatalf("first present: %q", got)
 	}
 	seen.observe(ctx, log, driver, "img:v1", true)

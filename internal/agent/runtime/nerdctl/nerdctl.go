@@ -62,7 +62,7 @@ func (d *Driver) WithAuthDir(dir string) *Driver {
 }
 
 // Name implements runtime.Driver.
-func (d *Driver) Name() string { return "nerdctl" }
+func (d *Driver) Name() string { return runtime.DriverNerdctl }
 
 // NamedVolumes: nerdctl creates a named volume on first use and keeps it.
 func (d *Driver) NamedVolumes() bool { return true }
@@ -379,8 +379,8 @@ var runTimeout, abandonGrace time.Duration
 //
 // Device injection through vendor runtime plugins (for example
 // Ascend-Docker-Runtime) is docker-specific. GPUWorks' driver-aware Ascend
-// injector instead supplies nerdctl with raw --device arguments and explicit
-// driver/DCMI bind mounts; buildRunArgs propagates both here. See
+// injector instead grants nerdctl the device nodes themselves and explicit
+// driver/DCMI bind mounts; buildRunArgs renders both here. See
 // gpu.AscendProber.RuntimeInjectionForDriver and docs/dev/ledgers/engineering-log.md "Ascend device
 // injection for the nerdctl runtime driver".
 func (d *Driver) buildRunArgs(spec runtime.WorkloadSpec) []string {
@@ -394,7 +394,7 @@ func (d *Driver) buildRunArgs(spec runtime.WorkloadSpec) []string {
 		}
 	}
 
-	args = append(args, expandDeviceDirs(spec.DockerArgs)...)
+	args = append(args, expandDeviceDirs(spec.DockerRunArgs())...)
 	args = append(args, runtime.LabelArgs(spec.Labels)...)
 
 	if spec.ShmBytes > 0 {

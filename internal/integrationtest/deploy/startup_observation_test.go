@@ -80,7 +80,7 @@ func createStartupObservedDeployment(t *testing.T, env *testenv.Env, node *teste
 // with the short time needed to probe an already-running service.
 func TestStartupObservationIsMeasuredOnceAndSurvivesAgentAdoption(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("startup-observation", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("startup-observation", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	var healthRequests atomic.Int32
 	node.Driver.SetEngineHandler(func(inst testenv.EngineInstance) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -174,7 +174,7 @@ func TestStartupObservationDoesNotTurnFailureOrCancellationIntoReadyTime(t *test
 			env := testenv.New(t)
 			env.SetControllerRetryPolicy(time.Hour, 1)
 			env.SetControllerStartTimeout(1)
-			node := env.AddNode("startup-"+name, testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+			node := env.AddNode("startup-"+name, testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 			var healthRequests atomic.Int32
 			node.Driver.SetEngineHandler(func(testenv.EngineInstance) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -50,11 +50,11 @@ var ascendFrameworkProbeMiss sync.Once
 
 func (p *AscendProber) Vendor() string { return accelerator.VendorAscend }
 
-// DetectRuntimePlugin reports the Ascend Docker Runtime, a Docker-only
-// plugin; GPUWorks injects Ascend devices and driver mounts explicitly for
-// nerdctl.
+// DetectRuntimePlugin reports the Ascend Docker Runtime on a runtime whose
+// containers get their devices from it; on the others GPUWorks injects the
+// devices and driver mounts itself and there is no plugin to look for.
 func (p *AscendProber) DetectRuntimePlugin(ctx context.Context, driver string) runtime.PluginInfo {
-	if !strings.EqualFold(strings.TrimSpace(driver), "docker") {
+	if accelerator.RuntimeGPUPlugin(accelerator.VendorAscend, driver) != accelerator.PluginAscendDockerRuntime {
 		return runtime.PluginInfo{}
 	}
 	// The package name differs between Ascend releases. Keep the lookup
@@ -164,15 +164,18 @@ func parseCANNFrameworkVersion(text string) string {
 }
 
 func (p *AscendProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
-	if _, err := lookCLI("npu-smi"); err != nil && p.runner == nil {
-		return p.roster(nil, false), nil
-	}
+	_, err := lookCLI("npu-smi")
+	return probeCards(ctx, accelerator.VendorAscend, p.hostRoot, err == nil || p.runner != nil, p.list, nil)
+}
+
+// list is the chips npu-smi lists, each with its health detail.
+func (p *AscendProber) list(ctx context.Context) ([]proto.GPUInfo, error) {
 	out, err := p.info(ctx)
 	if err != nil {
 		// npu-smi could not be asked (on 198.51.100.31 it answers "dcmi
 		// module initialize failed"), so nothing is known about any card.
 		// The eight 910B4 in the machine are still a fact.
-		return p.roster(nil, false), err
+		return nil, err
 	}
 	chips := parseAscendChips(out)
 	enrichAscendHealthDetails(ctx, chips, p.command)
@@ -180,12 +183,7 @@ func (p *AscendProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
 	for i, c := range chips {
 		gpus[i] = c.gpu
 	}
-	return p.roster(gpus, true), nil
-}
-
-// roster places what npu-smi listed on the roster of what the host has.
-func (p *AscendProber) roster(listed []proto.GPUInfo, answered bool) []proto.GPUInfo {
-	return Roster(accelerator.VendorAscend, p.hostRoot, listed, answered)
+	return gpus, nil
 }
 
 // chipAddress is how npu-smi addresses the chip a device index names, read
@@ -265,7 +263,7 @@ func (p *AscendProber) RuntimeInjection(indexes []int) RuntimeInjection {
 		},
 		// Ascend Docker Runtime is the preferred path on the 910B4 hosts. It
 		// handles /dev/davinci* and driver mounts; per-device visibility is env.
-		DockerArgs: []string{"--runtime", "ascend"},
+		Grant: runtime.DeviceGrant{RuntimeClass: "ascend"},
 	}
 }
 
@@ -319,22 +317,22 @@ var ascendDriverMounts = []RuntimeMount{
 	{Source: "/etc/ascend_install.info", Target: "/etc/ascend_install.info", ReadOnly: true},
 }
 
-// RuntimeInjectionForDriver implements DriverAwareInjector. Every driver
-// other than nerdctl keeps the device-injection shape from RuntimeInjection.
-// Rootless execution resolves host logical IDs for ACL; Docker keeps compact
-// container ordinals. The kube runtime hands the --device nodes to the pod
-// through the agent's device plugin and the mounts as host paths, so it
-// takes the nerdctl form too, without needing the runtime on the node.
-// nerdctl has no Ascend Docker Runtime plugin
-// (docs/dev/ledgers/engineering-log.md "Ascend device injection for the nerdctl runtime driver"), so
-// it gets raw device passthrough plus explicit driver/DCMI mounts instead of
-// --runtime ascend. Device paths are passed unrenamed
+// RuntimeInjectionForDriver implements DriverAwareInjector. A runtime where
+// Ascend Docker Runtime injects the devices keeps the shape from
+// RuntimeInjection, with compact container ordinals. Rootless execution,
+// which sees the host's devices, resolves host logical IDs for ACL. A
+// runtime that gives a container only what it was granted and has no such
+// plugin gets the device nodes themselves plus explicit driver/DCMI mounts
+// instead of --runtime ascend: nerdctl
+// (docs/dev/ledgers/engineering-log.md "Ascend device injection for the nerdctl runtime driver"),
+// and kube, which hands the nodes to the pod through the agent's device
+// plugin and the mounts as host paths. Device paths are passed unrenamed
 // (--device /dev/davinciN, not /dev/davinciN:/dev/davinci0) because renaming
 // fails outright on this nerdctl/containerd combination — confirmed on
 // 198.51.100.32.
-func (p *AscendProber) RuntimeInjectionForDriver(indexes []int, driverName string) RuntimeInjection {
+func (p *AscendProber) RuntimeInjectionForDriver(indexes []int, target runtime.Target) RuntimeInjection {
 	base := p.RuntimeInjection(indexes)
-	if driverName == "udocker" && len(indexes) > 0 {
+	if target.View == runtime.ViewHost && len(indexes) > 0 {
 		visible, err := p.rootlessVisibleDevices(indexes)
 		if err != nil {
 			return RuntimeInjection{UnsupportedReason: err.Error()}
@@ -343,17 +341,20 @@ func (p *AscendProber) RuntimeInjectionForDriver(indexes []int, driverName strin
 		base.Env[accelerator.AscendEnvNPUVisible] = visible
 		return base
 	}
-	if (driverName != "nerdctl" && driverName != "kube") || len(indexes) == 0 {
+	// A runtime with the vendor's plugin, or one nothing is known about,
+	// gets the plugin's form; one that isolates devices without it is
+	// handed the device nodes.
+	if target.View != runtime.ViewGranted || accelerator.RuntimeGPUPlugin(accelerator.VendorAscend, target.Name) != "" || len(indexes) == 0 {
 		return base
 	}
 	containerDevices := compactVisibleDevices(len(indexes))
-	args := make([]string, 0, len(indexes)*2+len(ascendSharedDeviceNodes)*2)
+	devices := make([]runtime.Device, 0, len(indexes)+len(ascendSharedDeviceNodes))
 	for _, idx := range indexes {
-		args = append(args, "--device", fmt.Sprintf("/dev/davinci%d", idx))
+		devices = append(devices, runtime.Device{Path: fmt.Sprintf("/dev/davinci%d", idx)})
 	}
 	for _, node := range ascendSharedDeviceNodes {
 		if deviceNodeExists(node) {
-			args = append(args, "--device", node)
+			devices = append(devices, runtime.Device{Path: node})
 		}
 	}
 	return RuntimeInjection{
@@ -367,8 +368,8 @@ func (p *AscendProber) RuntimeInjectionForDriver(indexes []int, driverName strin
 			accelerator.AscendEnvRTVisibleDevices: containerDevices,
 			accelerator.AscendEnvNPUVisible:       containerDevices,
 		},
-		DockerArgs: args,
-		Mounts:     ascendNerdctlDriverMounts(),
+		Grant:  runtime.DeviceGrant{Devices: devices},
+		Mounts: ascendNerdctlDriverMounts(),
 	}
 }
 

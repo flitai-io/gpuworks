@@ -15,7 +15,8 @@ import TemplateWarnings from "../components/TemplateWarnings";
 import PageHeader from "../components/PageHeader";
 import MarkdownContent from "../components/MarkdownContent";
 import VendorLogo from "../components/VendorLogo";
-import { compareVendors } from "../vendors";
+import { useVendorDictionary } from "../hooks/useVendorDictionary";
+import { compareVendors, vendorFallbackName } from "../vendors";
 import { compactModelMetadata, editErrorOf, predicateLabel, specDisplayName, yamlModelID } from "./inferenceTemplateFlat.ts";
 import { engineOptionLabel } from "../engineLabels";
 import { inputModalityLabelKey, inputModalitiesOf, operationLabelKey, operationTypesOf } from "../modelInference";
@@ -121,14 +122,15 @@ export default function InferenceTemplateDetailPage() {
   const engines = useMemo(() => [...new Set(model?.specs.map((spec) => spec.engine) || [])].sort((left, right) =>
     Number(right === "vllm") - Number(left === "vllm") || left.localeCompare(right)), [model]);
   const specs = useMemo(() => model?.specs.filter((spec) => !engine || spec.engine === engine) || [], [model, engine]);
+  const vendorOrder = useVendorDictionary();
   const specGroups = useMemo(() => {
     const groups = new Map<string, InferenceSpec[]>();
     for (const spec of specs) {
       const vendor = spec.gpus.vendor.trim().toLowerCase();
       groups.set(vendor, [...(groups.get(vendor) || []), spec]);
     }
-    return [...groups.entries()].sort(([left], [right]) => compareVendors(left, right));
-  }, [specs]);
+    return [...groups.entries()].sort(([left], [right]) => compareVendors(left, right, vendorOrder.map((entry) => entry.id)));
+  }, [specs, vendorOrder]);
 
   const openSpec = async (spec: InferenceSpec) => {
     const request = ++previewRequest.current;
@@ -253,7 +255,7 @@ export default function InferenceTemplateDetailPage() {
     {engines.length >= 2 && <Segmented className="template-engine-switch" value={engine} options={engines.map((value) => ({ value, label: engineOptionLabel(value) }))} onChange={(value) => setEngine(String(value))} />}
     {model.detected_support?.warnings.map((item, index) => <Alert key={`${item.reason}:${index}`} type="warning" showIcon message={item.reason} description={item.alternative_available ? t("flat.alternativeAvailable") : undefined} />)}
     <div className="template-spec-groups">{specGroups.map(([vendor, vendorSpecs]) => <section className="template-spec-vendor-group" key={vendor}>
-      <header><VendorLogo vendor={vendor} size={22} /><Typography.Text strong>{t("detail.vendorGroup", { vendor: t(`vendor.${vendor}`, { defaultValue: vendor.toUpperCase() }), count: vendorSpecs.length })}</Typography.Text></header>
+      <header><VendorLogo vendor={vendor} size={22} /><Typography.Text strong>{t("detail.vendorGroup", { vendor: t(`vendor.${vendor}`, { defaultValue: vendorFallbackName(vendor) }), count: vendorSpecs.length })}</Typography.Text></header>
       <div className="template-spec-list">{vendorSpecs.map((spec) => <article className="template-detail-table-row" key={`${spec.source}:${spec.name}`}><div><Typography.Text strong>{specDisplayName(spec, i18n.language)}</Typography.Text><Space wrap><Tag color={spec.source === "user" ? "purple" : "blue"}>{t(spec.source === "user" ? "flat.userSource" : "flat.builtInSource")}</Tag><Tag>{spec.scenario || t("scenario.general")}</Tag><Tag color="geekblue">{spec.quantization}</Tag><Typography.Text type="secondary">{spec.weight_bytes ? `${(spec.weight_bytes / GIB).toFixed(1)} GiB` : t("detail.sizePending")}</Typography.Text></Space></div><Typography.Text type="secondary" code>{spec.name}</Typography.Text><Typography.Text ellipsis={{ tooltip: spec.image }}>{spec.image}</Typography.Text><Space><Button onClick={() => void openSpec(spec)}>{t("flat.details")}</Button><Button type="primary" icon={<RocketOutlined />} onClick={() => navigate(`/deploy?template=${model.id}&spec_source=${encodeURIComponent(spec.source)}&spec=${encodeURIComponent(spec.name)}`)}>{t("detail.deploy")}</Button>{spec.source === "user" && <Popconfirm title={t("editor.deleteSpecTitle")} description={t("editor.deleteSpecBody", { name: spec.name })} okText={t("editor.deleteSpecOk")} okButtonProps={{ danger: true }} cancelText={t("flat.cancel")} onConfirm={() => void deleteSpec(spec)}><Button danger icon={<DeleteOutlined />} aria-label={t("editor.deleteSpec", { name: spec.name })} /></Popconfirm>}</Space></article>)}</div>
     </section>)}{!specs.length && <Empty description={t("flat.emptySpecs")} />}</div>
     <Drawer open={Boolean(drawerSpec)} width={760} title={drawerSpec ? specDisplayName(drawerSpec, i18n.language) : undefined} onClose={() => { previewRequest.current += 1; setDrawerSpec(undefined); }}>{drawerSpec && <Tabs items={[

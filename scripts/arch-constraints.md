@@ -719,6 +719,62 @@ grep -rnE '"gpuworks\.ai/gpuworks/(pkg/bench|pkg/topoparse|pkg/modelrepo|interna
 是监控中枢诊断阈值设置（`monitor.rules`）review 后新增的排除项，目标仍是 0——store 不得导入
 `internal/server/monitor`（该设置已随 ADR 0043 删除，排除项保留）。
 
+### agent_runtime_name_comparisons（初值 7）
+
+意图：设备后端（`internal/agent/gpu`）与 engine 里拿运行时驱动的名字做比较。容器在某个运行时里看得到哪些设备，由
+`runtime.Target.View` 回答；按名字比较的分支在新增运行时时要逐个找出来改。目标 0。
+
+```sh
+grep -rnE '(==|!=) *("(docker|nerdctl|udocker|kube|host)"|(agent)?runtime\.Driver[A-Z]|proto\.RuntimeDriver|kube\.DriverName|hostproc\.DriverName|accelerator\.Runtime(Docker|Nerdctl|Udocker|Kube|Host))|("(docker|nerdctl|udocker|kube|host)"|(agent)?runtime\.Driver[A-Z]|proto\.RuntimeDriver|kube\.DriverName|hostproc\.DriverName|accelerator\.Runtime(Docker|Nerdctl|Udocker|Kube|Host)) *(==|!=)|case .*("(docker|nerdctl|udocker|kube|host)"|(agent)?runtime\.Driver[A-Z]|proto\.RuntimeDriver|kube\.DriverName|hostproc\.DriverName|accelerator\.Runtime(Docker|Nerdctl|Udocker|Kube|Host))|(EqualFold|Contains)\(.*("(docker|nerdctl|udocker|kube|host)"|(agent)?runtime\.Driver[A-Z]|proto\.RuntimeDriver|kube\.DriverName|hostproc\.DriverName|accelerator\.Runtime(Docker|Nerdctl|Udocker|Kube|Host))' \
+  internal/agent/gpu internal/agent/engine --include='*.go' | grep -v '_test\.go' | grep -c .
+```
+
+排除：`*_test.go`。同时匹配字符串字面量与三组名字常量（`proto.RuntimeDriver*`、`runtime.Driver*`、`accelerator.Runtime*`），写法包括 `==`、`!=`（名字在哪一边都算）、`case`（一行里任何位置）、`EqualFold` 与 `Contains`。剩下的在 dGPU 注入器（`engine/partition_hygon.go`、
+`partition_ascend.go`）与 `engine/engine.go`、`engine/runtime_mounts.go`。
+
+### agent_container_option_literals（初值 1）
+
+意图：设备后端与 engine 里手写容器命令行选项（`--device`、`--gpus`、`--runtime`、`--group-add`、`--tmpfs`）。设备
+后端授予的是 `runtime.DeviceGrant`，要顶替 workload 自带的哪些设置写在它的 `Replaces` 里，由各运行时驱动渲染；读
+workload 自带选项用 `runtime.ParseOwnOptions`。目标 0。
+
+```sh
+grep -rnE '"--(device|gpus|runtime|group-add|tmpfs)"' internal/agent/gpu internal/agent/engine --include='*.go' \
+  | grep -v '_test\.go' | grep -c .
+```
+
+排除：`*_test.go`。剩下的一处是海光 dGPU 后端的 `--tmpfs`（`engine/partition_hygon.go`）。
+
+### vendor_name_files_outside_definitions（初值 39）
+
+意图：在厂商定义（`internal/accelerator`）与厂商驱动（`internal/agent/gpu`）之外按名字判断厂商的生产文件数。厂商之间
+的差别写在各自的定义里，别处问定义（`accelerator.Supports`、`RuntimeMismatchFor`、`RequiresDeviceSelection` 等），不比
+较厂商名。新增厂商不应让这个数上升。
+
+```sh
+names=$(sed -nE 's/^[[:space:]]*Vendor[A-Za-z0-9]+[[:space:]]*=[[:space:]]*"([a-z0-9-]+)"/\1/p' internal/accelerator/vendor.go | paste -sd'|' -)
+grep -rlE "accelerator\.Vendor[A-Z][A-Za-z0-9]*([^A-Za-z0-9(]|\$)|(==|!=) *\"($names)\"|\"($names)\" *(==|!=)|case .*\"($names)\"|(EqualFold|Contains|HasPrefix)\(.*\"($names)\"" internal cmd pkg --include='*.go' \
+  | grep -v '_test\.go' | grep -v '^internal/accelerator/' | grep -v '^internal/agent/gpu/' | grep -c .
+```
+
+排除：`*_test.go`、`internal/accelerator/`、`internal/agent/gpu/`。匹配两种写法：厂商常量（`accelerator.VendorNVIDIA`
+这样的名字，不含 `VendorBrand(`、`VendorKey(` 这类只做查询的函数调用），以及与厂商名字符串的比较（`==`、`!=`、`case`、`EqualFold`、`Contains`、`HasPrefix`）；厂商名取自
+`internal/accelerator/vendor.go` 的常量（小写字母、数字与连字符），新增厂商不用改这条命令。它数的是文件，一个文件里比较几次都算一个。
+kube 驱动里比较 RuntimeClass 名字的 `rc == "nvidia"` 也在数内：那是写在定义之外的厂商知识。
+不匹配别的大小写的产品字样（例如解析拓扑标签时的 `"NVIDIA"`、`"NPU"`）：那是在读外部文本，不是按厂商名分支。
+
+### udocker_vendor_inference_funcs（初值 6）
+
+意图：udocker 驱动里判断一个 workload 是哪家厂商的函数（`isNVIDIASpec`、`isPPUSpec` 这一类）。授予带厂商名时它们读
+`DeviceGrant.Vendor`；不带时（旧 agent 的落盘记录、没有选卡的 workload）从环境变量名和设备路径推断，这部分不写厂商名，上一条
+预算看不见。新厂商由授予里的名字认出，不应再加一个这样的函数。目标：不增加。
+
+```sh
+grep -rhE '^func is[A-Z][A-Za-z0-9]*Spec\(' internal/agent/runtime/udocker --include='*.go' --exclude='*_test.go' | grep -c .
+```
+
+排除：`*_test.go`。
+
 ### agent_direct_exec（初值 5）
 
 意图：agent 绕过 `runtime.Driver` 直接 `exec`（计划 B9）。目标 ≤ 1（doctor 的可注入 runner）。
@@ -1032,6 +1088,25 @@ key='"[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){0,2}"'
 `Feature: "…"` 不限定所属结构体（多行字面量里看不到结构体名）：别的结构体的 `Feature` 字段若写了键形字面量也会计入，
 到时把该处改为常量或在此登记排除。排除：测试文件（功能门与
 推送状态的测试要构造键）。看不到的：先赋给普通 `string` 变量再转换的键；这种写法在评审里拦。
+
+### published_tags_outside_grammar（初值 121，2026-11-25）
+
+意图：内置镜像的 tag 一律是 `<backend><框架版本>[-<型号>]-<engine><版本>-rN`，文法只有一份
+（`cmd/gpuworks-image-manifest` 的 `releaseTagPattern`）。镜像目录里已经有 121 个不合文法的存量 tag
+（裸 `<id>`、`-<arch>-slotN`、`-rN-<arch>` 等），它们已经在用户的目录里，不能改名也不能删。生成器对写进
+目录的 tag 逐条过文法：不合文法的条目必须在 `build/runner-images/matrix.yaml` 的 `published` 里写
+`legacy_reason`，否则 `make image-manifest` 失败；合文法的条目写了 `legacy_reason` 同样失败。所以声明的
+条数就是例外的条数。这条预算让例外只减不增：新 tag 取合规的名字，不是再加一条声明。计数单位是
+**`legacy_reason` 出现的次数**。
+
+```sh
+grep -v '^[[:space:]]*#' build/runner-images/matrix.yaml | grep -o 'legacy_reason' | grep -c .
+```
+
+按出现次数而不按行首的键来数，YAML 换一种写法（流式 `{…}`、加引号的键）也照样计入。排除：整行注释。
+会多计的：`note` 等其他字段的正文里提到 `legacy_reason` 这个词；改正文，不调预算。看不到的：用 YAML
+锚点与合并键（`<<: *x`）把一条声明复用到多个条目；矩阵里不用这种写法，评审里拦。发布脚本
+（`build/runner-images/tag_check.py`）读的是同一份声明，不另有名单。
 
 ---
 

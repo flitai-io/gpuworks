@@ -231,7 +231,7 @@ func TestAppleProberReadsThePlatformUUIDOnce(t *testing.T) {
 
 func TestAppleProberRuntimeInjection(t *testing.T) {
 	p := &AppleProber{}
-	if got := p.RuntimeInjection(nil); got.UnsupportedReason != "" || len(got.Env) != 0 || len(got.DockerArgs) != 0 {
+	if got := p.RuntimeInjection(nil); got.UnsupportedReason != "" || len(got.Env) != 0 || len(got.Grant.DockerDeviceArgs()) != 0 {
 		t.Fatalf("RuntimeInjection(nil) = %+v", got)
 	}
 	if got := p.RuntimeInjection([]int{0}); got.UnsupportedReason != "" {

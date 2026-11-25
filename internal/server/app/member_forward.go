@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/cluster"
 	"gpuworks.ai/gpuworks/internal/server/hub"
 
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -36,7 +37,8 @@ import (
 
 const (
 	// The leader is observed on this interval; an observation older than
-	// memberLeaderFresh is not acted on.
+	// memberLeaderFresh, stretched on a tier that elects later
+	// (observedLeader), is not acted on.
 	memberLeaderObserveInterval = 500 * time.Millisecond
 	memberLeaderObserveTimeout  = 2 * time.Second
 	memberLeaderFresh           = 3 * time.Second
@@ -341,9 +343,16 @@ func (f *memberForward) memberID() uint64 {
 	return f.id
 }
 
+// observedLeader is the leader this member last observed, while the
+// observation is fresh. A leader that fails is replaced after one to two
+// election timeouts and a vote; at slow-storage's timing that is inside
+// memberLeaderFresh, and a tier that elects later keeps the observation
+// longer in proportion, so that an ordinary election does not by itself make
+// every member refuse business.
 func (f *memberForward) observedLeader() (uint64, bool) {
 	observation := f.observed.Load()
-	if observation == nil || observation.leader == 0 || time.Since(observation.at) > memberLeaderFresh {
+	fresh := cluster.ProcessStorageTier().Stretch(memberLeaderFresh)
+	if observation == nil || observation.leader == 0 || time.Since(observation.at) > fresh {
 		return 0, false
 	}
 	return observation.leader, true

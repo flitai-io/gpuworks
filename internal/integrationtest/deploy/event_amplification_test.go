@@ -86,7 +86,7 @@ func TestImagePullProgressDoesNotAmplifyIntoEventsOrStatusReports(t *testing.T) 
 	}
 
 	env := testenv.New(t)
-	node := env.AddNode("amplify-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("amplify-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	node.Driver.OnPullImage(func(_ string, onLine func(string)) (error, bool) {
 		for _, line := range transcript {
 			onLine(line)

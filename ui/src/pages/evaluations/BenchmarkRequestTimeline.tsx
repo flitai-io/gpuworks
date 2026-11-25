@@ -39,7 +39,8 @@ export default function BenchmarkRequestTimeline({ data, loading, error, onRetry
   const identity = (record: BenchmarkTimelineRecord) => `${t('timeline.session')} ${record.session_id || unknown} · ${t('timeline.turn')} ${record.turn ?? unknown} · ${t('timeline.attempt')} ${record.attempt ?? unknown}`;
   const value = (input: string | number | null | undefined) => input === null || input === undefined || input === '' || (typeof input === 'number' && !Number.isFinite(input)) ? unknown : typeof input === 'number' ? input.toLocaleString(undefined, { maximumFractionDigits: 3 }) : input;
   const timestamp = (input: string | null) => time(input) === null ? unknown : input;
-  const active = selected && visible.includes(selected) ? selected : visible[0];
+  // No request is selected until the reader picks one.
+  const active = selected && visible.includes(selected) ? selected : undefined;
   const details = active ? [
     { key: 'session', label: t('timeline.session'), children: value(active.session_id) },
     { key: 'turn', label: t('timeline.turn'), children: value(active.turn) },

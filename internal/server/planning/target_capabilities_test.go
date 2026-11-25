@@ -74,8 +74,8 @@ func TestResolvedFeaturesAreAppliedToEveryVendor(t *testing.T) {
 }
 
 func TestExplicitSelectionRejectsOneIncompatibleGPU(t *testing.T) {
-	// Apple is the vendor that refuses requested features.
-	node := &store.Node{OS: "linux", Arch: "amd64", RuntimeDriver: "docker", GPUs: []store.GPU{{Index: 0, Name: "Apple M4 Max", Vendor: "apple"}, {Index: 1, Name: "NVIDIA H100", Vendor: "nvidia", ArchID: "sm_90"}}}
+	// Kunlunxin does not offer engine sleep; NVIDIA does.
+	node := &store.Node{OS: "linux", Arch: "amd64", RuntimeDriver: "docker", GPUs: []store.GPU{{Index: 0, Name: "P800", Vendor: "kunlunxin", ArchID: "KL3"}, {Index: 1, Name: "NVIDIA H100", Vendor: "nvidia", ArchID: "sm_90"}}}
 	in := Input{Node: node, GPUIndexes: []int{0, 1}, Sleepable: true}
 	snap := scheduler.NodeSnapshot{GPUs: []scheduler.GPU{{Index: 0}, {Index: 1}}}
 	refusal := constrainTargetGPUs(in, &snap)
@@ -85,8 +85,8 @@ func TestExplicitSelectionRejectsOneIncompatibleGPU(t *testing.T) {
 }
 
 func TestAutomaticTargetGateCanKeepOneCompatibleCard(t *testing.T) {
-	// Apple is the vendor that refuses requested features.
-	node := &store.Node{OS: "linux", Arch: "amd64", RuntimeDriver: "docker", GPUs: []store.GPU{{Index: 0, Name: "Apple M4 Max", Vendor: "apple"}, {Index: 1, Name: "NVIDIA H100", Vendor: "nvidia", ArchID: "sm_90"}}}
+	// Kunlunxin does not offer engine sleep; NVIDIA does.
+	node := &store.Node{OS: "linux", Arch: "amd64", RuntimeDriver: "docker", GPUs: []store.GPU{{Index: 0, Name: "P800", Vendor: "kunlunxin", ArchID: "KL3"}, {Index: 1, Name: "NVIDIA H100", Vendor: "nvidia", ArchID: "sm_90"}}}
 	req := LaunchRequest{Node: node, Model: &store.Model{}, Engine: "vllm", Sleepable: true}
 	if refusal, err := TargetCandidateRefusal(req, deploy.CatalogSelection{}, node); err != nil || refusal != nil {
 		t.Fatalf("compatible auto candidate refused: %+v", refusal)
@@ -212,5 +212,20 @@ func TestKunlunTargetAdmissionInspectsHandwrittenParallelModes(t *testing.T) {
 	refusal, err := TargetCandidateRefusal(req, deploy.CatalogSelection{}, node)
 	if err != nil || refusal == nil || refusal.Code != scheduler.ReasonLaunchFeaturesUnknown {
 		t.Fatalf("unknown shell refusal=%+v err=%v", refusal, err)
+	}
+}
+
+// A card on a runtime its vendor does not list is refused before scheduling,
+// with the runtimes it does list: a Mac's card under docker cannot run an
+// engine, which is a host process there.
+func TestCardOnARuntimeItsVendorDoesNotListIsRefused(t *testing.T) {
+	mac := &store.Node{OS: "darwin", Arch: "arm64", RuntimeDriver: "docker", GPUs: []store.GPU{{Index: 0, Name: "Apple M4 Max", Vendor: "apple"}}}
+	refusals := TargetRefusals(mac, nil, nil)
+	if len(refusals) != 1 || refusals[0].Code != scheduler.ReasonRuntimeUnsupported || refusals[0].Params["required_runtime"] != "host" || refusals[0].Params["runtime"] != "docker" {
+		t.Fatalf("refusals = %+v", refusals)
+	}
+	mac.RuntimeDriver = "host"
+	if refusals := TargetRefusals(mac, nil, nil); len(refusals) != 0 {
+		t.Fatalf("a Mac on the host runtime was refused: %+v", refusals)
 	}
 }

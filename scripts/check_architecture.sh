@@ -246,6 +246,24 @@ measure() {
     grep -rnE 'func (normalizeVendor|NormalizeVendor)\(' internal pkg cmd --include='*.go' 2>/dev/null \
       | grep -v '_test\.go' | grep -c . || true
     ;;
+  agent_runtime_name_comparisons)
+    grep -rnE '(==|!=) *("(docker|nerdctl|udocker|kube|host)"|(agent)?runtime\.Driver[A-Z]|proto\.RuntimeDriver|kube\.DriverName|hostproc\.DriverName|accelerator\.Runtime(Docker|Nerdctl|Udocker|Kube|Host))|("(docker|nerdctl|udocker|kube|host)"|(agent)?runtime\.Driver[A-Z]|proto\.RuntimeDriver|kube\.DriverName|hostproc\.DriverName|accelerator\.Runtime(Docker|Nerdctl|Udocker|Kube|Host)) *(==|!=)|case .*("(docker|nerdctl|udocker|kube|host)"|(agent)?runtime\.Driver[A-Z]|proto\.RuntimeDriver|kube\.DriverName|hostproc\.DriverName|accelerator\.Runtime(Docker|Nerdctl|Udocker|Kube|Host))|(EqualFold|Contains)\(.*("(docker|nerdctl|udocker|kube|host)"|(agent)?runtime\.Driver[A-Z]|proto\.RuntimeDriver|kube\.DriverName|hostproc\.DriverName|accelerator\.Runtime(Docker|Nerdctl|Udocker|Kube|Host))' \
+      internal/agent/gpu internal/agent/engine --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -c . || true
+    ;;
+  agent_container_option_literals)
+    grep -rnE '"--(device|gpus|runtime|group-add|tmpfs)"' internal/agent/gpu internal/agent/engine --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -c . || true
+    ;;
+  vendor_name_files_outside_definitions)
+    vendor_names=$(sed -nE 's/^[[:space:]]*Vendor[A-Za-z0-9]+[[:space:]]*=[[:space:]]*"([a-z0-9-]+)"/\1/p' internal/accelerator/vendor.go | paste -sd'|' -)
+    grep -rlE "accelerator\.Vendor[A-Z][A-Za-z0-9]*([^A-Za-z0-9(]|\$)|(==|!=) *\"($vendor_names)\"|\"($vendor_names)\" *(==|!=)|case .*\"($vendor_names)\"|(EqualFold|Contains|HasPrefix)\(.*\"($vendor_names)\"" internal cmd pkg --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -v '^internal/accelerator/' | grep -v '^internal/agent/gpu/' | grep -c . || true
+    ;;
+  udocker_vendor_inference_funcs)
+    grep -rhE '^func is[A-Z][A-Za-z0-9]*Spec\(' internal/agent/runtime/udocker --include='*.go' --exclude='*_test.go' 2>/dev/null \
+      | grep -c . || true
+    ;;
   infer_vendor_callers)
     grep -rn 'deploy\.InferVendor(' internal pkg cmd --include='*.go' 2>/dev/null \
       | grep -v '_test\.go' | grep -c . || true
@@ -435,6 +453,14 @@ measure() {
     # assigned to a featuregate.Key constant, set as a route's Feature, or
     # given as a feature declaration's Key in a file importing featuregate.
     feature_key_literal_hits | grep -c . || true
+    ;;
+  published_tags_outside_grammar)
+    # Published runner tags outside the release tag grammar. The image
+    # manifest generator rejects such a tag unless its matrix entry declares
+    # a legacy_reason, and rejects the declaration on a conforming tag, so
+    # the declarations are the exceptions. Counts every mention outside
+    # comment lines, whatever YAML style it is written in.
+    grep -v '^[[:space:]]*#' build/runner-images/matrix.yaml | grep -o 'legacy_reason' | grep -c . || true
     ;;
   *)
     # `measure` runs inside a command substitution, so exiting here would only

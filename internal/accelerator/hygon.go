@@ -41,3 +41,50 @@ var hygonProfiles = []PartitionProfile{
 func (hygonLogicalBackend) Profiles() []PartitionProfile {
 	return append([]PartitionProfile(nil), hygonProfiles...)
 }
+
+// hygonVendor is Hygon DCU. PCI identity measured 2026-10-15: K100
+// "KONGMING" 1d94:6211 class 0x0b40 (192.0.2.133).
+var hygonVendor = vendorSpec{
+	id:           VendorHygon,
+	brand:        "Hygon",
+	frameworks:   []string{"dtk"},
+	named:        contains("hygon", "dcu", "haiguang"),
+	precedence:   40,
+	namePrefixes: []string{"hygon"},
+
+	tool:          "hy-smi",
+	detectCommand: "hy-smi",
+	pciID:         0x1d94,
+	pci: &pciVendor{
+		classes:     []uint32{pciClassCoProcessor},
+		baseClasses: []uint32{pciBaseClassAccelerators},
+		drivers:     []string{"hydcu", "hycu"},
+	},
+	arch: func(archID, _ string) Arch { return Arch{ID: archID, Family: hygonFamily(archID)} },
+
+	runtimes: []string{RuntimeDocker, RuntimeNerdctl, RuntimeUdocker, RuntimeKube},
+	supports: Features,
+	// Only some models can be divided; see hygonLogicalBackend.Matches.
+	partition:             hygonLogicalBackend{},
+	ownCatalogImage:       true,
+	sleepPoolOnHostMemory: true,
+
+	cardChecks: true,
+	checks:     []string{CheckRuntime},
+	healthProbe: func(_, bdf string) string {
+		if bdf == "" {
+			return ""
+		}
+		ras := "/sys/bus/pci/devices/" + bdf + "/ras/"
+		return "grep . " + ras + "*_err_count; cat " + ras + "gpu_vram_bad_pages"
+	},
+	runtimeGuide: func(card HealthCard) (HealthGuide, bool) {
+		if strings.TrimSpace(card.BDF) == "" {
+			return HealthGuide{}, false
+		}
+		return HealthGuide{Probe: HygonRuntimeSmokeCommand(card.BDF), Recheck: "hy-smi --healthcheck"}, true
+	},
+	healthGuide: func(card HealthCard, _ string, _ []HealthField) (HealthGuide, bool) {
+		return hygonHealthGuide(card.Code, card.BDF)
+	},
+}

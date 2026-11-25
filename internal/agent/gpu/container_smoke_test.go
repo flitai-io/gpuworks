@@ -24,7 +24,13 @@ func TestContainerSmokeVerdict(t *testing.T) {
 		{"ascend", "ASCEND_ACL_SMOKE_OK\n", 0, true, false},
 		{"ascend", "ASCEND_ACL_SMOKE_DIE_FAILED: aclrtSetDevice=507033\n", 1, false, false},
 		{"ascend", "ASCEND_ACL_SMOKE_UNAVAILABLE: the image has no libascendcl.so\n", 10, false, true},
-		{"nvidia", "CUDA_RUNTIME_SMOKE_OK\n", 0, false, true},
+		// A vendor whose check does not run in an image has no grader,
+		// whichever runtime's verdict the output carries.
+		{"nvidia", "CUDA_RUNTIME_SMOKE_OK\nASCEND_ACL_SMOKE_OK\n", 0, false, true},
+		{"hygon", "CUDA_RUNTIME_SMOKE_OK\nASCEND_ACL_SMOKE_OK\n", 0, false, true},
+		{"amd", "CUDA_RUNTIME_SMOKE_OK\nASCEND_ACL_SMOKE_OK\n", 0, false, true},
+		{"kunlunxin", "CUDA_RUNTIME_SMOKE_OK\nASCEND_ACL_SMOKE_OK\n", 0, false, true},
+		{"apple", "CUDA_RUNTIME_SMOKE_OK\nASCEND_ACL_SMOKE_OK\n", 0, false, true},
 	} {
 		err := ContainerSmokeVerdict(tc.vendor, tc.out, tc.exit)
 		if (err == nil) != tc.ok || (!tc.ok && (HostRuntimeUnavailable(err) != "") != tc.onHost) {

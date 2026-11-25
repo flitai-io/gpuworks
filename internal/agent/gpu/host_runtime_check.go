@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os/exec"
-	"strconv"
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
@@ -31,39 +30,34 @@ type HostRuntimeCheck struct {
 	Try func(ctx context.Context, visible string) error
 }
 
-var hostRuntimeChecks = map[string]HostRuntimeCheck{
-	accelerator.VendorNVIDIA: {
-		CLI:          "nvidia-smi",
-		Prerequisite: CUDASmokePrerequisite,
-		// A UUID cannot drift to another card when the set of working cards
-		// changes, while a device index can.
-		Visible: func(g proto.GPUInfo) (string, bool) { return g.UUID, g.UUID != "" },
-		Try:     CUDARuntimeSmokeOn,
-	},
-	accelerator.VendorAscend: {
-		CLI:          "npu-smi",
-		Prerequisite: AscendCLSmokePrerequisite,
-		// ACL initialization on a die that cannot create a context can spend
-		// almost the scheduler's default 30 seconds before returning its
-		// vendor error.
-		Timeout: 45 * time.Second,
-		Visible: func(g proto.GPUInfo) (string, bool) {
-			if g.Index < 0 {
-				return "", false
-			}
-			return strconv.Itoa(g.Index), true
-		},
-		Try: AscendRuntimeSmokeOn,
-	},
-	accelerator.VendorHygon: {
-		CLI:          "hy-smi",
-		Prerequisite: HygonHIPSmokePrerequisite,
-		// The script finds the card by its address among every card HIP
-		// lists, so the address is the name; a card without one cannot be
-		// told apart from its neighbours.
-		Visible: func(g proto.GPUInfo) (string, bool) { return g.PCIeBDF, g.PCIeBDF != "" },
-		Try:     HygonRuntimeSmokeOn,
-	},
+// HostRuntimeChecker is implemented by a vendor's driver whose runtime can
+// be asked about one card on the host.
+type HostRuntimeChecker interface {
+	HostRuntimeCheck() HostRuntimeCheck
+}
+
+// ContainerRuntimeGrader is implemented by a vendor's driver whose runtime is
+// asked from inside a runner image (accelerator.ContainerSmokeScript). It
+// grades what the script printed and how the container exited. Only the
+// script's own card marker blames the card: an image without the runtime or
+// without python, a container that crashed, or output this agent does not
+// recognize is reported as the host's (HostRuntimeUnavailableError).
+type ContainerRuntimeGrader interface {
+	ContainerSmokeVerdict(out string, exitErr error) error
+}
+
+// driverOf is the vendor's driver among the ones this agent has, or nil.
+func driverOf(vendor string) Prober {
+	id := accelerator.NormalizeVendor(vendor)
+	if id == "" {
+		return nil
+	}
+	for _, p := range defaultProbers() {
+		if p.Vendor() == id {
+			return p
+		}
+	}
+	return nil
 }
 
 // RuntimeCheckKey is the one key every runtime check on this node runs under
@@ -117,6 +111,9 @@ func HostRuntimeUnavailable(err error) string {
 // HostRuntimeCheckFor returns how to ask this vendor's runtime about a card,
 // and false for a vendor that cannot be asked on the host.
 func HostRuntimeCheckFor(vendor string) (HostRuntimeCheck, bool) {
-	check, ok := hostRuntimeChecks[accelerator.NormalizeVendor(vendor)]
-	return check, ok
+	checker, ok := driverOf(vendor).(HostRuntimeChecker)
+	if !ok {
+		return HostRuntimeCheck{}, false
+	}
+	return checker.HostRuntimeCheck(), true
 }

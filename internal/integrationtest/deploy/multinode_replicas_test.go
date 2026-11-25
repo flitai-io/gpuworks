@@ -86,8 +86,8 @@ func TestMultiNodeDeploymentScalesToTwoReplicas(t *testing.T) {
 	env := testenv.New(t)
 	gates := &gatedEngines{}
 	nodes := []*testenv.Node{
-		env.AddNode("replica-node-a", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"), testenv.WithManagementAddress("10.42.1.10")),
-		env.AddNode("replica-node-b", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"), testenv.WithManagementAddress("10.42.1.11")),
+		env.AddNode("replica-node-a", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"), testenv.WithManagementAddress("10.42.1.10")),
+		env.AddNode("replica-node-b", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"), testenv.WithManagementAddress("10.42.1.11")),
 	}
 	model, err := env.Store().UpsertModel(&store.Model{
 		Source: "huggingface", SourceID: "zstackai/qwen3-4b-replicas", Revision: "main",

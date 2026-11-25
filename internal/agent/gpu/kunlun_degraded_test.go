@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 )
 
 func TestKunlunDegradesTelemetryWithoutWeakeningIdentityChecks(t *testing.T) {
@@ -32,15 +33,15 @@ func TestKunlunDegradesTelemetryWithoutWeakeningIdentityChecks(t *testing.T) {
 			if card.Healthy != field.schedulable || card.HealthCode != field.code || card.HealthStatus != field.status || !strings.Contains(card.HealthMessage, field.evidence) {
 				t.Fatalf("health fields: %+v, want healthy=%v code=%q status=%q evidence=%q", card, field.schedulable, field.code, field.status, field.evidence)
 			}
-			injection := p.RuntimeInjectionForDriver([]int{0}, "docker")
+			injection := p.RuntimeInjectionForDriver([]int{0}, runtime.TargetNamed("docker"))
 			if field.schedulable {
-				if injection.UnsupportedReason != "" || len(injection.DockerArgs) == 0 {
+				if injection.UnsupportedReason != "" || len(injection.Grant.DockerDeviceArgs()) == 0 {
 					t.Fatalf("ECC warning denied injection: %+v", injection)
 				}
-			} else if injection.UnsupportedReason != "invalid or duplicate Kunlun device selection" || len(injection.DockerArgs) != 0 {
+			} else if injection.UnsupportedReason != "invalid or duplicate Kunlun device selection" || len(injection.Grant.DockerDeviceArgs()) != 0 {
 				t.Fatalf("invalid identity authorized: %+v", injection)
 			}
-			if reason := p.RuntimeInjectionForDriver([]int{1}, "docker").UnsupportedReason; reason != "" {
+			if reason := p.RuntimeInjectionForDriver([]int{1}, runtime.TargetNamed("docker")).UnsupportedReason; reason != "" {
 				t.Fatal(reason)
 			}
 		})
@@ -98,7 +99,7 @@ func TestKunlunDuplicateNumericMinorDoesNotAuthorizeEitherCard(t *testing.T) {
 	if err != nil || len(cards) != 2 || cards[0].Healthy || cards[1].Healthy {
 		t.Fatal(cards, err)
 	}
-	if got := p.RuntimeInjectionForDriver([]int{0}, "docker"); got.UnsupportedReason == "" {
+	if got := p.RuntimeInjectionForDriver([]int{0}, runtime.TargetNamed("docker")); got.UnsupportedReason == "" {
 		t.Fatal("duplicate numeric device identity authorized")
 	}
 }
@@ -128,7 +129,7 @@ func TestKunlunIncompleteInventoryWithoutSysfsIsVisible(t *testing.T) {
 	if !card.Healthy || card.HealthCode != accelerator.HealthInventoryIncomplete || card.HealthStatus != accelerator.HealthWarning || !strings.Contains(card.HealthMessage, "attached_xpus=2") || !strings.Contains(card.HealthMessage, "inventory_rows=1") {
 		t.Fatalf("incomplete inventory lost its diagnostic or valid card: %+v", card)
 	}
-	if inj := p.RuntimeInjectionForDriver([]int{0}, "docker"); inj.UnsupportedReason != "" {
+	if inj := p.RuntimeInjectionForDriver([]int{0}, runtime.TargetNamed("docker")); inj.UnsupportedReason != "" {
 		t.Fatal(inj.UnsupportedReason)
 	}
 	*raw = strings.Replace(*raw, "<dram_uncorrectable>0</dram_uncorrectable>", "<dram_uncorrectable>1</dram_uncorrectable>", 1)

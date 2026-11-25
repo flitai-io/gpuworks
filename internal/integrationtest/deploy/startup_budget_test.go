@@ -30,7 +30,7 @@ func TestTemplateWrapperDeadlineGetsMatchingHealthBudget(t *testing.T) {
 func exerciseLongEngineDeadline(t *testing.T, templateEntrypoint string) {
 	t.Helper()
 	env := testenv.New(t)
-	node := env.AddNode("startup-budget", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", Vendor: "nvidia", ArchID: "sm_80", ComputeCapability: "8.0", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("startup-budget", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", Vendor: "nvidia", ArchID: "sm_80", ComputeCapability: "8.0", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, node.Name)
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {
@@ -156,7 +156,7 @@ func TestStartupBudgetRespectsExplicitEngineEnvRemoval(t *testing.T) {
 func startupBudgetPreviewFixture(t *testing.T) (*testenv.APIClient, map[string]any) {
 	t.Helper()
 	env := testenv.New(t)
-	node := env.AddNode("startup-preview", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("startup-preview", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, node.Name)
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

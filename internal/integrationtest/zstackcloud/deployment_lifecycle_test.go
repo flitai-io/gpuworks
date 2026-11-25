@@ -128,7 +128,7 @@ func TestZStackCloudDeploymentReservesGPUUntilAgentConfirmsRemoval(t *testing.T)
 	}))
 	t.Cleanup(cloud.Close)
 
-	driver := testenv.NewFakeDriver("fake")
+	driver := testenv.NewFakeDriver("docker")
 	var inferenceName atomic.Value
 	inferenceName.Store("")
 	driver.OnRun(func(spec runtime.WorkloadSpec) (string, error, bool) {
@@ -154,7 +154,7 @@ func TestZStackCloudDeploymentReservesGPUUntilAgentConfirmsRemoval(t *testing.T)
 		}
 		agent := agentapp.New(agentapp.Config{
 			ServerURL: req.ServerURL, Token: req.Token, StateDir: stateDir,
-			Driver: driver, ForceDriver: "fake", DataLane: true,
+			Driver: driver, ForceDriver: "docker", DataLane: true,
 			Prober: testenv.NewFakeProber([]proto.GPUInfo{{Index: 0, UUID: "GPU-a", Name: "A100", Vendor: "nvidia", ComputeCapability: "8.0", PCIeBDF: "0000:01:00.0", MemoryTotalBytes: 80 << 30, Healthy: true}}),
 			NetworkInventory: func() proto.NetInventory {
 				return proto.NetInventory{

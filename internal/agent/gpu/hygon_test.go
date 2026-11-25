@@ -12,6 +12,9 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 // TestHygonInspectAndRequireDeviceSeeTheLiveHostDev: a privileged
@@ -168,7 +171,7 @@ func TestParseHygonBWInventory(t *testing.T) {
 }
 
 func TestHygonMetricsUseRealMemoryCapture(t *testing.T) {
-	p := &HygonProber{lastSeen: map[int]hygonIdentity{0: {uuid: "GPU-stable-zero"}}}
+	p := &HygonProber{seen: cardBaseline{cards: map[int]proto.GPUInfo{0: {UUID: "GPU-stable-zero"}}}}
 	metrics := p.parseMetrics(readHygonFixture(t), "")
 	if len(metrics) != 2 {
 		t.Fatalf("metrics = %+v", metrics)
@@ -212,9 +215,9 @@ func TestHygonMetricsFallBackToProvenMemoryQuery(t *testing.T) {
 
 func TestHygonRuntimeInjectionResolvesDRMFromPCI(t *testing.T) {
 	p := testHygonProber(t, readHygonFixture(t))
-	p.lastSeen = map[int]hygonIdentity{
-		0: {uuid: "GPU-a", bdf: "0000:19:00.0"},
-		1: {uuid: "GPU-b", bdf: "0000:67:00.0"},
+	p.seen.cards = map[int]proto.GPUInfo{
+		0: {UUID: "GPU-a", PCIeBDF: "0000:19:00.0"},
+		1: {UUID: "GPU-b", PCIeBDF: "0000:67:00.0"},
 	}
 	inj := p.RuntimeInjection([]int{1})
 	if inj.UnsupportedReason != "" {
@@ -235,8 +238,8 @@ func TestHygonRuntimeInjectionResolvesDRMFromPCI(t *testing.T) {
 		"--group-add", "39",
 		"--group-add", "998",
 	}
-	if !reflect.DeepEqual(inj.DockerArgs, wantArgs) {
-		t.Fatalf("docker args = %#v, want %#v", inj.DockerArgs, wantArgs)
+	if !reflect.DeepEqual(inj.Grant.DockerDeviceArgs(), wantArgs) {
+		t.Fatalf("docker args = %#v, want %#v", inj.Grant.DockerDeviceArgs(), wantArgs)
 	}
 	wantMounts := []RuntimeMount{{Source: "/opt/hyhal", Target: "/opt/hyhal", ReadOnly: true}}
 	if !reflect.DeepEqual(inj.Mounts, wantMounts) {
@@ -263,11 +266,11 @@ func TestHygonRuntimeInjectionForDriverNumbersCardsAsHIPSeesThem(t *testing.T) {
 		{"udocker", []int{1, 0}, "1,0"},
 	} {
 		p := testHygonProber(t, readHygonFixture(t))
-		p.lastSeen = map[int]hygonIdentity{
-			0: {uuid: "GPU-a", bdf: "0000:19:00.0"},
-			1: {uuid: "GPU-b", bdf: "0000:67:00.0"},
+		p.seen.cards = map[int]proto.GPUInfo{
+			0: {UUID: "GPU-a", PCIeBDF: "0000:19:00.0"},
+			1: {UUID: "GPU-b", PCIeBDF: "0000:67:00.0"},
 		}
-		inj := ResolveInjection(t.Context(), p, InjectionRequest{Indexes: tc.indexes, DriverName: tc.driver})
+		inj := ResolveInjection(t.Context(), p, InjectionRequest{Indexes: tc.indexes, Runtime: runtime.TargetNamed(tc.driver)})
 		if inj.UnsupportedReason != "" {
 			t.Fatalf("%s %v: injection failed: %s", tc.driver, tc.indexes, inj.UnsupportedReason)
 		}
@@ -276,26 +279,26 @@ func TestHygonRuntimeInjectionForDriverNumbersCardsAsHIPSeesThem(t *testing.T) {
 			t.Fatalf("%s %v: env = %+v, want %+v", tc.driver, tc.indexes, inj.Env, wantEnv)
 		}
 		// The selected cards' nodes are still the host's own, whatever HIP calls them.
-		if !slices.Contains(inj.DockerArgs, "/dev/dri/renderD129:/dev/dri/renderD129:rwm") {
-			t.Fatalf("%s %v: selected render node missing: %#v", tc.driver, tc.indexes, inj.DockerArgs)
+		if !slices.Contains(inj.Grant.DockerDeviceArgs(), "/dev/dri/renderD129:/dev/dri/renderD129:rwm") {
+			t.Fatalf("%s %v: selected render node missing: %#v", tc.driver, tc.indexes, inj.Grant.DockerDeviceArgs())
 		}
 	}
 }
 
 func TestHygonRuntimeInjectionForDriverKeepsRefusals(t *testing.T) {
 	p := testHygonProber(t, readHygonFixture(t))
-	p.lastSeen = map[int]hygonIdentity{1: {uuid: "GPU-b", bdf: "0000:19:00.0"}}
-	inj := p.RuntimeInjectionForDriver([]int{1}, "docker")
-	if !strings.Contains(inj.UnsupportedReason, "changed from PCI") || inj.Env != nil || inj.DockerArgs != nil {
+	p.seen.cards = map[int]proto.GPUInfo{1: {UUID: "GPU-b", PCIeBDF: "0000:19:00.0"}}
+	inj := p.RuntimeInjectionForDriver([]int{1}, runtime.TargetNamed("docker"))
+	if !strings.Contains(inj.UnsupportedReason, "changed from PCI") || inj.Env != nil || inj.Grant.DockerDeviceArgs() != nil {
 		t.Fatalf("refused injection = %+v", inj)
 	}
 }
 
 func TestHygonRuntimeInjectionFailsClosedOnIndexDrift(t *testing.T) {
 	p := testHygonProber(t, readHygonFixture(t))
-	p.lastSeen = map[int]hygonIdentity{1: {uuid: "GPU-b", bdf: "0000:19:00.0"}}
+	p.seen.cards = map[int]proto.GPUInfo{1: {UUID: "GPU-b", PCIeBDF: "0000:19:00.0"}}
 	inj := p.RuntimeInjection([]int{1})
-	if !strings.Contains(inj.UnsupportedReason, "changed from PCI") || len(inj.Env) != 0 || len(inj.DockerArgs) != 0 {
+	if !strings.Contains(inj.UnsupportedReason, "changed from PCI") || len(inj.Env) != 0 || len(inj.Grant.DockerDeviceArgs()) != 0 {
 		t.Fatalf("injection = %+v", inj)
 	}
 }

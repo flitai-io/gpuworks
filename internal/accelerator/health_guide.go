@@ -92,19 +92,16 @@ func HealthGuideFor(card HealthCard, evidence []HealthField) (HealthGuide, bool)
 	if target == "" {
 		return HealthGuide{}, false
 	}
-	switch card.Vendor {
-	case VendorKunlunxin:
-		if card.Code == HealthMemoryUncorrectable {
-			return HealthGuide{Probe: "xpu-smi -q -x", Recheck: "xpu-smi -q -x"}, true
-		}
-	case VendorPPU:
-		return ppuHealthGuide(card.Code, target, evidence)
-	case VendorNVIDIA:
-		return nvidiaHealthGuide(card.Code, target, evidence)
-	case VendorAscend:
-		return ascendHealthGuide(card.Code, evidence)
-	case VendorHygon:
-		return hygonHealthGuide(card.Code, card.BDF)
+	spec, _ := vendorSpecByID(card.Vendor)
+	if spec.healthGuide == nil {
+		return HealthGuide{}, false
+	}
+	return spec.healthGuide(card, target, evidence)
+}
+
+func kunlunHealthGuide(card HealthCard, _ string, _ []HealthField) (HealthGuide, bool) {
+	if card.Code == HealthMemoryUncorrectable {
+		return HealthGuide{Probe: "xpu-smi -q -x", Recheck: "xpu-smi -q -x"}, true
 	}
 	return HealthGuide{}, false
 }
@@ -118,34 +115,8 @@ func HealthGuideFor(card HealthCard, evidence []HealthField) (HealthGuide, bool)
 // (gpu.HostRuntimeCheckFor). For the rest the verdict came from their CLI,
 // and their own code's guide covers it.
 func runtimeUnusableGuide(card HealthCard) (HealthGuide, bool) {
-	switch card.Vendor {
-	case VendorNVIDIA:
-		if card.UUID == "" {
-			// Without the UUID the command could only name an index, which
-			// addresses a different card once the driver drops one — the
-			// mistake the check itself avoids by using UUIDs.
-			return HealthGuide{}, false
-		}
-		guide := HealthGuide{Probe: CUDARuntimeSmokeCommand(card.UUID)}
-		if target := HealthTarget(card.BDF, card.Index); target != "" {
-			guide.Recheck = "nvidia-smi -q -i " + target
-		}
-		return guide, true
-	case VendorAscend:
-		if card.Index < 0 {
-			return HealthGuide{}, false
-		}
-		return HealthGuide{
-			Probe: AscendRuntimeSmokeCommand(strconv.Itoa(card.Index)),
-			// npu-smi addresses the chip, not the die index; the die's own
-			// row is what `npu-smi info` prints for it.
-			Recheck: "npu-smi info -m; npu-smi info",
-		}, true
-	case VendorHygon:
-		if strings.TrimSpace(card.BDF) == "" {
-			return HealthGuide{}, false
-		}
-		return HealthGuide{Probe: HygonRuntimeSmokeCommand(card.BDF), Recheck: "hy-smi --healthcheck"}, true
+	if spec, _ := vendorSpecByID(card.Vendor); spec.runtimeGuide != nil {
+		return spec.runtimeGuide(card)
 	}
 	return HealthGuide{}, false
 }
@@ -304,19 +275,10 @@ func ascendHealthGuide(code string, evidence []HealthField) (HealthGuide, bool) 
 // ToolCommand is the vendor tool's own overview command: what a person runs
 // first when the tool itself fails or a card is missing.
 func ToolCommand(vendor string) string {
-	switch vendor {
-	case VendorNVIDIA:
-		return "nvidia-smi"
-	case VendorKunlunxin:
-		return "xpu-smi -q -x"
-	case VendorPPU:
-		return "ppu-smi"
-	case VendorAscend:
-		return "npu-smi info"
-	case VendorHygon:
-		return "hy-smi"
-	case VendorAMD:
-		return "rocminfo"
+	for _, spec := range vendorSpecs {
+		if spec.id == vendor {
+			return spec.tool
+		}
 	}
 	return ""
 }

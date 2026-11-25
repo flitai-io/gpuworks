@@ -11,8 +11,8 @@
     "lint:i18n": "eslint",
     "preview": "vite preview",
     "pretest": "node ensure-deps.mjs",
-    "test": "tsx --import ./tests/helpers/rtlTimeout.ts --import ./tests/helpers/reactDomOrder.ts --test --test-force-exit --test-timeout=300000 ${UI_TEST_CONCURRENCY:+--test-concurrency=$UI_TEST_CONCURRENCY} tests/*.test.ts tests/*.test.tsx ${UI_EXTRA_TESTS:-}",
-    "test:coverage": "c8 --all --include='src/**/*.{ts,tsx}' --exclude='src/**/*.d.ts' --reporter=text --reporter=lcov tsx --import ./tests/helpers/rtlTimeout.ts --import ./tests/helpers/reactDomOrder.ts --test --test-force-exit --test-timeout=300000 ${UI_TEST_CONCURRENCY:+--test-concurrency=$UI_TEST_CONCURRENCY} ${TEST_SHARD:+--test-shard=$TEST_SHARD} tests/*.test.ts tests/*.test.tsx ${UI_EXTRA_TESTS:-}"
+    "test": "tsx --import ./tests/helpers/rtlTimeout.ts --import ./tests/helpers/reactDomOrder.ts --import ./tests/helpers/vendorDictionary.ts --test --test-force-exit --test-timeout=300000 ${UI_TEST_CONCURRENCY:+--test-concurrency=$UI_TEST_CONCURRENCY} tests/*.test.ts tests/*.test.tsx ${UI_EXTRA_TESTS:-}",
+    "test:coverage": "c8 --all --include='src/**/*.{ts,tsx}' --exclude='src/**/*.d.ts' --reporter=text --reporter=lcov tsx --import ./tests/helpers/rtlTimeout.ts --import ./tests/helpers/reactDomOrder.ts --import ./tests/helpers/vendorDictionary.ts --test --test-force-exit --test-timeout=300000 ${UI_TEST_CONCURRENCY:+--test-concurrency=$UI_TEST_CONCURRENCY} ${TEST_SHARD:+--test-shard=$TEST_SHARD} tests/*.test.ts tests/*.test.tsx ${UI_EXTRA_TESTS:-}"
   },
   "dependencies": {
     "@ant-design/cssinjs": "1.24.0",

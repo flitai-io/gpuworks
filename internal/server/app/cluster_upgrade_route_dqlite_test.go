@@ -10,9 +10,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/server/cluster"
 	"gpuworks.ai/gpuworks/internal/server/enrollment"
 	"gpuworks.ai/gpuworks/internal/server/hub"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -75,6 +78,28 @@ func TestClusterUpgradeStatusReportsHeldAgentConnections(t *testing.T) {
 	code, response, body := upgradeStepCall(t, handler, fixture.requesterPair.Leaf, enrollment.ClusterUpgradeStatus)
 	if code != http.StatusOK || response.AgentConnections != nil || strings.Contains(body, "agent_connections") {
 		t.Fatalf("a member that cannot say answered %d %s; want no count", code, body)
+	}
+	// The answer names the tier this process runs, not what the record
+	// may say by now.
+	if response.StorageTier != string(cluster.ProcessStorageTier()) || !strings.Contains(body, `"storage_tier":"`+string(cluster.ProcessStorageTier())+`"`) {
+		t.Fatalf("the member answered %s; want the tier it runs, %s", body, cluster.ProcessStorageTier())
+	}
+	// Beside it, the tier the installation records now: a record changed
+	// since the start shows as a different one, and a member that records
+	// none records the standard tier.
+	if response.RecordedStorageTier != "standard" {
+		t.Fatalf("a member without a record answered %s; want the standard tier recorded", body)
+	}
+	fixture.bundle.dataDir = t.TempDir()
+	if err := os.MkdirAll(filepath.Join(fixture.bundle.dataDir, "cluster-enrollment"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fixture.bundle.dataDir, "cluster-enrollment", "config.json"), []byte(`{"storage_tier":"slow-storage@100ms"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, response, body = upgradeStepCall(t, handler, fixture.requesterPair.Leaf, enrollment.ClusterUpgradeStatus); response.RecordedStorageTier != "slow-storage@100ms" ||
+		!strings.Contains(body, `"recorded_storage_tier":"slow-storage@100ms"`) || response.StorageTier != string(cluster.ProcessStorageTier()) {
+		t.Fatalf("after the record changed the member answered %s", body)
 	}
 	known = true
 	code, response, body = upgradeStepCall(t, handler, fixture.requesterPair.Leaf, enrollment.ClusterUpgradeStatus)

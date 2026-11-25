@@ -40,7 +40,10 @@ const DriverName = proto.RuntimeDriverHost
 
 // SupportedOn reports whether the driver runs on goos: environment packages
 // are built for macOS only.
-func SupportedOn(goos string) bool { return goos == "darwin" }
+func SupportedOn(goos string) bool {
+	info, _ := runtime.DriverNamed(DriverName)
+	return info.UnavailableOn(goos) == ""
+}
 
 // stopGrace is how long a stopped engine gets to exit after SIGTERM before its
 // group is killed. Engines release the GPU's memory on a clean exit, which a

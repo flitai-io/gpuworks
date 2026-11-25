@@ -256,7 +256,7 @@ func TestZStackCloudOnboardingRegistersGPUHostsWithoutReservingResources(t *test
 	t.Cleanup(cloud.Close)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	driver := testenv.NewFakeDriver("fake")
+	driver := testenv.NewFakeDriver("docker")
 	t.Cleanup(driver.CloseAll)
 	stateDir := t.TempDir()
 	installer := installerFunc(func(_ context.Context, req provision.SSHInstallRequest) (provision.SSHInstallReport, error) {
@@ -266,7 +266,7 @@ func TestZStackCloudOnboardingRegistersGPUHostsWithoutReservingResources(t *test
 		}
 		ag := agentapp.New(agentapp.Config{
 			ServerURL: req.ServerURL, Token: req.Token, StateDir: stateDir,
-			Driver: driver, ForceDriver: "fake",
+			Driver: driver, ForceDriver: "docker",
 			Prober: testenv.NewFakeProber([]proto.GPUInfo{{Index: 0, UUID: "GPU-a", Name: "A100", Vendor: "nvidia", MemoryTotalBytes: 80 << 30, Healthy: true}}),
 		}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 		go func() { _ = ag.Run(ctx) }()
@@ -356,7 +356,7 @@ func TestZStackCloudOnboardingPreservesUsedGPUState(t *testing.T) {
 	t.Cleanup(cloud.Close)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	driver := testenv.NewFakeDriver("fake")
+	driver := testenv.NewFakeDriver("docker")
 	t.Cleanup(driver.CloseAll)
 	stateDir := t.TempDir()
 	installer := installerFunc(func(_ context.Context, req provision.SSHInstallRequest) (provision.SSHInstallReport, error) {
@@ -366,7 +366,7 @@ func TestZStackCloudOnboardingPreservesUsedGPUState(t *testing.T) {
 		}
 		ag := agentapp.New(agentapp.Config{
 			ServerURL: req.ServerURL, Token: req.Token, StateDir: stateDir,
-			Driver: driver, ForceDriver: "fake",
+			Driver: driver, ForceDriver: "docker",
 			Prober: testenv.NewFakeProber([]proto.GPUInfo{
 				{Index: 0, UUID: "GPU-used", Name: "A100", Vendor: "nvidia", PCIeBDF: "0000:01:00.0", MemoryTotalBytes: 80 << 30, Healthy: true},
 				{Index: 1, UUID: "GPU-free", Name: "A100", Vendor: "nvidia", PCIeBDF: "0000:02:00.0", MemoryTotalBytes: 80 << 30, Healthy: true},

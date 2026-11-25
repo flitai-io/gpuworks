@@ -6,21 +6,23 @@ import (
 	"strings"
 )
 
-// kubeVendors are the vendors whose cards the agent runs on a Kubernetes
-// node. It needs no vendor's mounts or runtime for any of them: it reads
-// the host's files through the host's root and runs the vendor's CLIs in
-// the host's mount namespace. A node with no card of these stands by.
-var kubeVendors = map[string]bool{VendorNVIDIA: true, VendorAscend: true, VendorHygon: true, VendorPPU: true, VendorAMD: true, VendorKunlunxin: true}
-
-// RunsOnKube reports whether the agent runs the vendor's cards on
-// Kubernetes.
-func RunsOnKube(vendor string) bool { return kubeVendors[NormalizeVendor(vendor)] }
+// RunsOnKube reports whether the agent runs the vendor's cards on a
+// Kubernetes node, which is that its definition lists RuntimeKube. The agent
+// needs no vendor's mounts or runtime there: it reads the host's files
+// through the host's root and runs the vendor's CLIs in the host's mount
+// namespace. A node with no card of these stands by.
+func RunsOnKube(vendor string) bool {
+	spec, known := vendorSpecOf(vendor)
+	return known && spec.runsOn(RuntimeKube)
+}
 
 // KubeVendors lists the vendors that run on Kubernetes, sorted.
 func KubeVendors() []string {
-	out := make([]string, 0, len(kubeVendors))
-	for v := range kubeVendors {
-		out = append(out, v)
+	var out []string
+	for _, spec := range vendorSpecs {
+		if spec.runsOn(RuntimeKube) {
+			out = append(out, spec.id)
+		}
 	}
 	sort.Strings(out)
 	return out

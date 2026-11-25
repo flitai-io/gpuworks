@@ -310,7 +310,7 @@ func TestPPUProbeWorkloadMountsDriverLibrariesWithoutHostHGGCVersion(t *testing.
 		}
 	}
 	prober := &probeLibraryPPUProber{FixedProber: &gpu.FixedProber{VendorName: "ppu", FrameworkName: "hggc", FrameworkVersion: ""}}
-	e := &Engine{stateDir: root, prober: prober}
+	e := &Engine{stateDir: root, prober: prober, driver: &headlessTestDriver{name: "docker"}}
 	workload, err := e.BuildPartitionProbeWorkload(context.Background(), accelerator.BackendPPULogical, "gpuworks/partition-probe:v1", 7, 4<<30, "ppu-probe")
 	if err != nil {
 		t.Fatal(err)

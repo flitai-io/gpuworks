@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 func readHygonOverviewFixture(t *testing.T) string {
@@ -29,7 +31,7 @@ func readHygonTestdata(t *testing.T, name string) string {
 func TestHygonMetricsRecoverOverviewWhenCombinedFlagsAreUnsupported(t *testing.T) {
 	var calls []string
 	p := &HygonProber{
-		lastSeen: map[int]hygonIdentity{0: {uuid: "stable-hygon-0"}},
+		seen: cardBaseline{cards: map[int]proto.GPUInfo{0: {UUID: "stable-hygon-0"}}},
 		command: func(_ context.Context, args ...string) (string, error) {
 			key := strings.Join(args, " ")
 			calls = append(calls, key)

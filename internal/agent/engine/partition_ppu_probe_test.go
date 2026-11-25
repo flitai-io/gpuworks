@@ -12,6 +12,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/agent/gpu"
+	agentruntime "gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/assets"
 )
 
@@ -22,7 +23,8 @@ type probePPUProber struct {
 	library string
 }
 
-func (p *probePPUProber) RuntimeInjectionForDriver(indexes []int, driver string) gpu.RuntimeInjection {
+func (p *probePPUProber) RuntimeInjectionForDriver(indexes []int, target agentruntime.Target) gpu.RuntimeInjection {
+	driver := target.Name
 	if len(indexes) != 1 || indexes[0] != 8 {
 		return gpu.RuntimeInjection{UnsupportedReason: "fixture only has device 8"}
 	}

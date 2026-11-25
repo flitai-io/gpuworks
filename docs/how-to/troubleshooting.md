@@ -199,6 +199,24 @@ tail -n 50 <安装目录>/slurm-check.log
 
 修好后确认节点出现在「计算节点」页且在线。以上都对不上时，保留 Slurm 管控节点的接入命令输出、`scontrol show config | grep -i HealthCheck` 与节点上的 `slurm-check.log`，见本页末尾「仍未解决？」。
 
+## 控制面集群的成员拒绝请求
+
+**现象**：经某个成员发来的请求得到 503，正文是 `member business service is not ready`。
+
+**怎么确认**：看响应头 `X-Gpuworks-Refusal` 的代码（含义见[控制面集群的行为与边界](../explanation/control-plane-cluster.md#故障时的行为)），再看该成员的 server 日志里它为什么关闭了业务（`<install-dir>` 是该成员的安装目录）：
+
+```bash
+grep -E 'closed business admission|candidate material proof (failed|succeeded)' <install-dir>/logs/server.log | tail
+```
+
+| 看到 | 说明 | 处理 |
+|---|---|---|
+| 代码 `member_revoked`；日志 `closed business admission caller=proof_failed`，随后 `candidate material proof failed while business admission is closed`，其中 `err_class=admission_rejected` | 数据库拒绝了这个成员的接纳：它已被撤销。这一版里只有从备份恢复会撤销成员：恢复后的数据库里，其余成员都已被撤销 | 这个成员不再属于恢复后的集群。停掉它；要让这台主机回到集群，按从备份恢复的步骤让它重新加入 |
+| 代码 `cluster_identity_conflict`；日志同上，其中 `err_class=identity_conflict` | 这个成员连到的数据库属于另一个集群，或数据库的协议版本与这个程序的不同 | 核对该成员的集群身份文件和数据库地址是否指向本集群；各成员的程序版本是否一致 |
+| 代码 `proof_missing`，日志里没有 `closed business admission` | 成员刚启动，还没有完成第一次资格确认 | 等几秒；一直不变再看同一条日志里的 `failure_stage` |
+| 多个成员同时拒绝：响应头先有一次 `proof_expired`，之后一直是 `proof_missing`；日志 `closed business admission caller=proof_expired` | 这些成员的资格确认完成不了，手里的确认用完了 | 看这些成员日志里 `candidate material proof failed` 一行的 `failure_stage` 和 `err_class` 定位原因。“成员已被撤销但仍在数据库的成员集合里”不是原因：这一版里撤销只发生在从备份恢复时，恢复出来的是只有一个成员的集群，其余成员重新加入 |
+
+
 ## 节点掉线后的自愈与 recovery
 
 **现象**：节点从「在线」变「离线」，节点详情出现「带外恢复」卡片。

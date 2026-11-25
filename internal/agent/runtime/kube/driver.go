@@ -31,7 +31,7 @@ import (
 )
 
 // DriverName is the runtime's name, what --driver selects.
-const DriverName = "kube"
+const DriverName = runtime.DriverKube
 
 // DaemonSetName is the agent DaemonSet the manifest creates.
 const DaemonSetName = "gpuworks-agent"

@@ -43,7 +43,7 @@ var planted = map[string]string{
 // the model is handed.
 func TestAssistantReadsNoPlantedSecret(t *testing.T) {
 	env := testenv.NewWithPrivateHTTPHosts(t, "127.0.0.1")
-	env.AddNode("secrets-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+	env.AddNode("secrets-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "secrets-node")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

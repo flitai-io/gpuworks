@@ -57,18 +57,8 @@ const (
 //     agent arranges itself.
 //   - A node with no accelerator vendor needs nothing.
 func RuntimeGPUPlugin(vendor, runtimeDriver string) string {
-	driver := strings.ToLower(strings.TrimSpace(runtimeDriver))
-	switch NormalizeVendor(vendor) {
-	case VendorNVIDIA:
-		if driver == "docker" || driver == "nerdctl" {
-			return PluginNVIDIAContainerToolkit
-		}
-	case VendorAscend:
-		if driver == "docker" {
-			return PluginAscendDockerRuntime
-		}
-	}
-	return ""
+	spec, _ := vendorSpecOf(vendor)
+	return spec.gpuPlugins[strings.ToLower(strings.TrimSpace(runtimeDriver))]
 }
 
 // RuntimeNeedsGPUPlugin reports whether this runtime driver needs the
@@ -94,5 +84,6 @@ const RuntimeGPUReady = "gpu_ready"
 //     runtime it has and says which plugin it lacks.
 //   - The others need no plugin under any runtime; nothing is passed over.
 func RuntimeGPUFallback(vendor string) bool {
-	return NormalizeVendor(vendor) == VendorNVIDIA
+	spec, _ := vendorSpecOf(vendor)
+	return spec.gpuFallback
 }

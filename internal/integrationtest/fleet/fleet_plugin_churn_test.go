@@ -97,7 +97,7 @@ func TestFleetPluginPushChurn(t *testing.T) {
 
 	start := time.Now()
 	for i := range nodeCount {
-		node := env.AddNode(fmt.Sprintf("churn-%04d", i), testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+		node := env.AddNode(fmt.Sprintf("churn-%04d", i), testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 		node.Driver.ShareEnginePorts()
 	}
 	client, err := Login(env.URL(), "admin", testenv.AdminPassword)

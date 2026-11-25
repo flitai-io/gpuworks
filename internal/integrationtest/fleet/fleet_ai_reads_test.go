@@ -43,7 +43,7 @@ func TestFleetAIAssistantReads(t *testing.T) {
 	names := make([]string, 0, nodeCount)
 	for i := 0; i < nodeCount; i++ {
 		name := fmt.Sprintf("fleet-%04d", i)
-		node := env.AddNode(name, testenv.WithGPUs(perNode+1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+		node := env.AddNode(name, testenv.WithGPUs(perNode+1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 		node.Driver.ShareEnginePorts()
 		names = append(names, name)
 	}

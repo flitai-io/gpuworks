@@ -10,18 +10,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 type hygonCommandRunner func(context.Context, ...string) (string, error)
-
-type hygonIdentity struct {
-	uuid string
-	bdf  string
-}
 
 // HygonProber detects Hygon DCUs through hy-smi and resolves per-card device
 // nodes through sysfs. It deliberately avoids ROCm/DTK shared libraries so the
@@ -33,8 +27,8 @@ type HygonProber struct {
 	glob     func(string) ([]string, error)
 	stat     func(string) (os.FileInfo, error)
 
-	mu       sync.RWMutex
-	lastSeen map[int]hygonIdentity
+	// seen is what each card was when hy-smi last listed it.
+	seen cardBaseline
 
 	// hostRoot is where the host's /sys is read for the PCI roster; empty
 	// means "/". A test sets it so the roster describes its fixture
@@ -53,15 +47,19 @@ func (p *HygonProber) Available() bool {
 }
 
 func (p *HygonProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
-	if _, err := p.lookup("hy-smi"); err != nil {
-		return p.roster(nil, false), nil //nolint:nilerr // Absence of this vendor CLI is an unavailable probe, not a node failure.
-	}
+	_, err := p.lookup("hy-smi")
+	return probeCards(ctx, accelerator.VendorHygon, p.hostRoot, err == nil, p.list, &p.seen)
+}
+
+// list is the cards hy-smi lists, each with its driver version and the
+// health finding read from the driver's RAS files.
+func (p *HygonProber) list(ctx context.Context) ([]proto.GPUInfo, error) {
 	out, err := p.run(ctx, hygonInventoryArgs()...)
 	if err != nil {
 		// hy-smi answers "No device available" on a host whose only DCU is
 		// passed through to a virtual machine (measured on 192.0.2.133).
 		// The card is there; it is simply not this host's to use.
-		return p.roster(nil, false), err
+		return nil, err
 	}
 	driver := p.DriverVersion(ctx)
 	gpus := parseHygonInventory(out, func(path string) ([]byte, error) {
@@ -72,19 +70,7 @@ func (p *HygonProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
 		code, evidence := hygonHealth(gpus[i].PCIeBDF, p.read)
 		SetCardFinding(&gpus[i], code, evidence)
 	}
-
-	p.mu.Lock()
-	p.lastSeen = make(map[int]hygonIdentity, len(gpus))
-	for _, gpu := range gpus {
-		p.lastSeen[gpu.Index] = hygonIdentity{uuid: gpu.UUID, bdf: gpu.PCIeBDF}
-	}
-	p.mu.Unlock()
-	return p.roster(gpus, true), nil
-}
-
-// roster places what hy-smi listed on the roster of what the host has.
-func (p *HygonProber) roster(listed []proto.GPUInfo, answered bool) []proto.GPUInfo {
-	return Roster(accelerator.VendorHygon, p.hostRoot, listed, answered)
+	return gpus, nil
 }
 
 func (p *HygonProber) DriverVersion(ctx context.Context) string {
@@ -167,11 +153,9 @@ func (p *HygonProber) parseMetrics(fieldsOut, overview string) []Metric {
 		fields := records[index]
 		bdf := hygonPCIBDF(fields["pci bus"])
 		uuid := p.hygonUUID(index, bdf, fields)
-		p.mu.RLock()
-		if identity, ok := p.lastSeen[index]; ok && identity.uuid != "" {
-			uuid = identity.uuid
+		if identity, ok := p.seen.at(index); ok && identity.UUID != "" {
+			uuid = identity.UUID
 		}
-		p.mu.RUnlock()
 		m := Metric{Index: index, UUID: uuid, Vendor: accelerator.VendorHygon, Values: map[string]float64{}}
 		for key, value := range fields {
 			switch {

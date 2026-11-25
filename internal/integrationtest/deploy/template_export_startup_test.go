@@ -51,7 +51,7 @@ func TestTemplateExportReusesAnUnchangedDefaultDeploymentThroughHTTP(t *testing.
 func exerciseTemplateExportStartup(t *testing.T, timeout int, removeEnv, editPolicies, defaultName bool) {
 	t.Helper()
 	env := testenv.New(t)
-	node := env.AddNode("template-budget", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("template-budget", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	runs := make(chan runtime.WorkloadSpec, 4)
 	if defaultName {
 		node.Driver.AfterRun(func(spec runtime.WorkloadSpec) {

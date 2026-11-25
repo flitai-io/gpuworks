@@ -28,6 +28,7 @@ func (d *imagePullTestDriver) InspectImage(context.Context, string) (runtime.Ima
 }
 
 func (d *imagePullTestDriver) Name() string                                      { return "image-pull-test" }
+func (d *imagePullTestDriver) DeviceView() runtime.DeviceView                    { return runtime.ViewGranted }
 func (d *imagePullTestDriver) Detect(context.Context) (bool, error)              { return true, nil }
 func (d *imagePullTestDriver) ImageExists(context.Context, string) (bool, error) { return false, nil }
 func (d *imagePullTestDriver) PullImage(_ context.Context, _ string, onLine func(string)) error {

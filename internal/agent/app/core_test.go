@@ -33,6 +33,10 @@ type reconnectObservationDriver struct {
 	release     chan struct{}
 }
 
+// Name is a runtime the test's vendor lists: the instance must be admitted
+// for its inspection to be observed.
+func (d *reconnectObservationDriver) Name() string { return runtime.DriverDocker }
+
 func (d *reconnectObservationDriver) Run(context.Context, runtime.WorkloadSpec) (string, error) {
 	d.mu.Lock()
 	d.running = true

@@ -37,6 +37,7 @@ The root [`CLAUDE.md`](../../CLAUDE.md) is authoritative for development convent
 
 - [Code Map: Package Responsibilities](code-map.md)
 - [Extension Points: The Module Contract and Installable Extensions](extensions.md)
+- [Adding a New Accelerator Vendor](add-accelerator-vendor.md)
 - [Local Development Environment](setup.md)
 - [Test Tiers and Cloud Strategy](testing.md)
 - [AMD support design: responsibilities, admission and compatibility](amd-support-design.md)
@@ -53,4 +54,4 @@ The root [`CLAUDE.md`](../../CLAUDE.md) is authoritative for development convent
 <!-- translation-source-sha256: eb743876a85e847ebdefb51b66b411b998b97037c5baad253612b08918b2fb63 # Developer Documentation -->
 <!-- translation-source-sha256: 116e712dc9b02d99ef386edc93b753e6d38c9b93c55a17c05a0203c929a1f808 ## From Clone to Demo -->
 <!-- translation-source-sha256: f103d4e248e7d9def4aad41c74f50845f4a54811390b8ba5024a354b8abf1e41 ## Repository Map -->
-<!-- translation-source-sha256: fc99dbbd3f92bc9339da38af9cc66f5933a8a9bed2a4d2b6368832ebd73a427e ## Next Steps -->
+<!-- translation-source-sha256: 1945559bc2a92cd79936ba5dbb319b8a03bfab5f72970489d850d3ae46240100 ## Next Steps -->

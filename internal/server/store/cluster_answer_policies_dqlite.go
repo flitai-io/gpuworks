@@ -26,15 +26,12 @@ var (
 
 	// ProofUnanswered: a failed material proof compared nothing. Its cause
 	// is an expired deadline, a database with no leader, a leader not read
-	// in time, or a connection lost under the question; of an error that is
-	// itself a join, every branch is. A join under a wrapper is read less
-	// strictly: a missing leader anywhere in it is enough, whatever it is
-	// joined to. No proof stage returns such an error; the reading is kept
-	// as it was and is the first to tighten (see JoinRule).
+	// in time, or a connection lost under the question; of a joined error,
+	// every branch is, so a verdict joined to one of these stays a verdict.
 	ProofUnanswered = AnswerPolicy{
 		NoAnswer:     CauseNoLeader,
 		NoAnswerLeaf: CauseDeadline | CauseObservationTimeout | CauseBadConn | CauseEOF | CauseUnexpectedEOF,
-		Joined:       EveryBranchUnderWrapper,
+		Joined:       EveryBranchAlone,
 	}
 
 	// ProofReadUnanswered: a database read the proof could not start. A
@@ -72,11 +69,9 @@ var (
 	}
 
 	// ReplicationUndecided: a replication pass that carries no verdict on
-	// the member's material. The caller's cancellation is not undecided. An
-	// error that is itself a join is never undecided here; the caller asks
-	// about each branch. A join under a wrapper is read less strictly: one
-	// of these causes anywhere in it is enough. Kept as it was; to tighten
-	// with ProofUnanswered.
+	// the member's material. The caller's cancellation is not undecided. A
+	// joined error is never undecided here; the caller asks about each
+	// branch.
 	ReplicationUndecided = AnswerPolicy{
 		NoAnswer:     CauseNoLeader | CauseObservationTimeout | CauseBadConn | CauseNoMajority,
 		NoAnswerLeaf: CauseDeadline,

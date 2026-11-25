@@ -52,7 +52,7 @@ cache=${GPUWORKS_HOSTENV_CACHE:-$HOME/.cache/gpuworks-hostenv}
 # The runner tag names the engine as the image catalog does (vllm for
 # vllm-metal) and the framework version as the minimum macOS.
 # llama.cpp's builds are bNNNNN, so a "-" separates name and build
-# (cmd/gpuworks-image-manifest's tagPattern).
+# (cmd/gpuworks-image-manifest's idGrammar; the pushed tag is releaseTagPattern).
 sep=""
 case $engine in vllm-metal) runner_engine=vllm ;; llama.cpp) runner_engine=llama.cpp sep=- ;; *) runner_engine=$engine ;; esac
 tag=${GPUWORKS_HOSTENV_TAG:-gpuworks/gpuworks-runner:metal${MACOS_TARGET}-${runner_engine}${sep}${version}-${revision}}

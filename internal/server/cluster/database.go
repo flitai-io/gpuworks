@@ -41,7 +41,10 @@ type DatabaseConfig struct {
 	TransportPolicyPath string
 	// StorageTier is the cluster's timing profile. Empty takes the tier this
 	// process was told its installation records (UseStorageTier); every
-	// member of one cluster must start its node with the same tier.
+	// member of one cluster must start its node with the same tier. Naming
+	// one here starts the node with it and does not change what the
+	// process was told, so nothing outside the node follows it: commands
+	// tell the process and leave this empty.
 	StorageTier storagetier.Tier
 }
 

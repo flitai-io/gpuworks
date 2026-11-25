@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -196,18 +195,9 @@ func (p *SMIProber) RuntimeInjection(indexes []int) RuntimeInjection {
 	if len(indexes) == 0 {
 		return RuntimeInjection{}
 	}
-	idx := make([]string, len(indexes))
-	for i, g := range indexes {
-		idx[i] = strconv.Itoa(g)
-	}
-	devices := strings.Join(idx, ",")
 	return RuntimeInjection{
-		Env: map[string]string{"CUDA_VISIBLE_DEVICES": devices},
-		// Docker parses --gpus values as CSV. Without the inner quotes,
-		// device=0,1 becomes DeviceIDs=[0] plus Count=1 and recent daemons
-		// reject the request as "cannot set both Count and DeviceIDs". exec does
-		// not add shell quoting for us, so the quote characters are intentional.
-		DockerArgs: []string{"--gpus", "\"device=" + devices + "\""},
+		Env:   map[string]string{"CUDA_VISIBLE_DEVICES": joinDeviceIndexes(indexes)},
+		Grant: runtime.DeviceGrant{ToolkitDevices: append([]int(nil), indexes...)},
 	}
 }
 
@@ -283,14 +273,33 @@ func parseFrameworkVersion(text, pattern string) string {
 // Probe returns the detected GPUs. Empty slice + nil error means "no GPU here".
 func (p *SMIProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
 	slog.Debug("gpu probe started", "vendor", p.Vendor())
-	if _, err := lookCLI("nvidia-smi"); err != nil && p.runner == nil {
-		// No CLI to ask. The cards plugged in are still a fact, and saying
-		// "this host has four cards and no driver for them" is the useful
-		// answer; reporting none sends an operator looking for hardware
-		// that is sitting right there.
+	_, lookErr := lookCLI("nvidia-smi")
+	installed := lookErr == nil || p.runner != nil
+	// What the driver listed is placed on the roster of what is actually
+	// plugged in: a card it could not bring up, or that belongs to a VM, is
+	// part of this node's hardware either way. With no CLI to ask, or with
+	// every inventory query failing, nothing is known about what each card
+	// is, but which cards are in the machine is still a fact: reporting none
+	// would describe a host with no accelerators, the opposite of what an
+	// operator needs to see on a node whose driver has stopped answering.
+	// The error goes with them so the server knows these cards carry only
+	// what PCI says.
+	gpus, err := probeCards(ctx, accelerator.VendorNVIDIA, p.hostRoot, installed, p.list, nil)
+	switch {
+	case !installed:
 		slog.Debug("gpu probe command unavailable", "vendor", p.Vendor(), "command", "nvidia-smi")
-		return Roster(accelerator.VendorNVIDIA, p.hostRoot, nil, false), nil
+	case err != nil:
+		slog.Warn("gpu probe failed", "vendor", p.Vendor(), "err", err)
+	case len(gpus) == 0:
+		slog.Debug("gpu probe returned no devices", "vendor", p.Vendor())
+	default:
+		slog.Info("gpu probe completed", "vendor", p.Vendor(), "count", len(gpus))
 	}
+	return gpus, err
+}
+
+// list is the cards nvidia-smi lists.
+func (p *SMIProber) list(ctx context.Context) ([]proto.GPUInfo, error) {
 	// One query row per GPU; nounits keeps memory in MiB as bare integers.
 	// Newer drivers require the explicit *.total suffix. The tiers degrade for
 	// drivers that reject a field name outright; a field a card does not
@@ -306,14 +315,7 @@ func (p *SMIProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
 		}
 	}
 	if err != nil {
-		// Every inventory query failed, so nothing is known about what
-		// each card is. Which cards are in the machine is still a fact,
-		// and reporting none of them would describe a host with no
-		// accelerators — the opposite of what an operator needs to see on
-		// a node whose driver has stopped answering. The error goes with
-		// them so the server knows these cards carry only what PCI says.
-		slog.Warn("gpu probe failed", "vendor", p.Vendor(), "err", err)
-		return Roster(accelerator.VendorNVIDIA, p.hostRoot, nil, false), err
+		return nil, err
 	}
 	gpus := parseNVIDIAInfo(out)
 	for _, gpu := range gpus {
@@ -327,15 +329,6 @@ func (p *SMIProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
 		enrichSingleVisibleNVIDIAMIG(gpus, listing)
 	}
 	applyUnifiedMemoryFallback(gpus, func() int64 { return hostMemoryBytes(p.hostRoot) })
-	// What the driver listed, placed on the roster of what is actually
-	// plugged in: a card it could not bring up, or that belongs to a VM,
-	// is part of this node's hardware either way.
-	gpus = Roster(accelerator.VendorNVIDIA, p.hostRoot, gpus, true)
-	if len(gpus) == 0 {
-		slog.Debug("gpu probe returned no devices", "vendor", p.Vendor())
-	} else {
-		slog.Info("gpu probe completed", "vendor", p.Vendor(), "count", len(gpus))
-	}
 	return gpus, nil
 }
 

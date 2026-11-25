@@ -55,7 +55,7 @@ func TestAgentScrapesTheReservedMetricsPortAndNotTheAPIPort(t *testing.T) {
 	env := testenv.NewOnDisk(t)
 	node := env.AddNode("metrics-port-scrape-node",
 		testenv.WithGPUs(2, testenv.GPUSpec{Model: "NVIDIA A100", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}),
-		testenv.WithDriverName("fake"),
+		testenv.WithDriverName("docker"),
 	)
 	// The API port serves the standard fake engine, except that a /metrics on it
 	// is counted and, for the engine that has a port of its own for them,

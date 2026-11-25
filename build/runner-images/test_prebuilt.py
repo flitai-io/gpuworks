@@ -13,16 +13,16 @@ class PrebuiltMatrixTest(unittest.TestCase):
         here = Path(__file__).parent
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for name in ("push.sh", "verify.sh"):
+            for name in ("push.sh", "verify.sh", "tag_check.py", "tag-grammar.txt"):
                 shutil.copyfile(here / name, root / name)
             # The fixture is JSON (a YAML subset). This narrow yaml adapter
             # keeps orchestration tests offline on CI images without PyYAML;
             # production YAML syntax is checked by the manifest generator.
             (root / "yaml.py").write_text("from json import load as safe_load\n")
             (root / "matrix.yaml").write_text(json.dumps({"items": [
-                {"id": "external", "builder": "prebuilt", "revision": "r1"},
-                {"id": "mac", "builder": "host-env", "revision": "r1"},
-                {"id": "built", "revision": "r2"},
+                {"id": "cuda13.0-sglang0.5.21", "builder": "prebuilt", "revision": "r1"},
+                {"id": "metal15.0-vllm0.31.0", "builder": "host-env", "revision": "r1"},
+                {"id": "cuda13.0-vllm0.30.0", "revision": "r2"},
             ]}))
             for name in ("docker", "skopeo"):
                 command = root / name
@@ -34,26 +34,26 @@ class PrebuiltMatrixTest(unittest.TestCase):
             result = subprocess.run(["bash", str(root / "push.sh"), "--dest", "dest.example/runner",
                                      "--dry-run"], env=env, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("source.example/runner:built-r2 -> dest.example/runner:built-r2", result.stdout)
-            self.assertNotIn("external-r1", result.stdout)
-            self.assertIn("source.example/runner:mac-r1 -> dest.example/runner:mac-r1", result.stdout)
+            self.assertIn("source.example/runner:cuda13.0-vllm0.30.0-r2 -> dest.example/runner:cuda13.0-vllm0.30.0-r2", result.stdout)
+            self.assertNotIn("cuda13.0-sglang0.5.21-r1", result.stdout)
+            self.assertIn("source.example/runner:metal15.0-vllm0.31.0-r1 -> dest.example/runner:metal15.0-vllm0.31.0-r1", result.stdout)
             self.assertFalse(calls.exists(), "dry run must not copy images")
             result = subprocess.run(["bash", str(root / "push.sh"), "--dest", "dest.example/runner",
                                      "--tags-from", "matrix"], env=dict(env, COMMAND_EXIT="0"),
                                     capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(sorted(calls.read_text().splitlines()), [
-                "copy --all --preserve-digests docker://source.example/runner:built-r2 docker://dest.example/runner:built-r2",
-                "copy --all --preserve-digests docker://source.example/runner:mac-r1 docker://dest.example/runner:mac-r1",
+                "copy --all --preserve-digests docker://source.example/runner:cuda13.0-vllm0.30.0-r2 docker://dest.example/runner:cuda13.0-vllm0.30.0-r2",
+                "copy --all --preserve-digests docker://source.example/runner:metal15.0-vllm0.31.0-r1 docker://dest.example/runner:metal15.0-vllm0.31.0-r1",
             ])
             calls.unlink()
             result = subprocess.run(["bash", str(root / "verify.sh"), "--all"],
                                     env=env, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 1, "the unavailable built image must still fail")
-            self.assertIn("SKIP external: prebuilt", result.stderr)
-            self.assertIn("source.example/runner:built-r2", calls.read_text())
-            self.assertNotIn("external-r1", calls.read_text())
-            self.assertNotIn("mac-r1", calls.read_text())
+            self.assertIn("SKIP cuda13.0-sglang0.5.21: prebuilt", result.stderr)
+            self.assertIn("source.example/runner:cuda13.0-vllm0.30.0-r2", calls.read_text())
+            self.assertNotIn("cuda13.0-sglang0.5.21-r1", calls.read_text())
+            self.assertNotIn("metal15.0-vllm0.31.0-r1", calls.read_text())
 
 
 if __name__ == "__main__":

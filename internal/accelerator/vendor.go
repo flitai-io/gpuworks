@@ -23,24 +23,15 @@ const (
 // vendor from this single table. An unknown framework yields the empty
 // string.
 func FrameworkVendor(framework string) string {
-	switch strings.ToLower(strings.TrimSpace(framework)) {
-	case "cuda":
-		return VendorNVIDIA
-	case "rocm":
-		return VendorAMD
-	case "cann":
-		return VendorAscend
-	case "dtk":
-		return VendorHygon
-	case "hggc":
-		return VendorPPU
-	case "xre":
-		return VendorKunlunxin
-	case "metal":
-		return VendorApple
-	default:
-		return ""
+	framework = strings.ToLower(strings.TrimSpace(framework))
+	for _, spec := range vendorSpecs {
+		for _, own := range spec.frameworks {
+			if own == framework {
+				return spec.id
+			}
+		}
 	}
+	return ""
 }
 
 // KnownVendors returns every canonical vendor name, in a stable order. It is
@@ -48,7 +39,11 @@ func FrameworkVendor(framework string) string {
 // table in the product (image catalog metadata, the static hardware catalog,
 // the dtype matrix) must stay within.
 func KnownVendors() []string {
-	return []string{VendorNVIDIA, VendorAMD, VendorAscend, VendorPPU, VendorHygon, VendorApple, VendorKunlunxin}
+	ids := make([]string, len(vendorSpecs))
+	for i, spec := range vendorSpecs {
+		ids[i] = spec.id
+	}
+	return ids
 }
 
 // NormalizeVendor returns the canonical vendor name used on the wire. Each
@@ -59,21 +54,11 @@ func KnownVendors() []string {
 func NormalizeVendor(values ...string) string {
 	for _, value := range values {
 		v := strings.ToLower(strings.TrimSpace(value))
-		switch {
-		case strings.Contains(v, "kunlunxin") || strings.Contains(v, "kunlun") || v == "xre":
-			return VendorKunlunxin
-		case strings.Contains(v, "nvidia") || strings.Contains(v, "cuda"):
-			return VendorNVIDIA
-		case strings.Contains(v, "amd") || strings.Contains(v, "rocm") || strings.Contains(v, "gfx"):
-			return VendorAMD
-		case strings.Contains(v, "hygon") || strings.Contains(v, "dcu") || strings.Contains(v, "haiguang"):
-			return VendorHygon
-		case strings.Contains(v, "ascend") || strings.Contains(v, "huawei") || v == "npu":
-			return VendorAscend
-		case strings.Contains(v, "ppu") || strings.Contains(v, "thead") || v == "t-head" || v == "alibaba" || v == "beethoven":
-			return VendorPPU
-		case v == "apple" || v == "metal" || strings.HasPrefix(v, "apple "):
-			return VendorApple
+		for _, spec := range vendorsByPrecedence {
+			// A definition that says no name is never the answer.
+			if spec.named != nil && spec.named(v) {
+				return spec.id
+			}
 		}
 	}
 	return ""
@@ -113,8 +98,8 @@ func NormalizeArch(value string) string {
 // ROCm-derived stack and is catalogued separately, yet it still
 // cannot inherit a CUDA/ROCm engine default image.
 func IsDomestic(vendor string) bool {
-	vendor = NormalizeVendor(vendor)
-	return vendor == VendorAscend || vendor == VendorPPU || vendor == VendorKunlunxin
+	spec, _ := vendorSpecOf(vendor)
+	return spec.domestic
 }
 
 // HasRuntimeAssetBundles reports whether the vendor's partition backend ships
@@ -128,8 +113,8 @@ func IsDomestic(vendor string) bool {
 // dGPU backend composes host-installed driver libraries in place instead of
 // shipping its own, so neither belongs here.
 func HasRuntimeAssetBundles(vendor string) bool {
-	vendor = NormalizeVendor(vendor)
-	return vendor == VendorAscend || vendor == VendorPPU || vendor == VendorAMD
+	spec, _ := vendorSpecOf(vendor)
+	return spec.assetBundles
 }
 
 // RequiresVendorCatalogImage identifies runtimes that cannot safely inherit a
@@ -143,30 +128,14 @@ func HasRuntimeAssetBundles(vendor string) bool {
 // image must not fall back to the CUDA default, and Apple, whose
 // engines are macOS environment packages rather than Linux images at all.
 func RequiresVendorCatalogImage(vendor string) bool {
-	vendor = VendorKey(vendor)
-	return IsDomestic(vendor) || vendor == VendorHygon || vendor == VendorApple || vendor == VendorAMD
+	spec, _ := vendorSpecOf(vendor)
+	return spec.ownCatalogImage
 }
 
 // VendorBrand writes a canonical vendor the way the vendor writes it. It is
 // the English fallback for a client that has no translation of its own; the
 // vendor id stays the key everywhere else.
 func VendorBrand(vendor string) string {
-	switch NormalizeVendor(vendor) {
-	case VendorNVIDIA:
-		return "NVIDIA"
-	case VendorAMD:
-		return "AMD"
-	case VendorAscend:
-		return "Ascend"
-	case VendorPPU:
-		return "T-Head"
-	case VendorHygon:
-		return "Hygon"
-	case VendorKunlunxin:
-		return "Kunlunxin"
-	case VendorApple:
-		return "Apple"
-	default:
-		return ""
-	}
+	spec, _ := vendorSpecOf(vendor)
+	return spec.brand
 }

@@ -28,7 +28,7 @@ func TestKunlunInjectionCanceledDuringDeviceValidation(t *testing.T) {
 	if !strings.Contains(injection.UnsupportedReason, "context canceled") {
 		t.Fatalf("canceled device validation accepted: %+v", injection)
 	}
-	if len(injection.DockerArgs) != 0 || len(injection.Env) != 0 || len(injection.Mounts) != 0 {
+	if len(injection.Grant.DockerDeviceArgs()) != 0 || len(injection.Env) != 0 || len(injection.Mounts) != 0 {
 		t.Fatalf("canceled validation exposed partial resources: %+v", injection)
 	}
 }

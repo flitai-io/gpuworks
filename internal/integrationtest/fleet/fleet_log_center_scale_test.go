@@ -49,7 +49,7 @@ func TestFleetLogCenterScale(t *testing.T) {
 	names := make([]string, 0, nodeCount)
 	for i := 0; i < nodeCount; i++ {
 		name := fmt.Sprintf("fleet-%04d", i)
-		node := env.AddNode(name, testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+		node := env.AddNode(name, testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 		node.Driver.ShareEnginePorts()
 		// Every running instance streams synthetic engine output at the
 		// configured rate: mostly INFO request chatter on application

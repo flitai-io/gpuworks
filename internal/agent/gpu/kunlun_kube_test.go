@@ -6,31 +6,44 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 )
 
-// On Kubernetes a pod has no --runtime option: it would become a
-// RuntimeClass named "runc", which no cluster defines.
-func TestKunlunKubeInjectionNamesNoRuntime(t *testing.T) {
+// The grant names the plain runtime and the selected cards' nodes whichever
+// runtime it is for. What a runtime makes of the plain runtime is its own:
+// docker and nerdctl name runc, and a pod has no class for it.
+func TestKunlunGrantsThePlainRuntimeAndTheSelectedNodes(t *testing.T) {
 	for _, tc := range []struct {
 		driver  string
 		indexes []int
 		want    []string
 	}{
-		{"docker", []int{1}, []string{"--runtime", "runc", "--device", "/dev/xpu1:/dev/xpu1:rwm", "--device", "/dev/xpuctrl:/dev/xpuctrl:rwm"}},
-		{"nerdctl", []int{1}, []string{"--runtime", "runc", "--device", "/dev/xpu1:/dev/xpu1:rwm", "--device", "/dev/xpuctrl:/dev/xpuctrl:rwm"}},
-		{"kube", []int{1}, []string{"--device", "/dev/xpu1:/dev/xpu1:rwm", "--device", "/dev/xpuctrl:/dev/xpuctrl:rwm"}},
-		{"kube", []int{1, 0}, []string{"--device", "/dev/xpu1:/dev/xpu1:rwm", "--device", "/dev/xpu0:/dev/xpu0:rwm", "--device", "/dev/xpuctrl:/dev/xpuctrl:rwm"}},
+		{"docker", []int{1}, []string{"/dev/xpu1", "/dev/xpuctrl"}},
+		{"nerdctl", []int{1}, []string{"/dev/xpu1", "/dev/xpuctrl"}},
+		{"kube", []int{1}, []string{"/dev/xpu1", "/dev/xpuctrl"}},
+		{"kube", []int{1, 0}, []string{"/dev/xpu1", "/dev/xpu0", "/dev/xpuctrl"}},
 	} {
 		p, _ := kunlunFixture(t)
 		if _, err := p.Probe(t.Context()); err != nil {
 			t.Fatal(err)
 		}
-		got := p.RuntimeInjectionForDriver(tc.indexes, tc.driver)
+		got := p.RuntimeInjectionForDriver(tc.indexes, runtime.TargetNamed(tc.driver))
 		if got.UnsupportedReason != "" {
 			t.Fatalf("%s %v: %s", tc.driver, tc.indexes, got.UnsupportedReason)
 		}
-		if !reflect.DeepEqual(got.DockerArgs, tc.want) {
-			t.Fatalf("%s %v: args = %v, want %v", tc.driver, tc.indexes, got.DockerArgs, tc.want)
+		if got.Grant.RuntimeClass != runtime.PlainRuntimeClass {
+			t.Fatalf("%s %v: runtime class = %q, want the plain runtime", tc.driver, tc.indexes, got.Grant.RuntimeClass)
+		}
+		var paths []string
+		for _, device := range got.Grant.Devices {
+			if device.Access != runtime.DeviceAccessAll {
+				t.Fatalf("%s %v: %s is granted with access %q", tc.driver, tc.indexes, device.Path, device.Access)
+			}
+			paths = append(paths, device.Path)
+		}
+		if !reflect.DeepEqual(paths, tc.want) {
+			t.Fatalf("%s %v: nodes = %v, want %v", tc.driver, tc.indexes, paths, tc.want)
 		}
 	}
 }

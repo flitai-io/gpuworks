@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { access } from "node:fs/promises";
 import test from "node:test";
 
+import "./helpers/vendorDictionary.ts";
 import { vendorForFramework } from "../src/components/VendorLogo.tsx";
 import { VENDOR_ASSETS } from "../src/components/vendorAssets.ts";
 

@@ -19,7 +19,7 @@ import (
 // one of the healthy instances.
 func TestReplicasAreCreatedAndRoutableThroughThePublicAPI(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("replica-node", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	env.AddNode("replica-node", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "replica-node")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

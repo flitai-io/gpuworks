@@ -27,8 +27,13 @@ func applyFakeRuntime(cfg *agentapp.Config, log *slog.Logger) error {
 				driver.InjectMissingImage(ref)
 			}
 		}
+		// A process test of a refusal by runtime names the runtime the node
+		// reports; the recorder stands in for docker otherwise.
+		if name := strings.TrimSpace(os.Getenv("GPUWORKS_FAKE_RUNTIME_NAME")); name != "" {
+			driver.As(name)
+		}
 		cfg.Driver = driver
-		cfg.ForceDriver = "recording"
+		cfg.ForceDriver = driver.Name()
 		log.Warn("recording runtime enabled for process test", "path", record)
 	}
 	if path := strings.TrimSpace(os.Getenv(fakeNetworkEnv)); path != "" {

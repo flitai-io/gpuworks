@@ -7,7 +7,7 @@
 | AMD / ROCm | amdgpu sysfs, KFD | Linux amd64, whole-card deployment on Docker/nerdctl/runveil/Kubernetes; the upstream vLLM ROCm image has been tested for single-GPU BF16 text inference on MI325X (gfx942) and AMD395 (gfx1151), other combinations require per-profile validation | amd-dgpu memory quota (rocm-slicing-shim, user space; tested on MI300X/gfx942 under Docker and runveil and on MI325X under Kubernetes; Docker/nerdctl/runveil/Kubernetes) | Multi-node and PP run on the vLLM mp backend (RCCL reads the NCCL_* network variables; PP=2 and cross-node TP=2 tested on two MI325X hosts); vLLM sleep/wake (L1/L2) and PD (`vllm-nixl`, Ethernet UCX TCP) tested on MI300X; not a compatibility claim for all AMD GPUs or ROCm combinations |
 | PPU / HGGC | ppu-smi | Depends on provider/runtime | ppu-slicing-shim memory quota and weighted QoS (Docker, Kubernetes) | Sustained 20/80 workloads have demonstrated throughput weighting under load, not hard SM partitioning |
 | Hygon / DTK | hy-smi | Determined by the catalog spec and runtime | Native Z100 / K100_AI / BW vdev (experimental, x86_64, Docker or runveil/udocker) | Requires the optional native helper, host libraries and a per-GPU behavioral probe; other models remain full-GPU only |
-| Apple / Metal | sysctl, ioreg (macOS 15+, Apple silicon) | host (the engine is a host process; the image is a darwin environment package) | None; a Mac runs multiple instances concurrently using unified memory | One unified-memory card; GPU memory is the Metal working set; engine sleep, multi-node operation, and the KV disk tier are unsupported; see [ADR 0044](../adr/0044-mac-engines-as-host-processes.md) |
+| Apple / Metal | sysctl, ioreg (macOS 15+, Apple silicon) | host (the engine is a host process; the image is a darwin environment package) | None; a Mac runs multiple instances concurrently using unified memory | One unified-memory card; GPU memory is the Metal working set; engine sleep, multi-node operation, the KV disk tier and other platform features are unsupported (the full list is under "Support Declared in the Definitions" below); see [ADR 0044](../adr/0044-mac-engines-as-host-processes.md) |
 | Kunlunxin / XRE | xpu-smi XML, PCI/sysfs device identity | Linux amd64, Docker/nerdctl/Kubernetes, P800 PCIe / KL3, whole-card TP / PP / DP | Unsupported | TP, PP and engine DP; cross-node communication prerequisites apply; no PD, sleep or runveil; explicit image/model catalog specs |
 
 The dGPU capability status in the table above is derived from the server's partition capability assessment:
@@ -24,6 +24,24 @@ Kubernetes nodes (see [Connect a Kubernetes Cluster](../how-to/connect-kubernete
 
 Slurm nodes (an on-premises Slurm cluster, or an Alibaba Cloud E-HPC cluster, see [Connect a Slurm Cluster](../how-to/connect-slurm-nodes.md)) currently support NVIDIA cards only: the cards stay Slurm's to allocate and a deployment borrows one with a placeholder job; a node without an NVIDIA GPU (a CPU queue) gets no agent and does not appear on the platform. HPC products of cloud vendors other than E-HPC, and schedulers other than Slurm (PBS and others), cannot be connected yet.
 
+
+## Support Declared in the Definitions
+
+The table below is generated from each vendor's definition (`internal/accelerator/<vendor>.go`) and is not written by hand. When a node's operating system and architecture are not the required host, its runtime is not among the runtimes that carry workloads, or a platform feature that is not offered is requested, the server refuses before scheduling. The overview command is the vendor tool an operator looks at the cards with; a driver does not necessarily detect cards with it (AMD's reads sysfs). The table states what the platform admits: each item newly added to a definition needs evidence from real hardware (see the review standard in the [guide](../dev/add-accelerator-vendor.md)), while not every combination carried over has been verified; for what was verified, see the table above and the sections below.
+
+<!-- declared-support:begin -->
+| Vendor | Image framework | Overview command | Required host | Runtimes that carry workloads | Platform features not offered | dGPU backend (runtimes) |
+|---|---|---|---|---|---|---|
+| NVIDIA | `cuda` | `nvidia-smi` | any | `docker`, `nerdctl`, `udocker`, `kube` | none | `nvidia-dgpu` (`docker`, `nerdctl`, `udocker`, `kube`) |
+| AMD | `rocm` | `rocminfo` | `linux/amd64` | `docker`, `nerdctl`, `udocker`, `kube` | none | `amd-dgpu` (`docker`, `nerdctl`, `udocker`, `kube`) |
+| Ascend | `cann` | `npu-smi info` | any | `docker`, `nerdctl`, `udocker`, `kube` | none | `ascend-dgpu` (`docker`, `nerdctl`, `udocker`, `kube`) |
+| T-Head | `hggc` | `ppu-smi` | any | `docker`, `nerdctl`, `udocker`, `kube` | none | `ppu-dgpu` (`docker`, `kube`) |
+| Hygon | `dtk` | `hy-smi` | any | `docker`, `nerdctl`, `udocker`, `kube` | none | `hygon-dgpu` (`docker`, `udocker`) |
+| Apple | `metal` | none | any | `host` | `engine_sleep`, `multi_node`, `prefill_decode_disaggregation`, `kv_disk_tier`, `pipeline_parallelism`, `data_parallelism`, `external_kv_cache` | none |
+| Kunlunxin | `xre` | `xpu-smi -q -x` | `linux/amd64` | `docker`, `nerdctl`, `kube` | `engine_sleep`, `prefill_decode_disaggregation` | none |
+<!-- declared-support:end -->
+
+After changing a definition, regenerate it with `GPUWORKS_UPDATE_SUPPORT_MATRIX=1 go test -run TestSupportMatrixTableIsWrittenFromTheDefinitions ./internal/accelerator/`, then record this page's new source hash with `python3 docs-site/check_translations.py --write docs/reference/support-matrix.md`; otherwise the translation check reports the section as changed.
 
 ## dGPU Capability Comparison
 
@@ -121,7 +139,8 @@ Single-node device injection does not require XDR or RDMA. Multi-node TP require
 
 Container options follow the common administrator template contract. Scheduled device injection is not a security sandbox for arbitrary privileged options, images or host mounts. The agent injects container-logical `XPU_VISIBLE_DEVICES`, and `CUDA_VISIBLE_DEVICES` in the image entrypoint also uses container-logical indexes. Import suitable image and model specs explicitly; see [Kunlun P800 deployment](../how-to/kunlun-p800.md).
 
-<!-- translation-source-sha256: 889f339ffd99a4374002a52c74c1d6a31bdf5a2eba39e5c987613fdae5821e9f # Vendor Support Matrix -->
+<!-- translation-source-sha256: b6ebe9e363e0f1609ea0915d693c15ff949920c96d683677a8d6a29a1853ab7f # Vendor Support Matrix -->
+<!-- translation-source-sha256: 4903c310769a9a9544cdd3d6399e09d5f3db25f86dff1f295e0da22e08c1d2ce ## Support Declared in the Definitions -->
 <!-- translation-source-sha256: 6964ffed4400f853715fb4b3e5eb090ca10e86f445836ae7702b695ba55c78c2 ## dGPU Capability Comparison -->
 <!-- translation-source-sha256: 023a3c02b785d1f4534b826467e0c48cf8f2bfc5a943023918bbc6bb9ed420f7 ## AMD full-GPU implementation boundary and validation status -->
 <!-- translation-source-sha256: 1387c582596b2644621140db2548f8aab41b1f81f7eaf5329052ee731ef1b261 ## AMD dGPU memory quota -->

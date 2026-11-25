@@ -1,0 +1,150 @@
+{
+  "items": [
+    {
+      "id": "nvidia",
+      "brand": "NVIDIA",
+      "frameworks": [
+        "cuda"
+      ],
+      "runtimes": [
+        "docker",
+        "nerdctl",
+        "udocker",
+        "kube"
+      ],
+      "features": [
+        "engine_sleep",
+        "multi_node",
+        "prefill_decode_disaggregation",
+        "kv_disk_tier",
+        "pipeline_parallelism",
+        "data_parallelism",
+        "external_kv_cache"
+      ],
+      "partition_backend": "nvidia-dgpu"
+    },
+    {
+      "id": "amd",
+      "brand": "AMD",
+      "frameworks": [
+        "rocm"
+      ],
+      "runtimes": [
+        "docker",
+        "nerdctl",
+        "udocker",
+        "kube"
+      ],
+      "features": [
+        "engine_sleep",
+        "multi_node",
+        "prefill_decode_disaggregation",
+        "kv_disk_tier",
+        "pipeline_parallelism",
+        "data_parallelism",
+        "external_kv_cache"
+      ],
+      "partition_backend": "amd-dgpu"
+    },
+    {
+      "id": "ascend",
+      "brand": "Ascend",
+      "frameworks": [
+        "cann"
+      ],
+      "runtimes": [
+        "docker",
+        "nerdctl",
+        "udocker",
+        "kube"
+      ],
+      "features": [
+        "engine_sleep",
+        "multi_node",
+        "prefill_decode_disaggregation",
+        "kv_disk_tier",
+        "pipeline_parallelism",
+        "data_parallelism",
+        "external_kv_cache"
+      ],
+      "partition_backend": "ascend-dgpu"
+    },
+    {
+      "id": "ppu",
+      "brand": "T-Head",
+      "frameworks": [
+        "hggc"
+      ],
+      "runtimes": [
+        "docker",
+        "nerdctl",
+        "udocker",
+        "kube"
+      ],
+      "features": [
+        "engine_sleep",
+        "multi_node",
+        "prefill_decode_disaggregation",
+        "kv_disk_tier",
+        "pipeline_parallelism",
+        "data_parallelism",
+        "external_kv_cache"
+      ],
+      "partition_backend": "ppu-dgpu"
+    },
+    {
+      "id": "hygon",
+      "brand": "Hygon",
+      "frameworks": [
+        "dtk"
+      ],
+      "runtimes": [
+        "docker",
+        "nerdctl",
+        "udocker",
+        "kube"
+      ],
+      "features": [
+        "engine_sleep",
+        "multi_node",
+        "prefill_decode_disaggregation",
+        "kv_disk_tier",
+        "pipeline_parallelism",
+        "data_parallelism",
+        "external_kv_cache"
+      ],
+      "partition_backend": "hygon-dgpu"
+    },
+    {
+      "id": "apple",
+      "brand": "Apple",
+      "frameworks": [
+        "metal"
+      ],
+      "runtimes": [
+        "host"
+      ],
+      "features": []
+    },
+    {
+      "id": "kunlunxin",
+      "brand": "Kunlunxin",
+      "frameworks": [
+        "xre"
+      ],
+      "runtimes": [
+        "docker",
+        "nerdctl",
+        "kube"
+      ],
+      "features": [
+        "multi_node",
+        "kv_disk_tier",
+        "pipeline_parallelism",
+        "data_parallelism",
+        "external_kv_cache"
+      ]
+    }
+  ],
+  "total": 7
+}

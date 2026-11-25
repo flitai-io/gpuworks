@@ -24,7 +24,7 @@ func TestPlacementPreviewAndPersistedLaunchAreIdentical(t *testing.T) {
 	node := env.AddNode("placement-launch-node",
 		testenv.WithGPUs(4, testenv.GPUSpec{Model: "Ascend 910B4", Vendor: "ascend", ArchID: "910B4", VRAMMB: 32768}),
 		testenv.WithAccelerator("ascend", "cann", "9.0.0"),
-		testenv.WithDriverName("fake"),
+		testenv.WithDriverName("docker"),
 	)
 	env.WaitNodeOnline(t, node.Name)
 	nodes, err := env.Store().ListNodes()

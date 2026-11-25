@@ -18,6 +18,7 @@ change GET /install.sh
 change GET /kube/manifest.yaml
 change GET /slurm/setup.sh
 change OPTIONS /*
+read GET /api/v1/accelerator-vendors
 read GET /api/v1/agent-upgrades
 read GET /api/v1/agent-upgrades/summary
 read GET /api/v1/agent-upgrades/{id}

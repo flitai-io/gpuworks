@@ -870,7 +870,7 @@
     "ACCELERATOR_SM_LIMIT_UNSUPPORTED": "{{vendor}} does not support a compute/SM limit. Remove it, or use a vendor whose dGPU backend exposes one.",
     "LAUNCH_FEATURES_UNKNOWN": "Cannot determine which features the custom launch command requests on {{vendor}}. Use a recognized engine entrypoint or structured launch parameters.",
     "SLEEP_TARGET_UNRESOLVED": "Cannot resolve the GPU selection for instance {{instance}} on node {{node}}: {{detail}}.",
-    "ACCELERATOR_RUNTIME_UNSUPPORTED": "{{vendor}} requires {{required_os}}/{{required_arch}} and {{required_runtime}}; the node reports {{os}}/{{arch}} and {{runtime}}.",
+    "ACCELERATOR_RUNTIME_UNSUPPORTED": "{{vendor}} requires {{required}}; the node reports {{os}}/{{arch}} and {{runtime}}.",
     "ACCELERATOR_RUNTIME_UNREPORTED": "The node has not reported all runtime facts required by {{vendor}}. Refresh the node inventory before retrying.",
     "ACCELERATOR_DEVICE_UNAVAILABLE": "The selected {{vendor}} devices could not be verified. Check the device identities and driver diagnostics.",
     "ACCELERATOR_INVENTORY_UNAVAILABLE": "The {{vendor}} driver inventory could not be read. Check the vendor CLI and driver.",

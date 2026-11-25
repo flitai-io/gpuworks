@@ -16,9 +16,9 @@ import (
 
 func TestImageRelayTransfersArchiveAndVerifiesLoad(t *testing.T) {
 	env := testenv.New(t)
-	source := env.AddNode("image-source", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"), testenv.WithManagementAddress("127.0.0.1"))
-	target := env.AddNode("image-target", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A10", VRAMMB: 16384}), testenv.WithDriverName("fake"), testenv.WithManagementAddress("127.0.0.1"))
-	failing := env.AddNode("image-failing", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A10", VRAMMB: 16384}), testenv.WithDriverName("fake"), testenv.WithManagementAddress("127.0.0.1"))
+	source := env.AddNode("image-source", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"), testenv.WithManagementAddress("127.0.0.1"))
+	target := env.AddNode("image-target", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A10", VRAMMB: 16384}), testenv.WithDriverName("docker"), testenv.WithManagementAddress("127.0.0.1"))
+	failing := env.AddNode("image-failing", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A10", VRAMMB: 16384}), testenv.WithDriverName("docker"), testenv.WithManagementAddress("127.0.0.1"))
 	failing.Driver.SetImageAbsent(true)
 	for _, name := range []string{"image-source", "image-target", "image-failing"} {
 		env.WaitNodeOnline(t, name)

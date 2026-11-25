@@ -18,7 +18,7 @@ import (
 // controller, agent and proxy.  Only the GPU probe and runtime are simulated.
 func TestSleepWakeRouteAndProxy(t *testing.T) {
 	env := testenv.NewOnDisk(t)
-	env.AddNode("sleep-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	env.AddNode("sleep-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "sleep-node")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

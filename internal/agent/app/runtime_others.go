@@ -6,9 +6,6 @@ import (
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
-	dockerdrv "gpuworks.ai/gpuworks/internal/agent/runtime/docker"
-	nerdctldrv "gpuworks.ai/gpuworks/internal/agent/runtime/nerdctl"
-	udockerdrv "gpuworks.ai/gpuworks/internal/agent/runtime/udocker"
 )
 
 // otherRuntimes are the container runtimes on this node besides active that
@@ -17,11 +14,12 @@ import (
 // none shares state with the active driver, and asking one sets nothing up.
 func (n *NodeRuntime) otherRuntimes(ctx context.Context, active string) []runtime.LocalImageSource {
 	var sources []runtime.LocalImageSource
-	for _, build := range []func() runtime.Driver{
-		func() runtime.Driver { return dockerdrv.New() },
-		func() runtime.Driver { return nerdctldrv.New() },
-		func() runtime.Driver { return udockerdrv.New(n.stateDir) },
-	} {
+	builders := driverBuilders(n.stateDir)
+	for _, info := range runtime.Drivers() {
+		build, ok := builders[info.Name]
+		if !ok || !info.HoldsImages {
+			continue
+		}
 		driver := build()
 		if strings.EqualFold(driver.Name(), active) || driverUnavailableOn(goruntime.GOOS, driver.Name()) != "" {
 			continue

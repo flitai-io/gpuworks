@@ -20,7 +20,7 @@ import (
 
 func TestDeploymentRunsThroughRealAppAndFakeDriver(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("deploy-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("deploy-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	var ran runtime.WorkloadSpec
 	var pulled atomic.Int32
 	node.Driver.AfterRun(func(ws runtime.WorkloadSpec) { ran = ws })
@@ -146,7 +146,7 @@ func TestDeploymentRunsThroughRealAppAndFakeDriver(t *testing.T) {
 // image contributes nothing but its reference (ADR 0031).
 func TestContainerOverridesPreviewCreateAndRuntimeAgree(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("runspec-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("runspec-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	var ran runtime.WorkloadSpec
 	node.Driver.AfterRun(func(ws runtime.WorkloadSpec) { ran = ws })
 	env.WaitNodeOnline(t, "runspec-node")

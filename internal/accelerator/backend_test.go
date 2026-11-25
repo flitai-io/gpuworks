@@ -15,10 +15,10 @@ func TestRegistryExhaustive(t *testing.T) {
 		assets   []string
 	}{
 		{BackendNVIDIALogical, VendorNVIDIA, MaturityStable, []string{"libvgpu.so"}},
+		{BackendAMDLogical, VendorAMD, MaturityExperimental, []string{"libvrocm.so"}},
 		{BackendAscendLogical, VendorAscend, MaturityExperimental, []string{"libvruntime.so"}},
 		{BackendPPULogical, VendorPPU, MaturityExperimental, []string{"hggc_quota.so", "hgml_dlsym_hook.so"}},
 		{BackendHygonLogical, VendorHygon, MaturityExperimental, []string{"libamdhip64.so", "libhydmi.so", "libhydmi_mig.so", "librocm_smi64.so", "gpuworks-hygon-vdev-helper"}},
-		{BackendAMDLogical, VendorAMD, MaturityExperimental, []string{"libvrocm.so"}},
 	}
 	all := All()
 	if len(all) != len(want) {

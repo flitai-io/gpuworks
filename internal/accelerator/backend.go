@@ -98,13 +98,17 @@ type Backend interface {
 	Profiles() []PartitionProfile
 }
 
-var registry = []Backend{
-	nvidiaLogicalBackend{},
-	ascendLogicalBackend{},
-	ppuLogicalBackend{},
-	hygonLogicalBackend{},
-	amdLogicalBackend{},
-}
+// registry is every vendor's dGPU backend, in the vendors' order. Which
+// vendor has one is declared in its definition.
+var registry = func() []Backend {
+	var backends []Backend
+	for _, spec := range vendorSpecs {
+		if spec.partition != nil {
+			backends = append(backends, spec.partition)
+		}
+	}
+	return backends
+}()
 
 func All() []Backend { return append([]Backend(nil), registry...) }
 

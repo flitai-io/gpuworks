@@ -37,6 +37,7 @@ make demo
 
 - [代码地图：逐包职责](code-map.md)
 - [扩展点：模块契约与可安装扩展](extensions.md)
+- [接入一个新的加速卡厂商](add-accelerator-vendor.md)
 - [本地开发环境](setup.md)
 - [测试分层和云端策略](testing.md)
 - [AMD 支持设计：职责、准入与兼容边界](amd-support-design.md)

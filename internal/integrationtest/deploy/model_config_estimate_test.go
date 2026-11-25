@@ -101,7 +101,7 @@ func seedEstimateCatalog(t *testing.T, env *testenv.Env, modelID, modelConfig, k
 // scheduler and the deployment detail page see the same numbers.
 func TestTemplateDeploymentEstimatesKVCapacityFromTheCatalog(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("kv-catalog", testenv.WithGPUs(1, testenv.GPUSpec{Model: "NVIDIA A100-SXM4-80GB", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+	env.AddNode("kv-catalog", testenv.WithGPUs(1, testenv.GPUSpec{Model: "NVIDIA A100-SXM4-80GB", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "kv-catalog")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {
@@ -156,7 +156,7 @@ func TestTemplateDeploymentEstimatesKVCapacityFromTheCatalog(t *testing.T) {
 // configuration would make a finished answer look like a missing one.
 func TestTemplateDeploymentReportsAModelWithoutKVCache(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("kv-none", testenv.WithGPUs(1, testenv.GPUSpec{Model: "NVIDIA A100-SXM4-80GB", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+	env.AddNode("kv-none", testenv.WithGPUs(1, testenv.GPUSpec{Model: "NVIDIA A100-SXM4-80GB", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "kv-none")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {
@@ -186,7 +186,7 @@ func TestTemplateDeploymentReportsAModelWithoutKVCache(t *testing.T) {
 // 72.0 GiB available") proved the candidate fits.
 func TestEvaluationNamesAnImpossibleTensorParallel(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("kv-tp", testenv.WithGPUs(8, testenv.GPUSpec{Model: "NVIDIA A100-SXM4-80GB", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+	env.AddNode("kv-tp", testenv.WithGPUs(8, testenv.GPUSpec{Model: "NVIDIA A100-SXM4-80GB", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "kv-tp")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {
@@ -229,7 +229,7 @@ func TestEvaluationNamesAnImpossibleTensorParallel(t *testing.T) {
 // because only the template path ever consulted the catalog.
 func TestRegisteredModelFindsItsCatalogEntryForKVEstimate(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("kv-by-model", testenv.WithGPUs(1, testenv.GPUSpec{Model: "NVIDIA A100-SXM4-80GB", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+	env.AddNode("kv-by-model", testenv.WithGPUs(1, testenv.GPUSpec{Model: "NVIDIA A100-SXM4-80GB", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "kv-by-model")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {
@@ -284,7 +284,7 @@ func TestRegisteredModelFindsItsCatalogEntryForKVEstimate(t *testing.T) {
 // language.
 func TestUnmeasuredModelReportsAReasonCode(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("kv-unmeasured", testenv.WithGPUs(1, testenv.GPUSpec{Model: "NVIDIA A100-SXM4-80GB", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+	env.AddNode("kv-unmeasured", testenv.WithGPUs(1, testenv.GPUSpec{Model: "NVIDIA A100-SXM4-80GB", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "kv-unmeasured")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {
@@ -314,7 +314,7 @@ func TestUnmeasuredModelReportsAReasonCode(t *testing.T) {
 // answers nothing for a release the catalog explicitly knows about.
 func TestQuantizedReleaseFindsTheKVEstimateOfTheModelItQuantizes(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("kv-quant", testenv.WithGPUs(1, testenv.GPUSpec{Model: "NVIDIA A100-SXM4-80GB", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+	env.AddNode("kv-quant", testenv.WithGPUs(1, testenv.GPUSpec{Model: "NVIDIA A100-SXM4-80GB", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "kv-quant")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

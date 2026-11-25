@@ -227,7 +227,7 @@ func removeArchive(path string) {
 // see one filesystem, and falls back to the agent state directory when that
 // store is not writable by this agent.
 func (i *nodeImages) imageArchiveDir() (string, error) {
-	roots := []string{runtimeImageStoreRoot(i.driverName(), i.deps.modelsRoot()), filepath.Join(i.deps.stateDir(), "images")}
+	roots := []string{i.imageStoreRoot(), filepath.Join(i.deps.stateDir(), "images")}
 	var firstErr error
 	seen := map[string]bool{}
 	for _, root := range roots {
@@ -248,6 +248,16 @@ func (i *nodeImages) imageArchiveDir() (string, error) {
 		firstErr = errors.New("no writable image archive directory")
 	}
 	return "", firstErr
+}
+
+// imageStoreRoot is where this node's runtime keeps its unpacked layers. A
+// stand-in driver answers for itself: the name it reports is another
+// runtime's, and that runtime's store is not its own.
+func (i *nodeImages) imageStoreRoot() string {
+	if standIn, ok := i.deps.driver().(runtime.ImageStoreRooter); ok {
+		return standIn.ImageStoreRoot()
+	}
+	return runtimeImageStoreRoot(i.driverName(), i.deps.modelsRoot())
 }
 
 // runtimeImageStoreRoot is where each runtime keeps its unpacked layers.

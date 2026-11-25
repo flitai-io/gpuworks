@@ -108,6 +108,7 @@ DELETE /api/v1/slurm/clusters/{uuid}
 DELETE /api/v1/storages/{id}
 DELETE /api/v1/storages/{id}/cache
 DELETE /api/v1/storages/{id}/files
+GET /api/v1/accelerator-vendors
 GET /api/v1/agent-upgrades
 GET /api/v1/agent-upgrades/summary
 GET /api/v1/agent-upgrades/{id}

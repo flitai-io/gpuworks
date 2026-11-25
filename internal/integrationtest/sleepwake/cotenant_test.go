@@ -20,7 +20,7 @@ import (
 // the fake runtime and fake engine.
 func TestSleepMakesRoomAndWakeIsRefusedWhileTheCoTenantRuns(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("cotenant-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	env.AddNode("cotenant-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "cotenant-node")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {
@@ -164,7 +164,7 @@ func TestSleepMakesRoomAndWakeIsRefusedWhileTheCoTenantRuns(t *testing.T) {
 // correct answer after the wake proves the agent issued the three orders.
 func TestDeepSleepWakesWithReloadedWeights(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("deep-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	env.AddNode("deep-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "deep-node")
 	nodes, _ := env.Store().ListNodes()
 	node := nodes[0]
@@ -279,7 +279,7 @@ func TestDeepSleepWakesWithReloadedWeights(t *testing.T) {
 // restores the sleeping intent and requires an explicit retry.
 func TestWakeFailureRollsBackWithoutAutomaticRetry(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("retry-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	env.AddNode("retry-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "retry-node")
 	nodes, _ := env.Store().ListNodes()
 	model, err := env.Store().UpsertModel(&store.Model{

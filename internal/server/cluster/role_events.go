@@ -24,6 +24,13 @@ const roleLinePrefix = "gpuworks-raft: "
 // outside the budget.
 const roleRecordsPerMinute = 240
 
+// roleDecisivePerMinute bounds the records that end or begin a leadership.
+// They have a budget of their own, far above what a cluster in trouble
+// writes (a member alone campaigns about once a second), so that a database
+// process gone wrong cannot fill the log through them either. The first
+// record of each kind in a minute is filed whatever the count.
+const roleDecisivePerMinute = 1200
+
 // roleReasonFresh is how long a reason this member observed is attributed to
 // the next change of leader.
 const roleReasonFresh = 30 * time.Second
@@ -85,7 +92,7 @@ func roleValue(fields []roleField, key string) string {
 func roleLevel(fields []roleField) slog.Level {
 	switch roleValue(fields, "event") {
 	case "step_down", "election_start", "election_retry", "transfer_timeout", "loop_late",
-		"slow_log_write", "slow_step", "peer_connect_failed", "peer_send_failed", "dropped", "health":
+		"slow_log_write", "slow_step", "peer_disconnected", "peer_connect_failed", "peer_send_failed", "dropped", "health":
 		return slog.LevelWarn
 	case "app":
 		if roleValue(fields, "level") == "error" {
@@ -105,9 +112,13 @@ type roleTracker struct {
 
 	mu        sync.Mutex
 	now       func() time.Time
-	windowAt  time.Time // start of the current minute of the budget
+	windowAt  time.Time // start of the current minute of the budgets
 	filed     int       // records filed in it
 	skipped   int       // records left out of it
+	decisive  int       // decisive records filed in it
+	held      int       // decisive records left out of it
+	kinds     map[string]bool
+	lostMono  int64 // the database process' monotonic clock when the leader was lost, in ms; -1 without one
 	self      string
 	leader    string    // member id of the leader this member follows or is; "" when none
 	lostAt    time.Time // when this member last stopped having a leader; zero while it has one
@@ -122,41 +133,61 @@ func newRoleTracker(log func() *slog.Logger) *roleTracker {
 	if log == nil {
 		log = slog.Default
 	}
-	return &roleTracker{log: log, now: time.Now}
+	return &roleTracker{log: log, now: time.Now, lostMono: -1}
 }
 
-// roleDecisive reports whether a record says that a leadership ended or began,
-// or that records were lost. Those are filed whatever the budget: a leader
-// that steps down while no successor can be elected leaves nothing else.
-func roleDecisive(fields []roleField) bool {
-	switch roleValue(fields, "event") {
+// roleDecisive names the kind of a record that says a leadership ended or
+// began, what the connections to the peers were doing at that moment, or that
+// records were lost; "" for any other record. Those are filed outside the
+// ordinary budget: a leader that steps down while no successor can be elected
+// leaves nothing else.
+func roleDecisive(fields []roleField) string {
+	switch event := roleValue(fields, "event"); event {
 	case "step_down", "election_won", "following", "dropped":
-		return true
+		return event
+	case "peer_io", "tcp":
+		if trigger := roleValue(fields, "trigger"); trigger == "step_down" || trigger == "election_start" || trigger == "role_change" {
+			return event
+		}
 	case "state":
-		return roleValue(fields, "old") == "LEADER" || roleValue(fields, "new") == "LEADER"
+		if roleValue(fields, "old") == "LEADER" || roleValue(fields, "new") == "LEADER" {
+			return "state"
+		}
 	}
-	return false
+	return ""
 }
 
-// admit applies the budget. It reports whether this record is filed and how
-// many were left out of the minute that has just ended.
-func (t *roleTracker) admit(fields []roleField) (file bool, leftOut int) {
+// admit applies the budgets. It reports whether this record is filed and how
+// many ordinary and decisive records were left out of the minute that has
+// just ended.
+func (t *roleTracker) admit(fields []roleField) (file bool, leftOut, decisiveLeftOut int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := t.now()
 	if now.Sub(t.windowAt) >= time.Minute {
 		leftOut, t.skipped = t.skipped, 0
-		t.windowAt, t.filed = now, 0
+		decisiveLeftOut, t.held = t.held, 0
+		t.windowAt, t.filed, t.decisive, t.kinds = now, 0, 0, nil
 	}
-	if roleDecisive(fields) {
-		return true, leftOut
+	if kind := roleDecisive(fields); kind != "" {
+		first := !t.kinds[kind]
+		if t.kinds == nil {
+			t.kinds = map[string]bool{}
+		}
+		t.kinds[kind] = true
+		if !first && t.decisive >= roleDecisivePerMinute {
+			t.held++
+			return false, leftOut, decisiveLeftOut
+		}
+		t.decisive++
+		return true, leftOut, decisiveLeftOut
 	}
 	if t.filed >= roleRecordsPerMinute {
 		t.skipped++
-		return false, leftOut
+		return false, leftOut, decisiveLeftOut
 	}
 	t.filed++
-	return true, leftOut
+	return true, leftOut, decisiveLeftOut
 }
 
 // record files one record and, when it names a new leader, the summary.
@@ -177,19 +208,31 @@ func (t *roleTracker) record(record string) {
 			}
 			continue
 		}
+		if f.key == "mono" {
+			// Read below to measure between two records; of no use to a
+			// reader as a number.
+			continue
+		}
 		attrs = append(attrs, f.key, f.value)
 	}
 	log := t.log()
-	file, leftOut := t.admit(fields)
+	file, leftOut, decisiveLeftOut := t.admit(fields)
 	if leftOut > 0 {
 		log.Warn("cluster database role events suppressed", "suppressed", leftOut, "per_minute", roleRecordsPerMinute)
+	}
+	if decisiveLeftOut > 0 {
+		log.Warn("cluster database role events suppressed", "suppressed", decisiveLeftOut, "per_minute", roleDecisivePerMinute, "kind", "leadership")
 	}
 	if file {
 		log.Log(context.Background(), roleLevel(fields), "cluster database role event", attrs...)
 	}
 	// The leader is followed through every record, filed or not, and a
 	// change of leader is always written.
-	if summary, changed := t.follow(fields, at); summary != nil {
+	mono := int64(-1)
+	if ms, err := strconv.ParseInt(roleValue(fields, "mono"), 10, 64); err == nil && ms >= 0 {
+		mono = ms
+	}
+	if summary, changed := t.follow(fields, at, mono); summary != nil {
 		if changed {
 			log.Info("cluster database leader changed", summary...)
 		} else {
@@ -204,12 +247,12 @@ func (t *roleTracker) record(record string) {
 // with the same leader before and after, when that leader lost the role and
 // won it again: the term is then another, or this member itself stopped
 // leading in between.
-func (t *roleTracker) follow(fields []roleField, at time.Time) ([]any, bool) {
+func (t *roleTracker) follow(fields []roleField, at time.Time, mono int64) ([]any, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	lose := func() {
 		if t.lostAt.IsZero() && (t.leader != "" || !t.hadLeader) {
-			t.lostAt = at
+			t.lostAt, t.lostMono = at, mono
 		}
 	}
 	why := func(text string, replace bool) {
@@ -286,7 +329,15 @@ func (t *roleTracker) follow(fields []roleField, at time.Time) ([]any, bool) {
 		"observed_at", at.Format(time.RFC3339Nano),
 	}
 	if !t.lostAt.IsZero() {
-		summary = append(summary, "without_leader_ms", at.Sub(t.lostAt).Milliseconds())
+		// Measured on the database process' monotonic clock when both
+		// records carry it: the wall clock may have been set in between.
+		// Without it the wall clock is used and a step backwards counts
+		// as no time.
+		without := max(at.Sub(t.lostAt).Milliseconds(), 0)
+		if mono >= 0 && t.lostMono >= 0 && mono >= t.lostMono {
+			without = mono - t.lostMono
+		}
+		summary = append(summary, "without_leader_ms", without)
 	}
 	switch {
 	case !changed:
@@ -296,7 +347,7 @@ func (t *roleTracker) follow(fields []roleField, at time.Time) ([]any, bool) {
 		// The same member again: the terms tell the two leaderships apart.
 		summary = append(summary, "old_term", t.term)
 	}
-	t.leader, t.lostAt, t.reason, t.hadLeader = newLeader, time.Time{}, "", true
+	t.leader, t.lostAt, t.lostMono, t.reason, t.hadLeader = newLeader, time.Time{}, -1, "", true
 	t.term, t.ledBefore = term, false
 	return summary, changed
 }

@@ -130,6 +130,7 @@ see the index in [`artifacts/README.md`](../artifacts/README.md)). Chinese origi
 - [Developer Documentation Overview](dev/README.md)
 - [Code Map: Package Responsibilities](dev/code-map.md)
 - [Extension Points: The Module Contract and Installable Extensions](dev/extensions.md)
+- [Adding a New Accelerator Vendor](dev/add-accelerator-vendor.md)
 - [Local Setup](dev/setup.md)
 - [Testing Guide and Cloud Test Tiers](dev/testing.md)
 - [AMD Integration and Hardware Validation](dev/amd-hardware-validation.md)
@@ -161,5 +162,5 @@ see the index in [`artifacts/README.md`](../artifacts/README.md)). Chinese origi
 <!-- translation-source-sha256: 37a93fcc0763f871e216200ec1fd2f2ee2302d961fd043c647b750848c105844 ### Reference -->
 <!-- translation-source-sha256: f82bd928b3e7493fdc76f8e101c3d5f32b5f94cfb5b2566960cb6edf529e78f8 ## Why It Is Designed This Way -->
 <!-- translation-source-sha256: 51ca17b50a9e4d6b765cd07edb97987efbb50065558fac90c490198271464fcc ## Release Notes -->
-<!-- translation-source-sha256: 0f2d93be9d69e07f04ea8dd47208fb22fb65033d8d9a0ac2c74ba521e3e9ac4f ## Developer Documentation -->
+<!-- translation-source-sha256: 685f98c9a390cb15c42062493952623da68b4d4aeaf2cf5ad9bfd652494eea27 ## Developer Documentation -->
 <!-- translation-source-sha256: 69e1dc41f912694773f9570f06e6e98f87d7af73495f7851d6cbd62a14e97720 ## Document Placement Rules -->

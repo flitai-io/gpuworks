@@ -62,7 +62,7 @@ func TestFleet1000NodesRedeployChurn(t *testing.T) {
 	start := time.Now()
 	for i := range names {
 		names[i] = fmt.Sprintf("fleet-%04d", i)
-		node := env.AddNode(names[i], testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+		node := env.AddNode(names[i], testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 		// Every node is a separate machine as far as the scheduler is
 		// concerned, so they all get the same engine port. On one host that is
 		// one bind; see FakeDriver.ShareEnginePorts.

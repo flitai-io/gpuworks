@@ -38,10 +38,11 @@ var ascendCardNetwork = CardNetwork{
 // CardNetworkOf reports the card network of a vendor's accelerators, false
 // for vendors whose cards have no ports of their own.
 func CardNetworkOf(vendor string) (CardNetwork, bool) {
-	if NormalizeVendor(vendor) == VendorAscend {
-		return ascendCardNetwork, true
+	spec, _ := vendorSpecOf(vendor)
+	if spec.cardNetwork == nil {
+		return CardNetwork{}, false
 	}
-	return CardNetwork{}, false
+	return *spec.cardNetwork, true
 }
 
 // PortRailName names the network port an accelerator card owns, as a rail of

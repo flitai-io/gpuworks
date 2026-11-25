@@ -10,13 +10,15 @@ import {
 } from "antd";
 import type { DetectedTemplateChip, InferenceTemplateIndexItem, Model } from "../../api";
 import { useTranslation } from "react-i18next";
-import { compareVendors, type KnownVendor } from "../../vendors";
+import { compareVendors } from "../../vendors";
 import ModelPicker from "./ModelPicker";
 import DeployServedNameField from "./DeployServedNameField";
 import TemplateRecommendations from "./TemplateRecommendations";
 import { LockedGroup } from "./DeployEditContext";
 
-const targetVendorOrder: readonly KnownVendor[] = ["nvidia", "ascend", "ppu", "amd"];
+// The order the target picker offers vendors in, which is its own and not
+// the dictionary's; a vendor not named here follows by name.
+const targetVendorOrder: readonly string[] = ["nvidia", "ascend", "ppu", "amd"];
 
 function targetVendorKey(vendor?: string) {
   return vendor?.trim().toLowerCase() || undefined;

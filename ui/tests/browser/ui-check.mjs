@@ -22,7 +22,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright-core";
 import { tableLinkFindings } from "./table-link-rules.mjs";
-import { states, track } from "./page-states.mjs";
+import { states, observePageNetwork } from "./page-states.mjs";
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((pairs, arg, index, all) => {
   if (arg.startsWith("--")) pairs.push([arg.slice(2), all[index + 1]?.startsWith("--") || all[index + 1] == null ? "1" : all[index + 1]]);
@@ -190,7 +190,7 @@ async function run() {
       const context = await browser.newContext({ viewport: { width, height: width >= 1280 ? 900 : 768 }, locale: locale === "en" ? "en-US" : "zh-CN" });
       await context.addInitScript((lang) => { try { localStorage.setItem("i18nextLng", lang); localStorage.setItem("gpuworks.navCollapsed", "0"); } catch {} }, locale);
       const page = await context.newPage();
-      track(page);
+      await observePageNetwork(page);
       const errors = [];
       page.on("console", (m) => { if (m.type() === "error" && !ignoredConsole.some((re) => re.test(m.text()))) errors.push(m.text().slice(0, 200)); });
       page.on("pageerror", (e) => errors.push(`pageerror: ${String(e).slice(0, 200)}`));

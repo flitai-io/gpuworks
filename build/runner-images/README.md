@@ -24,12 +24,15 @@ Some vLLM patches under patches/ carry third-party attribution; see [NOTICE](NOT
   (per-file descriptions for both are in "patches/ and overlays/ file-by-file notes" below)
 - `build.sh` — build driver ｜ `verify.sh` — finished-image verification ｜ `push.sh` — copy between registries
   ｜ `publish.py` — publish to the three public registries (see "Publishing" below)
+  ｜ `tag_check.py` + `tag-grammar.txt` — the publish-time tag name check and the generated grammar it reads
 - `prepare-base.sh` — squashes the history of a vendor base (credential scrubbing, done only at the base layer)
 - `base-mirrors.example` — sample of the build machine's local base mapping (see below)
 
 ## Published SWR tags in the system catalog
 
 The matrix's `published` section lists existing SWR tags, including historical aliases, multi-platform images, and macOS host environment packages. Record the platforms returned by SWR and check manifest digests before adding entries. The generator preserves each exact tag and uses the SWR reference for pulls. Tags already listed by `items` keep their existing references. Build and push scripts read the separate `items` section.
+
+Each listed tag either follows the release grammar (`<id>-r<number>`, defined once in `cmd/gpuworks-image-manifest`) or declares a `legacy_reason` saying why a tag outside it exists. The generator rejects an undeclared tag outside the grammar and names it, and rejects a declaration on a tag that conforms. The declarations are counted by the `published_tags_outside_grammar` budget in `scripts/arch-constraints.txt`, which only goes down: a new image gets a conforming tag, not a new declaration.
 
 Run `make image-manifest` after editing the list. The inventory is a snapshot of registry tags. It carries no tag immutability guarantee, even for revision-shaped names. These entries use the schema-3 rolling-tag policy: they are available for explicit selection and excluded from automatic selection, including on older servers. New servers initially disable these SWR inventory rows and preserve subsequent operator choices. To promote a tag for automatic deployment, verify its immutability and hardware eligibility, and use the maintained matrix entry.
 
@@ -320,6 +323,10 @@ Built from the same upstream base as the official `vllm/vllm-omni:v0.34.0` image
 ## Publishing (internal registry -> public)
 
 `publish.py` publishes `registry.zstack.ai/gpuworks/gpuworks-runner:<tag>` to Docker Hub / quay / Huawei SWR.
+Both `publish.py` and `push.sh` check the destination tag before any copy (`tag_check.py`): it must follow the release grammar,
+be the bare `<id>` alias of convention 1, be a tag the matrix already declares with a `legacy_reason`, or carry the `zz-pilot-` scratch prefix
+used for rehearsals. Anything else is refused. The grammar is read from `tag-grammar.txt`, which `make image-manifest` exports from the generator;
+when copying `publish.py` to a publishing host, copy `tag_check.py`, `tag-grammar.txt` and `matrix.yaml` with it — without them it refuses to publish.
 It uses only the standard library and is Python 3.6 compatible (runs directly on gpu3). An image = all of the upstream base's layers + a few hundred MB of thin layers,
 so the key to publishing is **not re-uploading the base layers**:
 

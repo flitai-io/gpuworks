@@ -33,7 +33,7 @@ func RuntimeRequirementError(vendor string, actual accelerator.HostRuntime) *Inj
 	if mismatch.MissingFacts {
 		code, cause = proto.ErrorAcceleratorRuntimeUnreported, "runtime_unreported"
 	}
-	reason := fmt.Sprintf("%s: requires %s/%s with %s; observed os=%q arch=%q runtime=%q", cause, mismatch.RequiredOS, mismatch.RequiredArch, requiredRuntime, actual.OS, actual.Arch, actual.Driver)
+	reason := fmt.Sprintf("%s: requires %s; observed os=%q arch=%q runtime=%q", cause, mismatch.Requirement(), actual.OS, actual.Arch, actual.Driver)
 	return &InjectionError{
 		Failure: proto.RuntimeFailure{
 			Code: code, Vendor: vendor,

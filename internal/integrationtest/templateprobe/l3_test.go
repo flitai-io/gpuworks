@@ -15,7 +15,7 @@ import (
 
 func TestL3HarnessUsesRealDeploymentControllerAndGateway(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("l3-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("l3-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "l3-node")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

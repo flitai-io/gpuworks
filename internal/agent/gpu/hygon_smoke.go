@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 // These indirections are the test seams: the offline suite never starts a
@@ -102,4 +103,17 @@ func hygonSmokeVerdict(out []byte, err error) error {
 	}
 	// No marker at all: python itself did not run the script to an answer.
 	return &HostRuntimeUnavailableError{Reason: "the Hygon HIP runtime check gave no answer: " + detail}
+}
+
+// HostRuntimeCheck asks HIP on the host to use one card.
+func (p *HygonProber) HostRuntimeCheck() HostRuntimeCheck {
+	return HostRuntimeCheck{
+		CLI:          "hy-smi",
+		Prerequisite: HygonHIPSmokePrerequisite,
+		// The script finds the card by its address among every card HIP
+		// lists, so the address is the name; a card without one cannot be
+		// told apart from its neighbours.
+		Visible: func(g proto.GPUInfo) (string, bool) { return g.PCIeBDF, g.PCIeBDF != "" },
+		Try:     HygonRuntimeSmokeOn,
+	}
 }

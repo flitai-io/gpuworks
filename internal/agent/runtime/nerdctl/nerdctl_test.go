@@ -467,3 +467,42 @@ func TestBuildRunArgsRendersWorkloadLabels(t *testing.T) {
 		t.Fatalf("labels must come before the image: %q", args)
 	}
 }
+
+// Granted devices are rendered after the workload's own options, in the
+// spelling this nerdctl accepts: an Ascend node is passed unmapped.
+func TestBuildRunArgsRendersGrantedDevices(t *testing.T) {
+	args := New().buildRunArgs(runtime.WorkloadSpec{
+		Name: "gpuworks-test", Image: "fake",
+		DockerArgs: []string{"--ipc=host"},
+		Grant:      runtime.DeviceGrant{Devices: []runtime.Device{{Path: "/dev/davinci2"}, {Path: "/dev/kfd", Access: "rwm"}}, Groups: []int{39}},
+	})
+	joined := strings.Join(args, " ")
+	want := "--ipc=host --device /dev/davinci2 --device /dev/kfd:/dev/kfd:rwm --group-add 39"
+	if !strings.Contains(joined, want) {
+		t.Fatalf("nerdctl args = %s, want them to contain %q", joined, want)
+	}
+}
+
+// A granted device that is a directory is expanded into its entries like one
+// among the workload's own options: nerdctl refuses a directory.
+func TestBuildRunArgsExpandsAGrantedDeviceDirectory(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"uverbs0", "rdma_cm"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	args := New().buildRunArgs(runtime.WorkloadSpec{
+		Name: "gpuworks-test", Image: "fake",
+		Grant: runtime.DeviceGrant{Devices: []runtime.Device{{Path: dir}}},
+	})
+	joined := strings.Join(args, " ")
+	for _, name := range []string{"uverbs0", "rdma_cm"} {
+		if !strings.Contains(joined, "--device "+filepath.Join(dir, name)) {
+			t.Fatalf("nerdctl args = %s, want an entry for %s", joined, name)
+		}
+	}
+	if strings.Contains(joined, "--device "+dir+" ") {
+		t.Fatalf("nerdctl args pass the directory itself: %s", joined)
+	}
+}

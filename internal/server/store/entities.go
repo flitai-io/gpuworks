@@ -120,7 +120,7 @@ type Node struct {
 	// partial index idx_node_slurm (migration slurm_clusters).
 	SlurmClusterID    uint
 	LastRemoteAddr    string `gorm:"size:128"` // address observed by the control plane
-	RuntimeDriver     string `gorm:"size:16"`  // docker | nerdctl | udocker | host (detected)
+	RuntimeDriver     string `gorm:"size:16"`  // docker | nerdctl | udocker | kube | host (detected)
 	RuntimePreference string `gorm:"size:16"`  // auto | docker | nerdctl | udocker (desired)
 	RuntimePlugin     string `gorm:"size:128"` // selected vendor runtime plugin display name/version
 	// RuntimeGPUBlocked is the agent's code for why the selected container

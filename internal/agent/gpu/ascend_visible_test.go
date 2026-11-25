@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 )
 
 func TestAscendRootlessLogicalDeviceSelection(t *testing.T) {
@@ -50,7 +51,7 @@ func TestAscendRootlessLogicalDeviceSelection(t *testing.T) {
 					return "", nil
 				}
 			}}
-			got := p.RuntimeInjectionForDriver(tc.indexes, "udocker")
+			got := p.RuntimeInjectionForDriver(tc.indexes, runtime.TargetNamed("udocker"))
 			if tc.fail != "" {
 				if !strings.Contains(got.UnsupportedReason, tc.fail) || len(got.Env) != 0 {
 					t.Fatalf("failure must not fall back to card 0: %+v", got)

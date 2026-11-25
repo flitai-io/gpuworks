@@ -17,7 +17,7 @@ import (
 // Exercise the real HTTP -> node RPC -> filesystem path, with no RPC stub.
 func TestRegisterPathOutsideStorageThroughRealAgent(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("external-model", testenv.WithDriverName("fake"))
+	node := env.AddNode("external-model", testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, node.Name)
 	api := env.API(t)
 	post := func(t *testing.T, path string, body any, status int) []byte {

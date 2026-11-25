@@ -33,10 +33,10 @@ func TestDistributedDeploymentRunsThroughSchedulerAndTwoFakeAgents(t *testing.T)
 
 	leader := env.AddNode("distributed-rank-0",
 		testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}),
-		testenv.WithDriverName("fake"), testenv.WithManagementAddress(leaderAddress))
+		testenv.WithDriverName("docker"), testenv.WithManagementAddress(leaderAddress))
 	follower := env.AddNode("distributed-rank-1",
 		testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}),
-		testenv.WithDriverName("fake"), testenv.WithManagementAddress(followerAddress))
+		testenv.WithDriverName("docker"), testenv.WithManagementAddress(followerAddress))
 
 	leaderRuns := make(chan runtime.WorkloadSpec, 1)
 	followerRuns := make(chan runtime.WorkloadSpec, 1)

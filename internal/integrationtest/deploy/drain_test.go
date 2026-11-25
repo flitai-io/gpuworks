@@ -103,7 +103,7 @@ func instanceState(env *testenv.Env, uuid string) string {
 // only after that, leaving the other replica serving.
 func TestScaleDownDrainsTheNamedReplicaWithoutCuttingItsRequest(t *testing.T) {
 	gates := &gatedEngines{}
-	driver := testenv.NewFakeDriver("fake")
+	driver := testenv.NewFakeDriver("docker")
 	driver.SetEngineHandler(gates.handler)
 	env, api, depID := lifecycleEnv(t, driver)
 	running := waitRunning(t, env, depID, 2, nil)
@@ -176,7 +176,7 @@ func TestScaleDownDrainsTheNamedReplicaWithoutCuttingItsRequest(t *testing.T) {
 // Restarting one replica through its instance drains it while the
 // replacement starts, and costs the replica no retry.
 func TestRestartOneReplicaReplacesItAndSparesTheOther(t *testing.T) {
-	env, api, depID := lifecycleEnv(t, testenv.NewFakeDriver("fake"))
+	env, api, depID := lifecycleEnv(t, testenv.NewFakeDriver("docker"))
 	running := waitRunning(t, env, depID, 2, nil)
 	postAction(t, api, fmt.Sprintf("/api/v1/instances/%s/restart", running[0]), ``, http.StatusAccepted)
 	if got := instanceState(env, running[0]); got != proto.InstDraining {
@@ -215,7 +215,7 @@ func mustRequest(t *testing.T, method, url, body string) *http.Request {
 // least one replica serves and at most one drains, every replica ends on a new
 // generation, and the restart record is cleared once done.
 func TestRollingRestartReplacesOneReplicaAtATime(t *testing.T) {
-	env, api, depID := lifecycleEnv(t, testenv.NewFakeDriver("fake"))
+	env, api, depID := lifecycleEnv(t, testenv.NewFakeDriver("docker"))
 	first := waitRunning(t, env, depID, 2, nil)
 	postAction(t, api, fmt.Sprintf("/api/v1/deployments/%d/restart", depID), ``, http.StatusAccepted)
 

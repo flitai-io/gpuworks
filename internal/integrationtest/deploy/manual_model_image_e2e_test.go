@@ -38,7 +38,7 @@ func TestManualModelDeploymentImageResolutionIsVendorGeneric(t *testing.T) {
 			node := env.AddNode(fixture.name,
 				testenv.WithGPUList(testenv.GPUSpec{Model: fixture.gpu, Vendor: fixture.vendor, VRAMMB: 65536}),
 				testenv.WithAccelerator(fixture.vendor, fixture.framework, "1.0"),
-				testenv.WithDriverName("fake"), testenv.WithoutAcceleratorRuntimeInjection(),
+				testenv.WithDriverName("docker"), testenv.WithoutAcceleratorRuntimeInjection(),
 			)
 			runs := make(chan runtime.WorkloadSpec, 1)
 			node.Driver.AfterRun(func(spec runtime.WorkloadSpec) {

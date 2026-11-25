@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
@@ -25,8 +26,8 @@ func TestKunlunTransportFailureCarriesStableResource(t *testing.T) {
 		if tc.xdr {
 			withKunlunXDR(p, os.ModeDevice|os.ModeCharDevice)
 		}
-		got := p.RuntimeInjectionForLaunch(t.Context(), InjectionRequest{Indexes: []int{0}, DriverName: "docker", NNodes: 2, DockerArgs: tc.args, Env: validKunlunMultiNodeEnv()})
-		if got.Failure == nil || got.Failure.Code != proto.ErrorAcceleratorResourceUnavailable || got.Failure.Resource != tc.resource || got.UnsupportedReason == "" || len(got.DockerArgs) != 0 || len(got.Env) != 0 {
+		got := p.RuntimeInjectionForLaunch(t.Context(), InjectionRequest{Indexes: []int{0}, Runtime: runtime.TargetNamed("docker"), NNodes: 2, DockerArgs: tc.args, Env: validKunlunMultiNodeEnv()})
+		if got.Failure == nil || got.Failure.Code != proto.ErrorAcceleratorResourceUnavailable || got.Failure.Resource != tc.resource || got.UnsupportedReason == "" || len(got.Grant.DockerDeviceArgs()) != 0 || len(got.Env) != 0 {
 			t.Fatalf("resource=%s got=%+v", tc.resource, got)
 		}
 	}

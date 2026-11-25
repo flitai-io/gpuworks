@@ -78,7 +78,7 @@ func TestInferenceTemplateDeploymentRejectsInvalidGPUSelectionsBeforeAgentWorklo
 			env := testenv.New(t)
 			node := env.AddNode("reject-"+fixture.name,
 				testenv.WithGPUList(fixture.gpus...),
-				testenv.WithDriverName("fake"),
+				testenv.WithDriverName("docker"),
 				testenv.WithoutAcceleratorRuntimeInjection(),
 			)
 			runs := make(chan runtime.WorkloadSpec, 1)
@@ -220,7 +220,7 @@ func TestInferenceTemplateDeploymentPipeline(t *testing.T) {
 	}
 	var running []runningNode
 	for _, fixture := range cases {
-		node := env.AddNode(fixture.name, testenv.WithGPUList(fixture.gpus...), testenv.WithDriverName("fake"), testenv.WithoutAcceleratorRuntimeInjection())
+		node := env.AddNode(fixture.name, testenv.WithGPUList(fixture.gpus...), testenv.WithDriverName("docker"), testenv.WithoutAcceleratorRuntimeInjection())
 		runs := make(chan runtime.WorkloadSpec, 1)
 		runChannel := runs
 		node.Driver.AfterRun(func(spec runtime.WorkloadSpec) {
@@ -387,7 +387,7 @@ func TestInferenceTemplateDeploymentPipeline(t *testing.T) {
 
 func TestMultiComponentTemplatePreviewAndDeploymentUseTheSameLaunch(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("multi-component", testenv.WithGPUList(testenv.GPUSpec{Model: "NVIDIA A100", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+	node := env.AddNode("multi-component", testenv.WithGPUList(testenv.GPUSpec{Model: "NVIDIA A100", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 	runs := make(chan runtime.WorkloadSpec, 1)
 	node.Driver.AfterRun(func(spec runtime.WorkloadSpec) {
 		select {

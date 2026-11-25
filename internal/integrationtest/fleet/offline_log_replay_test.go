@@ -25,7 +25,7 @@ import (
 func TestInstanceLogsWrittenWhileTheServerIsDownReachTheLogCenter(t *testing.T) {
 	const perSec = 20
 	env := testenv.NewOnDisk(t)
-	node := env.AddNode("replay", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+	node := env.AddNode("replay", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 	node.Driver.ShareEnginePorts()
 	var mu sync.Mutex
 	written := 0

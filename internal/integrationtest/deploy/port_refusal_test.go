@@ -22,7 +22,7 @@ import (
 //	CGO_ENABLED=0 go test -count=1 -run TestARefusedPortIsRetriedWithoutTheBackoff ./internal/integrationtest/deploy/
 func TestARefusedPortIsRetriedWithoutTheBackoff(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("refusal-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("refusal-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, node.Name)
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

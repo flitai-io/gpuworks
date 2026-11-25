@@ -278,3 +278,25 @@ for (const lng of ["en", "zh"] as const) {
     assert.doesNotMatch(plain, /placement resolver|placement 解析器/);
   });
 }
+
+test("a runtime refusal states the host only when the vendor restricts it", () => {
+  const t = i18n.getFixedT("en", "deploy");
+  const node = { os: "linux", arch: "amd64" };
+  assert.equal(
+    scheduleText(t, { code: "runtime_unsupported", params: { ...node, vendor: "NVIDIA", runtime: "host", required_os: "", required_arch: "", required_runtime: "docker/nerdctl/udocker/kube" } }),
+    "NVIDIA requires docker/nerdctl/udocker/kube; this node reports linux/amd64 and host.",
+  );
+  assert.equal(
+    scheduleText(t, { code: "runtime_unsupported", params: { ...node, vendor: "Kunlunxin", runtime: "udocker", required_os: "linux", required_arch: "amd64", required_runtime: "docker/nerdctl/kube" } }),
+    "Kunlunxin requires linux/amd64 · docker/nerdctl/kube; this node reports linux/amd64 and udocker.",
+  );
+  assert.equal(
+    scheduleText(i18n.getFixedT("zh", "deploy"), { code: "runtime_unreported", params: { vendor: "AMD", required_os: "linux", required_arch: "amd64", required_runtime: "docker/nerdctl/udocker/kube" } }),
+    "AMD 需要 linux/amd64 · docker/nerdctl/udocker/kube；此节点尚未上报完整的运行时信息。",
+  );
+  const common = i18n.getFixedT("zh", "common");
+  assert.equal(
+    apiErrorText(common, new APIError("ACCELERATOR_RUNTIME_UNSUPPORTED", { ...node, vendor: "Apple", runtime: "docker", required_os: "", required_arch: "", required_runtime: "host" }, "refused", 409)),
+    "Apple 需要 host；节点当前为 linux/amd64 和 docker。",
+  );
+});

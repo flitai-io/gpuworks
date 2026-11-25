@@ -284,7 +284,8 @@ func (s *Store) clusterAdmission(ctx context.Context, clusterID, keyFingerprint 
 		return ClusterAdmission{}, ErrClusterIdentityConflict
 	}
 	if snapshot.Admission.KeyFingerprint == "" {
-		return ClusterAdmission{}, ErrClusterAdmissionRejected
+		// No admission that is not revoked: this key is refused.
+		return ClusterAdmission{}, &ClusterAdmissionRefusal{Key: keyFingerprint}
 	}
 	return snapshot.Admission, nil
 }

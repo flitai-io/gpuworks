@@ -66,7 +66,7 @@ func TestOwnerLabelsOmitUnknownFacts(t *testing.T) {
 // Containers the engine launches for itself (the per-card runtime check) carry
 // the owner too, but no instance: they serve none.
 func TestCardSmokeWorkloadCarriesOwnerButNoInstanceLabels(t *testing.T) {
-	e := newHermeticEngine(nil, func(proto.InstanceStatus) {}, slog.Default(), t.TempDir())
+	e := newHermeticEngine(&headlessTestDriver{name: "docker"}, func(proto.InstanceStatus) {}, slog.Default(), t.TempDir())
 	e.SetWorkloadOwner(WorkloadOwner{ServerURL: "https://gw-a.example", NodeUUID: "node-a", StateDir: "/opt/a"})
 
 	ws, err := e.BuildCardSmokeWorkload("runner:latest", 0, "gpuworks-card-smoke-0-x", []string{"true"})

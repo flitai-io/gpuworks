@@ -6,12 +6,20 @@ import (
 	"strings"
 )
 
-// gpuNameVendorPrefixes are the brand words probes put in front of a model
-// name. NVIDIA drivers add "NVIDIA " on some releases and not on others, and
-// the Ascend probe has always reported "Ascend <chip>", and macOS names the
-// GPU "Apple M4 Pro"; none of these words says anything the vendor field does
-// not already say.
-var gpuNameVendorPrefixes = []string{"nvidia", "huawei", "ascend", "hygon", "amd", "apple", "kunlunxin"}
+// isNamePrefix reports whether a word is one a vendor's probes put in front
+// of a model name. NVIDIA drivers add "NVIDIA " on some releases and not on
+// others, the Ascend probe has always reported "Ascend <chip>", and macOS
+// names the GPU "Apple M4 Pro".
+func isNamePrefix(word string) bool {
+	for _, spec := range vendorSpecs {
+		for _, prefix := range spec.namePrefixes {
+			if strings.EqualFold(word, prefix) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // NormalizeGPUName is the model name of a GPU as the server stores it: the
 // probe's name with surrounding and repeated whitespace collapsed and a
@@ -27,11 +35,8 @@ var gpuNameVendorPrefixes = []string{"nvidia", "huawei", "ascend", "hygon", "amd
 func NormalizeGPUName(name string) string {
 	fields := strings.Fields(name)
 	if len(fields) > 1 {
-		for _, prefix := range gpuNameVendorPrefixes {
-			if strings.EqualFold(fields[0], prefix) {
-				fields = fields[1:]
-				break
-			}
+		if isNamePrefix(fields[0]) {
+			fields = fields[1:]
 		}
 	}
 	return strings.Join(fields, " ")
@@ -54,33 +59,30 @@ type Arch struct {
 func GPUArch(vendor, archID, computeCapability string) Arch {
 	archID = strings.TrimSpace(archID)
 	computeCapability = strings.TrimSpace(computeCapability)
-	switch InferVendor(vendor, "", archID, computeCapability) {
-	case VendorNVIDIA:
-		major, minor, ok := parseComputeCapability(computeCapability)
-		if !ok {
-			// A row with no capability but an sm_XY says the same thing.
-			major, minor, ok = parseSMArch(archID)
-		}
-		if !ok {
-			return Arch{ID: archID}
-		}
-		return Arch{ID: "sm_" + strconv.Itoa(major) + strconv.Itoa(minor), Family: nvidiaFamily(major, minor)}
-	case VendorAscend:
-		return Arch{ID: archID, Family: ascendFamily(archID)}
-	case VendorHygon:
-		return Arch{ID: archID, Family: hygonFamily(archID)}
-	case VendorPPU:
-		return Arch{ID: archID, Family: ppuFamily(archID)}
-	case VendorKunlunxin:
-		if strings.EqualFold(archID, "KL3") {
-			return Arch{ID: archID, Family: "kl3"}
-		}
-		return Arch{ID: archID}
-	case VendorApple:
-		return Arch{ID: archID, Family: appleFamily(archID)}
-	default:
+	spec, _ := vendorSpecByID(InferVendor(vendor, "", archID, computeCapability))
+	if spec.arch == nil {
 		return Arch{ID: archID}
 	}
+	return spec.arch(archID, computeCapability)
+}
+
+func nvidiaArch(archID, computeCapability string) Arch {
+	major, minor, ok := parseComputeCapability(computeCapability)
+	if !ok {
+		// A row with no capability but an sm_XY says the same thing.
+		major, minor, ok = parseSMArch(archID)
+	}
+	if !ok {
+		return Arch{ID: archID}
+	}
+	return Arch{ID: "sm_" + strconv.Itoa(major) + strconv.Itoa(minor), Family: nvidiaFamily(major, minor)}
+}
+
+func kunlunArch(archID, _ string) Arch {
+	if strings.EqualFold(archID, "KL3") {
+		return Arch{ID: archID, Family: "kl3"}
+	}
+	return Arch{ID: archID}
 }
 
 // StoredArchID is the ArchID kept for a reported GPU. NVIDIA's sm_XY is a

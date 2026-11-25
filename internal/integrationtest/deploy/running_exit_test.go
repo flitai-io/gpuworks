@@ -18,7 +18,7 @@ import (
 func TestRunningInstanceWhoseContainerExitsIsRebuiltWithinTheRetryBudget(t *testing.T) {
 	env := testenv.New(t)
 	env.SetControllerRetryPolicy(100*time.Millisecond, 2)
-	node := env.AddNode("exit-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("exit-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "exit-node")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

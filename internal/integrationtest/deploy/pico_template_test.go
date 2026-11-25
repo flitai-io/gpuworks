@@ -79,7 +79,7 @@ func TestPicoLikeTemplateResolvesEachRanksLaunch(t *testing.T) {
 	for rank, address := range addresses {
 		node := env.AddNode(fmt.Sprintf("pico-gb10-%d", rank),
 			testenv.WithGPUs(1, testenv.GPUSpec{Model: "GB10", VRAMMB: 24576}),
-			testenv.WithDriverName("fake"), testenv.WithManagementAddress(address))
+			testenv.WithDriverName("docker"), testenv.WithManagementAddress(address))
 		captured := runs[rank]
 		node.Driver.AfterRun(func(spec runtime.WorkloadSpec) { captureWorkload(captured, spec) })
 		nodes = append(nodes, node)

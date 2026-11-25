@@ -14,24 +14,14 @@ import "strings"
 // as cmd/gpuworks-image-manifest spells it), and false for a vendor that has
 // no container check.
 func ContainerSmokeFramework(vendor string) (string, bool) {
-	switch NormalizeVendor(vendor) {
-	case VendorPPU:
-		return "hggc", true
-	case VendorAscend:
-		return "cann", true
-	}
-	return "", false
+	spec, _ := vendorSpecOf(vendor)
+	return spec.smokeFramework, spec.smokeFramework != ""
 }
 
 // ContainerSmokeScript is the python the container runs for this vendor.
 func ContainerSmokeScript(vendor string) (string, bool) {
-	switch NormalizeVendor(vendor) {
-	case VendorPPU:
-		return CUDAGradedSmokeScript, true
-	case VendorAscend:
-		return ascendContainerPreamble + AscendACLSmokeScript, true
-	}
-	return "", false
+	spec, _ := vendorSpecOf(vendor)
+	return spec.smokeScript, spec.smokeScript != ""
 }
 
 // RunnerTagFramework is the framework a runner image reference names in its

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
@@ -53,14 +54,17 @@ func (p *FixedProber) RuntimeInjection(indexes []int) RuntimeInjection {
 		visible[i], compact[i] = strconv.Itoa(index), strconv.Itoa(i)
 	}
 	switch strings.ToLower(strings.TrimSpace(p.VendorName)) {
+	case "apple":
+		// A Mac's engines are host processes; its prober grants nothing.
+		return RuntimeInjection{}
 	case "ascend", "huawei":
-		return RuntimeInjection{Env: map[string]string{"ASCEND_VISIBLE_DEVICES": strings.Join(visible, ","), "ASCEND_RT_VISIBLE_DEVICES": strings.Join(compact, ","), "NPU_VISIBLE_DEVICES": strings.Join(compact, ",")}, DockerArgs: []string{"--runtime", "ascend"}}
+		return RuntimeInjection{Env: map[string]string{"ASCEND_VISIBLE_DEVICES": strings.Join(visible, ","), "ASCEND_RT_VISIBLE_DEVICES": strings.Join(compact, ","), "NPU_VISIBLE_DEVICES": strings.Join(compact, ",")}, Grant: runtime.DeviceGrant{RuntimeClass: "ascend"}}
 	case "ppu", "t-head", "thead":
-		args := []string{"--device", "/dev/alixpu:/dev/alixpu:rwm", "--device", "/dev/alixpu_ctl:/dev/alixpu_ctl:rwm"}
+		devices := []runtime.Device{{Path: "/dev/alixpu", Access: runtime.DeviceAccessAll}, {Path: "/dev/alixpu_ctl", Access: runtime.DeviceAccessAll}}
 		for _, index := range indexes {
-			args = append(args, "--device", fmt.Sprintf("/dev/alixpu_ppu%d:/dev/alixpu_ppu%d:rwm", index, index))
+			devices = append(devices, runtime.Device{Path: fmt.Sprintf("/dev/alixpu_ppu%d", index), Access: runtime.DeviceAccessAll})
 		}
-		return RuntimeInjection{Env: map[string]string{"NVIDIA_VISIBLE_DEVICES": "void", "CUDA_VISIBLE_DEVICES": strings.Join(compact, ",")}, DockerArgs: args}
+		return RuntimeInjection{Env: map[string]string{"NVIDIA_VISIBLE_DEVICES": "void", "CUDA_VISIBLE_DEVICES": strings.Join(compact, ",")}, Grant: runtime.DeviceGrant{Devices: devices}}
 	default:
 		return (&SMIProber{}).RuntimeInjection(indexes)
 	}

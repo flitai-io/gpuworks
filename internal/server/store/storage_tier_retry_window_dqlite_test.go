@@ -4,7 +4,6 @@ package store
 
 import (
 	"testing"
-	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/cluster/storagetier"
 )
@@ -17,14 +16,12 @@ import (
 // added together with a longer window, and the window is capped by the time
 // an isolated member must refuse within.
 func TestEveryStorageTierElectsInsideTheMembershipRetryWindow(t *testing.T) {
-	const oneCommit = 500 * time.Millisecond
 	for _, tier := range storagetier.All() {
-		_, longest := tier.ElectionTimer()
-		if need := longest + oneCommit; need > clusterMembershipRetryWindow {
-			t.Errorf("storage tier %s: longest election timer %s plus one commit (%s) is %s, beyond clusterMembershipRetryWindow %s; the retry window must grow with the tier", tier, longest, oneCommit, need, clusterMembershipRetryWindow)
+		if need := tier.GrantRetryNeed(); need > clusterMembershipRetryWindow() || need > GrantRetryWindowFor(tier) {
+			t.Errorf("storage tier %s: longest election timer plus one commit is %s, beyond the retry window %s (%s for the tier); the retry window must grow with the tier", tier, need, clusterMembershipRetryWindow(), GrantRetryWindowFor(tier))
 		}
 	}
-	if clusterMembershipRetryWindow >= ClusterMembershipGrantTimeout {
-		t.Fatalf("retry window %s must stay inside the grant timeout %s", clusterMembershipRetryWindow, ClusterMembershipGrantTimeout)
+	if window := clusterMembershipRetryWindow(); window >= ClusterMembershipGrantTimeout {
+		t.Fatalf("retry window %s must stay inside the grant timeout %s", window, ClusterMembershipGrantTimeout)
 	}
 }

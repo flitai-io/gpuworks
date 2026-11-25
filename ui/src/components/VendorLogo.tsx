@@ -1,9 +1,13 @@
 import type { CSSProperties } from "react";
 import { VENDOR_ASSETS, VENDOR_LOGO_INK } from "./vendorAssets";
 import { useTranslation } from "react-i18next";
-import { vendorForFramework, type Vendor } from "../vendors";
+import { useVendorDictionary } from "../hooks/useVendorDictionary";
+import { vendorBrand, vendorForFramework } from "../vendors";
 
-const META: Record<Vendor, { label?: string; labelKey?: string; color: string; mark: string }> = {
+// The colour and letter of the drawn mark for vendors without artwork of
+// their own. A vendor the server lists and this table does not is drawn in
+// the neutral colour with the first letter of its name.
+const META: Record<string, { label?: string; labelKey?: string; color: string; mark: string }> = {
   nvidia: { label: "NVIDIA", color: "#76b900", mark: "N" },
   amd: { label: "AMD", color: "#ed1c24", mark: "A" },
   ascend: { labelKey: "vendor.ascend", color: "#c8102e", mark: "A" },
@@ -22,6 +26,17 @@ export function vendorMarkKey(vendor: string) {
 
 export function hasVendorMark(vendor: string) {
   return Boolean(VENDOR_ASSETS[vendorMarkKey(vendor)]);
+}
+
+// The vendor a logo is drawn for. A framework needs the server's dictionary
+// to be resolved; a vendor's own id does not when the console has artwork or
+// a colour for it, so marks stay when the dictionary has not arrived or the
+// server does not serve one.
+export function logoVendor(name?: string): string {
+  const vendor = vendorForFramework(name);
+  if (vendor !== "unknown") return vendor;
+  const id = (name || "").trim().toLowerCase();
+  return id !== "unknown" && (META[id] || hasVendorMark(id)) ? id : "unknown";
 }
 
 // The shared wrapper selects the theme treatment from the artwork's ink tone.
@@ -50,8 +65,10 @@ export default function VendorLogo({
   style?: CSSProperties;
 }) {
   const { t } = useTranslation("common");
-  const vendor = vendorForFramework(vendorName ?? framework);
-  const meta = META[vendor];
+  useVendorDictionary();
+  const vendor = logoVendor(vendorName ?? framework);
+  const brand = vendorBrand(vendor);
+  const meta = META[vendor] ?? { label: brand, color: META.unknown.color, mark: (brand ?? "?").charAt(0).toUpperCase() };
   const label = meta.label || t(meta.labelKey!);
   return (
     <span

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 )
 
 type amdDeviceInfo struct {
@@ -108,7 +109,7 @@ func TestAMDRuntimeFactsDefaultToCurrentHost(t *testing.T) {
 }
 
 func TestAMDRuntimeEmptySelectionFailsClosed(t *testing.T) {
-	inj := (&AMDProber{}).RuntimeInjectionForDriver(nil, "docker")
+	inj := (&AMDProber{}).RuntimeInjectionForDriver(nil, runtime.TargetNamed("docker"))
 	if inj.UnsupportedReason == "" {
 		t.Fatalf("empty selection injection was accepted: %+v", inj)
 	}
@@ -119,19 +120,19 @@ func TestAMDRuntimeUsesSelectedRenderWithoutGuessingUserspaceOrdinals(t *testing
 	if _, err := p.Probe(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	inj := p.RuntimeInjectionForDriver([]int{7}, "docker")
+	inj := p.RuntimeInjectionForDriver([]int{7}, runtime.TargetNamed("docker"))
 	if inj.UnsupportedReason != "" {
 		t.Fatal(inj.UnsupportedReason)
 	}
-	if strings.Join(inj.ManagedSelection.Env, ",") != "NVIDIA_VISIBLE_DEVICES,CUDA_VISIBLE_DEVICES,HIP_VISIBLE_DEVICES,ROCR_VISIBLE_DEVICES,GPU_DEVICE_ORDINAL" ||
-		strings.Join(inj.ManagedSelection.DockerOptions, ",") != "--gpus,--runtime" {
-		t.Fatalf("AMD selector cleanup = env %v docker %v", inj.ManagedSelection.Env, inj.ManagedSelection.DockerOptions)
+	if strings.Join(inj.ClearEnv, ",") != "NVIDIA_VISIBLE_DEVICES,CUDA_VISIBLE_DEVICES,HIP_VISIBLE_DEVICES,ROCR_VISIBLE_DEVICES,GPU_DEVICE_ORDINAL" ||
+		!inj.Grant.Replaces.ToolkitRequest || !inj.Grant.Replaces.RuntimeClass {
+		t.Fatalf("AMD selector cleanup = env %v replaces %+v", inj.ClearEnv, inj.Grant.Replaces)
 	}
 	wantPaths := []string{"/dev/dri", "/dev/dri/by-path", "/dev/dri/card7", "/dev/dri/card8", "/dev/dri/renderD135", "/dev/dri/renderD136", "/dev/kfd"}
-	if !reflect.DeepEqual(inj.ManagedSelection.DevicePaths, wantPaths) {
-		t.Fatalf("AMD device path cleanup = %v, want %v", inj.ManagedSelection.DevicePaths, wantPaths)
+	if !reflect.DeepEqual(inj.Grant.Replaces.Devices, wantPaths) {
+		t.Fatalf("AMD device path cleanup = %v, want %v", inj.Grant.Replaces.Devices, wantPaths)
 	}
-	joined := strings.Join(inj.DockerArgs, " ")
+	joined := strings.Join(inj.Grant.DockerDeviceArgs(), " ")
 	if joined != "--device /dev/kfd:/dev/kfd:rwm --device /dev/dri/renderD135:/dev/dri/renderD135:rwm" {
 		t.Fatal(joined)
 	}
@@ -159,7 +160,7 @@ func TestAMDRuntimePinsRunveilSelectionByGPUUUID(t *testing.T) {
 	if id == "" {
 		t.Fatalf("fixture card 7 has no unique_id-backed UUID: %q", uuid)
 	}
-	inj := p.RuntimeInjectionForDriver([]int{7}, "udocker")
+	inj := p.RuntimeInjectionForDriver([]int{7}, runtime.TargetNamed("udocker"))
 	if inj.UnsupportedReason != "" {
 		t.Fatal(inj.UnsupportedReason)
 	}
@@ -167,8 +168,8 @@ func TestAMDRuntimePinsRunveilSelectionByGPUUUID(t *testing.T) {
 	if inj.Env["ROCR_VISIBLE_DEVICES"] != want {
 		t.Fatalf("ROCR_VISIBLE_DEVICES = %q, want %q", inj.Env["ROCR_VISIBLE_DEVICES"], want)
 	}
-	if !strings.Contains(strings.Join(inj.DockerArgs, " "), "/dev/kfd") {
-		t.Fatalf("runveil injection lost the device nodes: %v", inj.DockerArgs)
+	if !strings.Contains(strings.Join(inj.Grant.DockerDeviceArgs(), " "), "/dev/kfd") {
+		t.Fatalf("runveil injection lost the device nodes: %v", inj.Grant.DockerDeviceArgs())
 	}
 }
 
@@ -185,16 +186,16 @@ func TestAMDRuntimeCleanupIncludesByPathAliases(t *testing.T) {
 	if _, err := p.Probe(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	injection := p.RuntimeInjectionForDriver([]int{7}, "docker")
+	injection := p.RuntimeInjectionForDriver([]int{7}, runtime.TargetNamed("docker"))
 	if injection.UnsupportedReason != "" {
 		t.Fatal(injection.UnsupportedReason)
 	}
 	want := []string{"/dev/dri", "/dev/dri/by-path", "/dev/dri/by-path/pci-0000:43:00.0-render", "/dev/dri/card7", "/dev/dri/card8", "/dev/dri/renderD135", "/dev/dri/renderD136", "/dev/kfd"}
-	if !reflect.DeepEqual(injection.ManagedSelection.DevicePaths, want) {
-		t.Fatalf("AMD by-path cleanup = %v, want %v", injection.ManagedSelection.DevicePaths, want)
+	if !reflect.DeepEqual(injection.Grant.Replaces.Devices, want) {
+		t.Fatalf("AMD by-path cleanup = %v, want %v", injection.Grant.Replaces.Devices, want)
 	}
-	if strings.Contains(strings.Join(injection.DockerArgs, " "), "by-path") {
-		t.Fatalf("injection must expose only the verified render node: %v", injection.DockerArgs)
+	if strings.Contains(strings.Join(injection.Grant.DockerDeviceArgs(), " "), "by-path") {
+		t.Fatalf("injection must expose only the verified render node: %v", injection.Grant.DockerDeviceArgs())
 	}
 }
 
@@ -215,7 +216,7 @@ func TestAMDRuntimeFailsClosed(t *testing.T) {
 			if _, err := p.Probe(context.Background()); err != nil {
 				t.Fatal(err)
 			}
-			if baseline := p.RuntimeInjectionForDriver([]int{7}, "nerdctl"); baseline.UnsupportedReason != "" {
+			if baseline := p.RuntimeInjectionForDriver([]int{7}, runtime.TargetNamed("nerdctl")); baseline.UnsupportedReason != "" {
 				t.Fatalf("invalid baseline fixture: %s", baseline.UnsupportedReason)
 			}
 			if test == "unpublished" {
@@ -275,11 +276,11 @@ func TestAMDRuntimeFailsClosed(t *testing.T) {
 				}
 				p.lastSeen[7] = g
 			}
-			inj := p.RuntimeInjectionForDriver(indexes, driver)
+			inj := p.RuntimeInjectionForDriver(indexes, runtime.TargetNamed(driver))
 			if !strings.Contains(inj.UnsupportedReason, want[test]) {
 				t.Fatalf("refusal = %q, want %q", inj.UnsupportedReason, want[test])
 			}
-			if len(inj.Env) != 0 || len(inj.DockerArgs) != 0 || len(inj.Mounts) != 0 {
+			if len(inj.Env) != 0 || len(inj.Grant.DockerDeviceArgs()) != 0 || len(inj.Mounts) != 0 {
 				t.Fatalf("failed injection returned additions: %+v", inj)
 			}
 		})
@@ -333,14 +334,14 @@ func TestAMDRuntimeMultipleNonContiguousCards(t *testing.T) {
 	if _, err := p.Probe(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	inj := p.RuntimeInjectionForDriver([]int{12, 7}, "nerdctl")
+	inj := p.RuntimeInjectionForDriver([]int{12, 7}, runtime.TargetNamed("nerdctl"))
 	if inj.UnsupportedReason != "" {
 		t.Fatal(inj.UnsupportedReason)
 	}
 	if len(inj.Env) != 0 {
 		t.Fatal(inj.Env)
 	}
-	joined := strings.Join(inj.DockerArgs, " ")
+	joined := strings.Join(inj.Grant.DockerDeviceArgs(), " ")
 	if !strings.Contains(joined, "renderD135") || !strings.Contains(joined, "renderD141") || strings.Contains(joined, "--gpus") {
 		t.Fatal(joined)
 	}
@@ -362,7 +363,7 @@ func TestAMDRuntimeIdentityFailurePersistsAcrossRetriesAndTelemetry(t *testing.T
 		p.Available()
 		p.Metrics(context.Background())
 		p.Topology(context.Background())
-		if inj := p.RuntimeInjectionForDriver([]int{7}, "docker"); inj.UnsupportedReason == "" {
+		if inj := p.RuntimeInjectionForDriver([]int{7}, runtime.TargetNamed("docker")); inj.UnsupportedReason == "" {
 			t.Fatalf("attempt %d accepted replacement before publishing new inventory", attempt)
 		}
 	}
@@ -370,7 +371,7 @@ func TestAMDRuntimeIdentityFailurePersistsAcrossRetriesAndTelemetry(t *testing.T
 	if _, err := p.Probe(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if inj := p.RuntimeInjectionForDriver([]int{7}, "docker"); inj.UnsupportedReason != "" {
+	if inj := p.RuntimeInjectionForDriver([]int{7}, runtime.TargetNamed("docker")); inj.UnsupportedReason != "" {
 		t.Fatal(inj.UnsupportedReason)
 	}
 }
@@ -396,7 +397,7 @@ func TestAMDRuntimeRejectsDuplicatePhysicalIdentity(t *testing.T) {
 	if _, err := p.Probe(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if inj := p.RuntimeInjectionForDriver([]int{7}, "docker"); inj.UnsupportedReason == "" {
+	if inj := p.RuntimeInjectionForDriver([]int{7}, runtime.TargetNamed("docker")); inj.UnsupportedReason == "" {
 		t.Fatalf("duplicate physical identity authorized injection: %+v", inj)
 	}
 }

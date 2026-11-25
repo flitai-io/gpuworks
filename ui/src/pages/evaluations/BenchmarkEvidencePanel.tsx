@@ -1,4 +1,5 @@
-import { Alert, Button, Card, Collapse, Descriptions, Space, Table, Typography } from "antd";
+import { Alert, Button, Collapse, Descriptions, Space, Table, Typography } from "antd";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { BenchmarkPoint, BenchmarkRun, BenchmarkTokenDistribution } from "../../api";
 
@@ -6,11 +7,24 @@ const number = (value: number) => value.toLocaleString(undefined, { maximumFract
 const ratio = (numerator: number, denominator: number, unknown: string) => denominator > 0 ? `${number(numerator / denominator * 100)}%` : unknown;
 const mean = (value: BenchmarkTokenDistribution, unknown: string) => value.count > 0 ? number(value.total / value.count) : unknown;
 
-export default function BenchmarkEvidencePanel({ run, point }: { run: BenchmarkRun; point?: BenchmarkPoint }) {
+// Collapsed until the reader opens it; a report capture passes expanded so the
+// exported page keeps the section.
+export default function BenchmarkEvidencePanel({ run, point, expanded = false }: { run: BenchmarkRun; point?: BenchmarkPoint; expanded?: boolean }) {
+  const { t } = useTranslation("evaluations");
+  const [activeKeys, setActiveKeys] = useState<string[]>([]);
+  return <Collapse activeKey={expanded ? ["evidence"] : activeKeys} onChange={(keys) => setActiveKeys(typeof keys === "string" ? [keys] : keys)} items={[{
+    key: "evidence",
+    label: t("evidence.title"),
+    extra: point?.detail_path ? <Button data-report-exclude size="small" href={`/api/v1/benchmarks/${run.id}/points/${point.seq}/detail`} onClick={(event) => event.stopPropagation()}>{t("evidence.download")}</Button> : undefined,
+    children: <EvidenceBody point={point} />,
+  }]} />;
+}
+
+function EvidenceBody({ point }: { point?: BenchmarkPoint }) {
   const { t } = useTranslation("evaluations");
   const evidence = point?.long_tail?.evidence;
   const unknown = t("evidence.unknown");
-  if (!evidence || evidence.version !== 1) return <Card title={t("evidence.title")}><Alert showIcon type="info" message={t("evidence.missing")} /></Card>;
+  if (!evidence || evidence.version !== 1) return <Alert showIcon type="info" message={t("evidence.missing")} />;
   const { plan, outcomes, all, timing, execution } = evidence;
   const groups = [
     { key: "all", name: t("evidence.all"), value: all },
@@ -44,8 +58,7 @@ export default function BenchmarkEvidencePanel({ run, point }: { run: BenchmarkR
   };
   const reasonRows = Object.entries(all.finish_reasons || {}).map(([reason, count]) => ({ reason, count }));
   const finishUnknown = Math.max(0, all.attempted - reasonRows.reduce((total, row) => total + row.count, 0));
-  return <Card title={t("evidence.title")} extra={point?.detail_path ? <Button data-report-exclude href={`/api/v1/benchmarks/${run.id}/points/${point.seq}/detail`}>{t("evidence.download")}</Button> : undefined}>
-    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+  return <Space direction="vertical" size="middle" style={{ width: "100%" }}>
       <Descriptions size="small" bordered column={{ xs: 1, sm: 2, xl: 4 }} items={[
         ...counts.map(([key, value]) => ({ key, label: t(`evidence.${key}`), children: number(value) })),
         { key: "requestRate", label: t("evidence.requestSuccess"), children: ratio(all.success, all.attempted, unknown) },
@@ -105,6 +118,5 @@ export default function BenchmarkEvidencePanel({ run, point }: { run: BenchmarkR
         ]} />
         <Typography.Text type="secondary">{t("evidence.timelineExport")}</Typography.Text>
       </> }]} />
-    </Space>
-  </Card>;
+    </Space>;
 }

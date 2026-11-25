@@ -20,8 +20,8 @@ import (
 func TestSchedulingEvaluateUsesRealAppAndHeterogeneousNodes(t *testing.T) {
 	hub := testenv.FakeModelHub(t)
 	env := testenv.NewWithModelEndpoint(t, hub.Endpoint)
-	big := env.AddNode("sched-24g", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
-	small := env.AddNode("sched-10g", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A10", VRAMMB: 10240}), testenv.WithDriverName("fake"))
+	big := env.AddNode("sched-24g", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
+	small := env.AddNode("sched-10g", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A10", VRAMMB: 10240}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "sched-24g")
 	env.WaitNodeOnline(t, "sched-10g")
 	nodes, err := env.Store().ListNodes()

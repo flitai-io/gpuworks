@@ -51,7 +51,7 @@ func TestNoisyNodeCtrlLatency(t *testing.T) {
 	env := testenv.New(t)
 	addNode := func(name string, logs func(id string, follow bool, tail int) (io.ReadCloser, error, bool)) *testenv.Node {
 		link := env.NewShapedLink(t, linkCfg)
-		node := env.AddNode(name, testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"), testenv.WithShapedLink(link))
+		node := env.AddNode(name, testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("docker"), testenv.WithShapedLink(link))
 		node.Driver.ShareEnginePorts()
 		node.Driver.OnLogs(logs)
 		return node

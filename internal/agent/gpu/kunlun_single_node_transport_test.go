@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 )
 
 // Adding cross-node support must not add XDR or RDMA requirements to local TP.
@@ -21,8 +23,8 @@ func TestKunlunSingleNodeTopologySkipsTransport(t *testing.T) {
 		return inspect(path)
 	}
 	indexes := []int{1}
-	native := p.RuntimeInjectionForDriver(indexes, "docker")
-	launch := p.RuntimeInjectionForLaunch(t.Context(), InjectionRequest{Indexes: indexes, DriverName: "docker", NNodes: 1})
+	native := p.RuntimeInjectionForDriver(indexes, runtime.TargetNamed("docker"))
+	launch := p.RuntimeInjectionForLaunch(t.Context(), InjectionRequest{Indexes: indexes, Runtime: runtime.TargetNamed("docker"), NNodes: 1})
 	if launch.UnsupportedReason != "" || !reflect.DeepEqual(launch, native) {
 		t.Fatalf("local topology changed native injection: %+v", launch)
 	}

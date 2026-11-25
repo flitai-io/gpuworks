@@ -275,10 +275,10 @@ func writeHelperTLS(cfg DatabaseConfig) (string, error) {
 }
 
 // storageTierArguments names the tier to the database process by the latency
-// it elects on. The standard tier adds nothing, so its command line is the one
-// a process built before tiers accepts.
+// it elects on. The standard tier's own latency adds nothing, so its command
+// line is the one a process built before tiers accepts.
 func storageTierArguments(tier storagetier.Tier) []string {
-	if tier == storagetier.Standard {
+	if tier.NetworkLatency() == storagetier.Standard.NetworkLatency() {
 		return nil
 	}
 	return []string{"--network-latency-ms", strconv.FormatInt(tier.NetworkLatency().Milliseconds(), 10)}

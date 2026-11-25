@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 )
 
 // Synthetic VMD addresses exercise the same-domain collision that motivated
@@ -29,7 +31,7 @@ func TestKunlunLargePCIDomainIsNotTruncated(t *testing.T) {
 	}
 	// Name the container runtime: the driver is not what this test is about,
 	// and Kunlun refuses rather than assume one.
-	if inj := p.RuntimeInjectionForDriver([]int{0, 1}, "docker"); inj.UnsupportedReason != "" {
+	if inj := p.RuntimeInjectionForDriver([]int{0, 1}, runtime.TargetNamed("docker")); inj.UnsupportedReason != "" {
 		t.Fatal(inj.UnsupportedReason)
 	}
 	p.readFile = func(path string) ([]byte, error) {
@@ -38,7 +40,7 @@ func TestKunlunLargePCIDomainIsNotTruncated(t *testing.T) {
 		}
 		return oldRead(path)
 	}
-	if inj := p.RuntimeInjectionForDriver([]int{0}, "docker"); inj.UnsupportedReason != "Kunlun PCI vendor cannot be verified" || len(inj.DockerArgs) != 0 {
+	if inj := p.RuntimeInjectionForDriver([]int{0}, runtime.TargetNamed("docker")); inj.UnsupportedReason != "Kunlun PCI vendor cannot be verified" || len(inj.Grant.DockerDeviceArgs()) != 0 {
 		t.Fatalf("domain-zero fallback: %+v", inj)
 	}
 }
@@ -55,7 +57,7 @@ func TestKunlunMissingUUIDRetainsIndexMetricsButNotLaunchPermission(t *testing.T
 	}
 	// The named cause matters: refusing for want of a runtime driver would
 	// pass this assertion without ever reaching the identity check.
-	if inj := p.RuntimeInjectionForDriver([]int{0}, "docker"); inj.UnsupportedReason != "invalid or duplicate Kunlun device selection" || len(inj.DockerArgs) != 0 {
+	if inj := p.RuntimeInjectionForDriver([]int{0}, runtime.TargetNamed("docker")); inj.UnsupportedReason != "invalid or duplicate Kunlun device selection" || len(inj.Grant.DockerDeviceArgs()) != 0 {
 		t.Fatalf("unidentified card was authorized: %+v", inj)
 	}
 }
@@ -70,23 +72,23 @@ func TestKunlunAvailableRequiresExplicitBrand(t *testing.T) {
 
 func TestKunlunInjectionRequiresProbeBaselineAndManagesWholeInventory(t *testing.T) {
 	p, _ := kunlunFixture(t)
-	inj := p.RuntimeInjectionForDriver([]int{1}, "docker")
-	if inj.UnsupportedReason != "Kunlun injection requires a successful probe baseline" || inj.Failure == nil || len(inj.DockerArgs) != 0 || inj.ManagedSelection != nil {
+	inj := p.RuntimeInjectionForDriver([]int{1}, runtime.TargetNamed("docker"))
+	if inj.UnsupportedReason != "Kunlun injection requires a successful probe baseline" || inj.Failure == nil || len(inj.Grant.DockerDeviceArgs()) != 0 || len(inj.ClearEnv) != 0 || len(inj.Grant.Replaces.Devices) != 0 {
 		t.Fatalf("injection without probe baseline: %+v", inj)
 	}
 
 	if _, err := p.Probe(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	inj = p.RuntimeInjectionForDriver([]int{1}, "docker")
+	inj = p.RuntimeInjectionForDriver([]int{1}, runtime.TargetNamed("docker"))
 	if inj.UnsupportedReason != "" {
 		t.Fatal(inj.UnsupportedReason)
 	}
-	if inj.ManagedSelection == nil || strings.Join(inj.ManagedSelection.DevicePaths, ",") != "/dev/xpu0,/dev/xpu1,/dev/xpuctrl" {
-		t.Fatalf("managed device paths = %+v", inj.ManagedSelection)
+	if strings.Join(inj.Grant.Replaces.Devices, ",") != "/dev/xpu0,/dev/xpu1,/dev/xpuctrl" {
+		t.Fatalf("managed device paths = %+v", inj.Grant.Replaces)
 	}
-	if len(inj.ManagedSelection.Env) != 1 || inj.ManagedSelection.Env[0] != "XPU_VISIBLE_DEVICES" {
-		t.Fatalf("managed environment = %+v", inj.ManagedSelection.Env)
+	if len(inj.ClearEnv) != 1 || inj.ClearEnv[0] != "XPU_VISIBLE_DEVICES" {
+		t.Fatalf("managed environment = %+v", inj.ClearEnv)
 	}
 	if inj.Env["XPU_VISIBLE_DEVICES"] != "0" {
 		t.Fatalf("Docker must use compact container-logical XPU indexes: %+v", inj.Env)

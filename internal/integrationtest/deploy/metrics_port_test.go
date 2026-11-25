@@ -33,7 +33,7 @@ func TestSeparateMetricsPortReachesPreviewLaunchAndDesiredState(t *testing.T) {
 	env := testenv.New(t)
 	node := env.AddNode("metrics-port-node",
 		testenv.WithGPUs(1, testenv.GPUSpec{Model: "NVIDIA A100", Vendor: "nvidia", ComputeCapability: "8.0", VRAMMB: 81920}),
-		testenv.WithDriverName("fake"),
+		testenv.WithDriverName("docker"),
 	)
 	runs := make(chan runtime.WorkloadSpec, 1)
 	node.Driver.AfterRun(func(workload runtime.WorkloadSpec) {

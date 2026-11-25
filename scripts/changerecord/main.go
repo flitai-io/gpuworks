@@ -28,7 +28,7 @@ func main() {
 func run(args []string) error {
 	// Companion MRs may already be merged when the default-branch or release
 	// pipeline starts. Enforce this gate before merging, not after it.
-	if os.Getenv("CI") != "" && os.Getenv("CI_PIPELINE_SOURCE") != "merge_request_event" {
+	if os.Getenv("CI") != "" && os.Getenv("CI_PIPELINE_SOURCE") != "merge_request_event" && !githubPullRequest() {
 		fmt.Println("change-record: non-MR CI pipeline; checked by the merge-request gate")
 		return nil
 	}
@@ -46,7 +46,7 @@ func run(args []string) error {
 	}
 	base, err := diffBase(root)
 	if err != nil {
-		if os.Getenv("CI_PIPELINE_SOURCE") == "merge_request_event" {
+		if os.Getenv("CI_PIPELINE_SOURCE") == "merge_request_event" || githubPullRequest() {
 			return err
 		}
 		fmt.Printf("NOTE: change-record: %v; skipped\n", err)
@@ -71,7 +71,12 @@ func run(args []string) error {
 			problems = append(problems, fmt.Sprintf("contract paths changed without added/updated docs/ or docs/adr/:\n  %s", strings.Join(contract, "\n  ")))
 		}
 	}
-	if len(decision) > 0 {
+	if len(decision) > 0 && githubPullRequest() {
+		// The record repository and its companion MRs are read through GitLab.
+		// A GitHub pull request says so instead of reporting a check it did
+		// not make; the GitLab merge-request gate verifies the record.
+		fmt.Printf("NOTE: change-record: decision paths changed; the record is NOT verified on GitHub (the GitLab merge-request gate checks it):\n  %s\n", strings.Join(decision, "\n  "))
+	} else if len(decision) > 0 {
 		branch := sourceBranch()
 		bodies, lookErr := decisionPlans(root, branch)
 		if lookErr != nil {
@@ -95,9 +100,27 @@ func repoRoot() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// githubPullRequest reports a GitHub Actions run for a pull request. Contract
+// records are checked there from the diff alone; decision records are not.
+func githubPullRequest() bool {
+	return os.Getenv("GITHUB_ACTIONS") == "true" && strings.HasPrefix(os.Getenv("GITHUB_EVENT_NAME"), "pull_request")
+}
+
 func diffBase(root string) (string, error) {
 	if base := os.Getenv("CI_MERGE_REQUEST_DIFF_BASE_SHA"); base != "" {
 		return base, nil
+	}
+	if githubPullRequest() {
+		// actions/checkout leaves the base branch at origin/<base> when the
+		// history is fetched (fetch-depth: 0). The pull request's own base is
+		// the only accepted one: falling back to another ref would check a
+		// different diff.
+		ref := "origin/" + os.Getenv("GITHUB_BASE_REF")
+		out, err := exec.Command("git", "-C", root, "merge-base", "HEAD", ref).Output()
+		if err != nil {
+			return "", fmt.Errorf("no merge base with %s (the checkout needs fetch-depth: 0)", ref)
+		}
+		return strings.TrimSpace(string(out)), nil
 	}
 	if base := os.Getenv("CHANGE_RECORD_BASE"); base != "" {
 		return base, nil

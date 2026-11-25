@@ -26,7 +26,7 @@ import (
 // engines speak the PD dialect recorded against real vLLM.
 func TestPDDeploymentServesThroughTheGatewayTwoStage(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("pd-node", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("pd-node", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	runs := make(chan runtime.WorkloadSpec, 4)
 	node.Driver.AfterRun(func(spec runtime.WorkloadSpec) { captureWorkload(runs, spec) })
 	env.WaitNodeOnline(t, node.Name)
@@ -218,7 +218,7 @@ func waitHandoffEvent(t *testing.T, st *store.Store, uuid string) store.Instance
 // request fails along the way (plan phase 3).
 func TestPDScalesPrefillWhileServing(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("pd-scale-node", testenv.WithGPUs(3, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("pd-scale-node", testenv.WithGPUs(3, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, node.Name)
 	model, err := env.Store().UpsertModel(&store.Model{Source: "huggingface", SourceID: "zstackai/qwen3-pd-scale", Revision: "main", Name: "qwen3-pd-scale", Arch: "Qwen3ForCausalLM", WeightBytes: 1 << 30,
 		Meta: `{"model_type":"qwen3","architectures":["Qwen3ForCausalLM"],"num_hidden_layers":1,"hidden_size":256,"num_attention_heads":8,"num_key_value_heads":8,"max_position_embeddings":2048}`})
@@ -340,7 +340,7 @@ func TestPDScalesPrefillWhileServing(t *testing.T) {
 // counters is judged by the decoder's answer.
 func TestSGLangPDDeploymentPairsByBootstrapRoom(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("pd-sglang-node", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("pd-sglang-node", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, node.Name)
 	model, err := env.Store().UpsertModel(&store.Model{Source: "huggingface", SourceID: "zstackai/qwen3-pd-sglang", Revision: "main", Name: "qwen3-pd-sglang", Arch: "Qwen3ForCausalLM", WeightBytes: 1 << 30,
 		Meta: `{"model_type":"qwen3","architectures":["Qwen3ForCausalLM"],"num_hidden_layers":1,"hidden_size":256,"num_attention_heads":8,"num_key_value_heads":8,"max_position_embeddings":2048}`})

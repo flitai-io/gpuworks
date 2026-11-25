@@ -70,55 +70,19 @@ type pciVendor struct {
 	notAccelerators []uint32
 }
 
-// pciVendors is read-only after init.
-//
-// Measured 2026-10-15: Ascend 910B4 19e5:d802 class 0x1200 bound to
-// devdrv_device_driver (198.51.100.31/.32); PPU ZW810E 1ded:6001 class 0x0302
-// bound to alipci (192.0.2.210); Hygon K100 "KONGMING" 1d94:6211 class
-// 0x0b40 (192.0.2.133); NVIDIA RTX 2080 Ti 10de:1e04 class 0x0300 and
-// Quadro RTX 8000 10de:1e78 class 0x0302, both bound to nvidia (gpu3).
-// Measured 2026-10-28: Kunlunxin P800 2057:3686 class 0x0780 bound to kunlun,
-// eight cards on each of two hosts (the node11 and node12 captures in
-// internal/agent/gpu/testdata).
-//
-// Huawei deliberately has no 0x03: 19e5:1711, the BMC display controller on
-// every one of its servers, reports 0x0300 and would otherwise be listed as
-// an NPU. The same care will be needed for Intel if it is ever added, whose
-// integrated graphics is 0x0300 and whose QAT and DSA are 0x0b40.
-var pciVendors = map[uint32]pciVendor{
-	AMDPCIVendorID: {
-		name:    VendorAMD,
-		drivers: []string{AMDGPUDriver},
-	},
-	0x2057: {name: VendorKunlunxin, classes: []uint32{pciClassOtherCommunication}, drivers: []string{"kunlun"}},
-	0x10de: {
-		name:    VendorNVIDIA,
-		classes: []uint32{pciClassVGA, pciClass3D},
-		drivers: []string{"nvidia"},
-	},
-	0x19e5: {
-		name:        VendorAscend,
-		baseClasses: []uint32{pciBaseClassAccelerators},
-		drivers:     []string{"devdrv_device_driver"},
-		// Kunpeng builds compression into the SoC: 19e5:a250, the ZIP
-		// engine, reports 0x1200 like the NPU does and binds hisi_zip.
-		// A 910C host presents eight of them (192.0.2.129, measured
-		// 2026-10-25), and nothing can run inference on one.
-		notAccelerators: []uint32{0xa250},
-	},
-	0x1ded: {
-		name:        VendorPPU,
-		classes:     []uint32{pciClass3D},
-		baseClasses: []uint32{pciBaseClassAccelerators},
-		drivers:     []string{"alipci"},
-	},
-	0x1d94: {
-		name:        VendorHygon,
-		classes:     []uint32{pciClassCoProcessor},
-		baseClasses: []uint32{pciBaseClassAccelerators},
-		drivers:     []string{"hydcu", "hycu"},
-	},
-}
+// pciVendors is every vendor's PCI identity by PCI vendor id, read-only
+// after init. The identities themselves are in vendorSpecs.
+var pciVendors = func() map[uint32]pciVendor {
+	vendors := map[uint32]pciVendor{}
+	for _, spec := range vendorSpecs {
+		if spec.pci != nil {
+			vendor := *spec.pci
+			vendor.name = spec.id
+			vendors[spec.pciID] = vendor
+		}
+	}
+	return vendors
+}()
 
 // HasPCICards reports whether a vendor's cards are listed on a PCI bus,
 // which makes it a vendor a node can be told to manage when its host has

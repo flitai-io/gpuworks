@@ -12,10 +12,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
@@ -23,18 +23,13 @@ import (
 // Enumeration indexes are deliberately treated as ephemeral: a PPU assigned
 // to VFIO disappears from the host and all following indexes can be renumbered.
 type PPUProber struct {
-	mu       sync.RWMutex
-	lastSeen map[int]ppuIdentity
+	// seen is what each card was when ppu-smi last listed it.
+	seen cardBaseline
 
 	// hostRoot is where the host's /sys is read for the PCI roster; empty
 	// means "/". A test sets it so the roster describes its fixture
 	// rather than whatever is in the machine running the test.
 	hostRoot string
-}
-
-type ppuIdentity struct {
-	uuid string
-	bdf  string
 }
 
 var _ DriverAwareInjector = (*PPUProber)(nil)
@@ -52,28 +47,17 @@ func (p *PPUProber) Available() bool {
 const ppuProbeFields = "index,name,architecture,uuid,minor_number,pci.bus_id,memory.total,memory.used,utilization.ppu,temperature.ppu,power.draw,driver_version,ecc.errors.uncorrected.volatile.dram,ecc.errors.uncorrected.aggregate.dram,retired_pages.double_bit.count,retired_pages.pending,remapped_rows.uncorrectable,remapped_rows.pending,remapped_rows.failure,xid.correctable.ppu_reset,xid.correctable.os_reboot,xid.correctable.cold_reboot"
 
 func (p *PPUProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
-	if _, err := lookCLI("ppu-smi"); err != nil {
-		return p.roster(nil, false), nil //nolint:nilerr // Absence of this vendor CLI is an unavailable probe, not a node failure.
-	}
-	out, err := queryPPU(ctx, "--query-ppu="+ppuProbeFields, "--format=csv,noheader,nounits")
-	if err != nil {
-		return p.roster(nil, false), err
-	}
-	gpus := parsePPUInfo(out)
-	p.mu.Lock()
-	if p.lastSeen == nil {
-		p.lastSeen = make(map[int]ppuIdentity)
-	}
-	for _, g := range gpus {
-		p.lastSeen[g.Index] = ppuIdentity{uuid: g.UUID, bdf: g.PCIeBDF}
-	}
-	p.mu.Unlock()
-	return p.roster(gpus, true), nil
+	_, err := lookCLI("ppu-smi")
+	return probeCards(ctx, accelerator.VendorPPU, p.hostRoot, err == nil, p.list, &p.seen)
 }
 
-// roster places what ppu-smi listed on the roster of what the host has.
-func (p *PPUProber) roster(listed []proto.GPUInfo, answered bool) []proto.GPUInfo {
-	return Roster(accelerator.VendorPPU, p.hostRoot, listed, answered)
+// list is the cards ppu-smi lists.
+func (p *PPUProber) list(ctx context.Context) ([]proto.GPUInfo, error) {
+	out, err := queryPPU(ctx, "--query-ppu="+ppuProbeFields, "--format=csv,noheader,nounits")
+	if err != nil {
+		return nil, err
+	}
+	return parsePPUInfo(out), nil
 }
 
 func (p *PPUProber) DriverVersion(ctx context.Context) string {
@@ -223,10 +207,10 @@ func (p *PPUProber) Metrics(ctx context.Context) ([]Metric, error) {
 }
 
 func (p *PPUProber) RuntimeInjection(indexes []int) RuntimeInjection {
-	return p.RuntimeInjectionForDriver(indexes, "")
+	return p.RuntimeInjectionForDriver(indexes, runtime.Target{})
 }
 
-func (p *PPUProber) RuntimeInjectionForDriver(indexes []int, driverName string) RuntimeInjection {
+func (p *PPUProber) RuntimeInjectionForDriver(indexes []int, target runtime.Target) RuntimeInjection {
 	if len(indexes) == 0 {
 		return RuntimeInjection{}
 	}
@@ -234,13 +218,13 @@ func (p *PPUProber) RuntimeInjectionForDriver(indexes []int, driverName string) 
 	if err != nil {
 		return RuntimeInjection{UnsupportedReason: fmt.Sprintf("cannot verify PPU device inventory: ppu-smi: %v", err)}
 	}
-	return p.runtimeInjection(indexes, rows, resolvePPUDevice, driverName)
+	return p.runtimeInjection(indexes, rows, resolvePPUDevice, target)
 }
 
-func (p *PPUProber) runtimeInjection(indexes []int, rows string, resolve func(int, string) (string, error), driverName string) RuntimeInjection {
-	args := []string{
-		"--device", "/dev/alixpu:/dev/alixpu:rwm",
-		"--device", "/dev/alixpu_ctl:/dev/alixpu_ctl:rwm",
+func (p *PPUProber) runtimeInjection(indexes []int, rows string, resolve func(int, string) (string, error), target runtime.Target) RuntimeInjection {
+	devices := []runtime.Device{
+		{Path: "/dev/alixpu", Access: runtime.DeviceAccessAll},
+		{Path: "/dev/alixpu_ctl", Access: runtime.DeviceAccessAll},
 	}
 	byIndex := make(map[int]string)
 	for _, row := range parsePPUCSV(rows) {
@@ -263,25 +247,23 @@ func (p *PPUProber) runtimeInjection(indexes []int, rows string, resolve func(in
 			return RuntimeInjection{UnsupportedReason: fmt.Sprintf("PPU device %d has an invalid or duplicate UUID %q", index, uuid)}
 		}
 		selected[uuid] = true
-		p.mu.RLock()
-		expected, hasExpected := p.lastSeen[index]
-		p.mu.RUnlock()
-		if hasExpected && expected.uuid != uuid {
-			return RuntimeInjection{UnsupportedReason: fmt.Sprintf("PPU index %d changed from UUID %s to %s since probe", index, expected.uuid, uuid)}
+		expected, hasExpected := p.seen.at(index)
+		if hasExpected && expected.UUID != uuid {
+			return RuntimeInjection{UnsupportedReason: fmt.Sprintf("PPU index %d changed from UUID %s to %s since probe", index, expected.UUID, uuid)}
 		}
 		path, err := resolve(index, uuid)
 		if err != nil {
 			return RuntimeInjection{UnsupportedReason: err.Error()}
 		}
-		args = append(args, "--device", path+":"+path+":rwm")
+		devices = append(devices, runtime.Device{Path: path, Access: runtime.DeviceAccessAll})
 		deviceUUIDs = append(deviceUUIDs, uuid)
 	}
 	// Driver-independent diagnostics keep the existing UUID contract. Actual
 	// workloads select their numeric view through DriverAwareInjector.
 	visible := strings.Join(deviceUUIDs, ",")
-	if driverName != "" {
+	if target != (runtime.Target{}) {
 		var err error
-		visible, err = ppuVisibleDeviceIndexes(indexes, driverName)
+		visible, err = ppuVisibleDeviceIndexes(indexes, target)
 		if err != nil {
 			return RuntimeInjection{UnsupportedReason: err.Error()}
 		}
@@ -292,7 +274,7 @@ func (p *PPUProber) runtimeInjection(indexes []int, rows string, resolve func(in
 			accelerator.EnvCUDAVisibleDevices:   visible,
 			accelerator.PPUEnvDeviceUUIDs:       strings.Join(deviceUUIDs, ","),
 		},
-		DockerArgs: args,
+		Grant: runtime.DeviceGrant{Devices: devices},
 	}
 }
 
@@ -300,18 +282,18 @@ func (p *PPUProber) runtimeInjection(indexes []int, rows string, resolve func(in
 // order; the kube runtime's device plugin hands the pod the same OCI devices.
 // PRoot exposes the host inventory. Keep the requested compute order in
 // either view, using numeric selectors understood by HGGC and inference engines.
-func ppuVisibleDeviceIndexes(indexes []int, driverName string) (string, error) {
+func ppuVisibleDeviceIndexes(indexes []int, target runtime.Target) (string, error) {
 	visibleIndexes := append([]int(nil), indexes...)
-	switch driverName {
-	case "docker", "nerdctl", "kube":
+	switch target.View {
+	case runtime.ViewGranted:
 		inventory := append([]int(nil), indexes...)
 		sort.Ints(inventory)
 		for i, index := range indexes {
 			visibleIndexes[i] = sort.SearchInts(inventory, index)
 		}
-	case "udocker":
+	case runtime.ViewHost:
 	default:
-		return "", fmt.Errorf("PPU device visibility is not supported for runtime %q", driverName)
+		return "", fmt.Errorf("PPU device visibility is not supported for runtime %q", target.Name)
 	}
 	visible := make([]string, len(visibleIndexes))
 	for i, index := range visibleIndexes {

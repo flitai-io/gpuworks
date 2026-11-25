@@ -20,7 +20,7 @@ import (
 // UserID to the key fixture would bypass the identity mismatch in GWKS-317.
 func TestConsoleBatchesAreReadableByTheirUsersHTTPKeys(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("batch-owner", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	env.AddNode("batch-owner", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "batch-owner")
 	st := env.Store()
 	nodes, err := st.ListNodes()

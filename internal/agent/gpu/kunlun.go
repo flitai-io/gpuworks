@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -24,10 +23,8 @@ type KunlunProber struct {
 	lookPath func(string) (string, error)
 	readFile func(string) ([]byte, error)
 	stat     func(string) (os.FileInfo, error)
-	// mu protects publication of lastSeen. Published maps are immutable;
-	// readers may retain a snapshot after releasing the lock.
-	mu       sync.RWMutex
-	lastSeen map[int]proto.GPUInfo
+	// seen is what each card was when xpu-smi last listed it.
+	seen cardBaseline
 }
 
 type kunlunInventory struct {
@@ -206,12 +203,15 @@ func (p *KunlunProber) Available() bool {
 	return false
 }
 func (p *KunlunProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
-	if _, e := p.executable(); e != nil {
-		return Roster(p.Vendor(), p.hostRoot, nil, false), nil //nolint:nilerr // Absence of this vendor CLI is an unavailable probe, not a node failure.
-	}
+	_, e := p.executable()
+	return probeCards(ctx, p.Vendor(), p.hostRoot, e == nil, p.list, &p.seen)
+}
+
+// list is the cards xpu-smi lists, each with its health finding.
+func (p *KunlunProber) list(ctx context.Context) ([]proto.GPUInfo, error) {
 	inv, e := p.inventory(ctx)
 	if e != nil {
-		return Roster(p.Vendor(), p.hostRoot, nil, false), e
+		return nil, e
 	}
 	out := make([]proto.GPUInfo, 0, len(inv.Cards))
 	for _, c := range inv.Cards {
@@ -255,16 +255,7 @@ func (p *KunlunProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
 		SetCardFinding(&g, code, evidence)
 		out = append(out, g)
 	}
-	lastSeen := make(map[int]proto.GPUInfo, len(out))
-	for _, g := range out {
-		if g.Index >= 0 {
-			lastSeen[g.Index] = g
-		}
-	}
-	p.mu.Lock()
-	p.lastSeen = lastSeen
-	p.mu.Unlock()
-	return Roster(p.Vendor(), p.hostRoot, out, true), nil
+	return out, nil
 }
 func (p *KunlunProber) DriverVersion(ctx context.Context) string {
 	i, e := p.inventory(ctx)

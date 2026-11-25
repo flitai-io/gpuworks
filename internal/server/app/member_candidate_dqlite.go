@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 // newCandidateMaterialEligibility is the closed member's request-path
@@ -57,7 +59,7 @@ func (a *App) CandidateMemberReady(ctx context.Context) (bool, error) {
 	}
 	bundle, memberID, key, cause := a.candidateEnrollmentWithCause(ctx)
 	if bundle == nil {
-		return materialReadinessFailure(ctx, cause)
+		return ownEnrollmentVerdict(ctx, key, cause)
 	}
 	// Membership is established by the material checker against a fresh live
 	// snapshot. The route supplies only the local member ID, never authority.
@@ -67,12 +69,38 @@ func (a *App) CandidateMemberReady(ctx context.Context) (bool, error) {
 	}
 	current, currentID, currentKey, cause := a.candidateEnrollmentWithCause(ctx)
 	if current == nil {
-		return materialReadinessFailure(ctx, cause)
+		return ownEnrollmentVerdict(ctx, currentKey, cause)
 	}
 	if currentID != memberID || currentKey != key || current.info != bundle.info {
 		return materialReadinessFailure(ctx)
 	}
 	return true, nil
+}
+
+// seedAdmissionFailure reads the answer to a seed member's direct read of
+// its own admission. The database's refusal of this member comes back with
+// the member's key. Any other error is the cause without a key, so that a
+// read the database did not answer is classified as no answer and not as
+// "not ready", which the worker latches.
+func seedAdmissionFailure(admission store.ClusterAdmission, err error, key string) (refusedKey string, cause error, failed bool) {
+	switch {
+	case store.RefusesMember(err, key):
+		return key, err, true
+	case err != nil:
+		return "", err, true
+	case admission.InvitationHash != "":
+		// Admitted by an invitation that is not yet claimed as a member.
+		return "", nil, true
+	}
+	return "", nil, false
+}
+
+// ownEnrollmentVerdict is how the proof fails on the member's own enrollment
+// check. It passes the same filter as the proof's body; here that changes
+// nothing, since the refusal was already matched to this key.
+func ownEnrollmentVerdict(ctx context.Context, key string, cause error) (bool, error) {
+	ready, err := materialProofFailure(ctx, key, cause)
+	return thisMembersVerdict(key, ready, err)
 }
 
 // CandidateMemberReadyMeasured runs the same on-demand proof and returns its
@@ -96,7 +124,9 @@ func (a *App) candidateEnrollment(ctx context.Context) (*enrollmentBundle, uint6
 
 // candidateEnrollmentWithCause also returns a cluster identity read failure.
 // One that fails while the database is between leaders says nothing about
-// this member; the proof reports it as an interruption, not a negative.
+// this member; the proof reports it as an interruption, not a negative. When
+// the database refuses this member's own admission, the cause is that
+// refusal and the key is the member's.
 func (a *App) candidateEnrollmentWithCause(ctx context.Context) (*enrollmentBundle, uint64, string, error) {
 	started := candidateProofStart(ctx)
 	defer candidateProofObserve(ctx, proofEnrollment, started, 0)
@@ -109,6 +139,10 @@ func (a *App) candidateEnrollmentWithCause(ctx context.Context) (*enrollmentBund
 		return nil, 0, "", nil
 	}
 	if err := verifyEnrollmentState(ctx, a.store, bundle); err != nil {
+		// Never the database's refusal: this check compares the files on
+		// this member's disk with an identity row that is written once, so
+		// a difference is a finding about the local files. It carries no
+		// key and leaves the proof as "not ready".
 		return nil, 0, "", err
 	}
 	key, err := bundle.trust.VerifyMember(bundle.tls.Certificates[0].Leaf, time.Now().UTC())
@@ -127,8 +161,8 @@ func (a *App) candidateEnrollmentWithCause(ctx context.Context) (*enrollmentBund
 		}
 	case os.IsNotExist(err):
 		admission, err := a.store.ClusterAdmissionForVerifiedKey(ctx, bundle.info.ClusterID, key)
-		if err != nil || admission.InvitationHash != "" || admission.RevokedAt != nil {
-			return nil, 0, "", nil
+		if refusedKey, cause, failed := seedAdmissionFailure(admission, err, key); failed {
+			return nil, 0, refusedKey, cause
 		}
 	default:
 		return nil, 0, "", nil

@@ -94,7 +94,7 @@ func New(baseDir string) *Driver {
 	return driver
 }
 
-func (d *Driver) Name() string { return "udocker" }
+func (d *Driver) Name() string { return runtime.DriverUdocker }
 
 // MountOwner returns the identity that will resolve udocker bind-mount source
 // paths. Provisioning chooses between the dedicated user and --allow-root, so

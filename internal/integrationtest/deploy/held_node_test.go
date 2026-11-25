@@ -34,7 +34,7 @@ func (h *siteHold) Hold(store.NodeHoldFacts) store.NodeHold {
 // counting the node as cordoned, which the evaluator explains as
 // node_cordoned. On a real server with a fake agent.
 func TestAHeldNodeKeepsItsReplicasAndNewWorkWaits(t *testing.T) {
-	env, api, depID := lifecycleEnv(t, testenv.NewFakeDriver("fake"))
+	env, api, depID := lifecycleEnv(t, testenv.NewFakeDriver("docker"))
 	running := waitRunning(t, env, depID, 2, nil)
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

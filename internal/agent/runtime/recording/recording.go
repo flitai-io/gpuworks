@@ -41,17 +41,38 @@ type Driver struct {
 	inspection    runtime.ImageInspection
 	loadFileHook  func(path string)
 
+	// name is the runtime the driver stands in for.
+	name string
+
 	// engineBin, when set, is a fake engine started for every serving
 	// container on the API port its command names (engine.go).
 	engineBin string
 	engines   map[string]*exec.Cmd
 }
 
+// New returns a driver that records to path under docker's name: a node is
+// admitted for a vendor's cards only on a runtime that vendor lists, and no
+// vendor lists a made-up name.
 func New(path string) *Driver {
-	return &Driver{path: path, running: map[string]bool{}, engines: map[string]*exec.Cmd{}}
+	return &Driver{path: path, name: runtime.DriverDocker, running: map[string]bool{}, engines: map[string]*exec.Cmd{}}
 }
 
-func (d *Driver) Name() string                         { return "recording" }
+// As makes the driver stand in for another runtime by reporting its name.
+func (d *Driver) As(name string) *Driver {
+	d.name = name
+	return d
+}
+
+func (d *Driver) Name() string { return d.name }
+
+// DeviceView says a recorded container sees only the devices it was
+// granted, as one of docker's would.
+func (d *Driver) DeviceView() runtime.DeviceView { return runtime.ViewGranted }
+
+// ImageStoreRoot: a recorded image is kept nowhere, whatever runtime the
+// driver is named after.
+func (d *Driver) ImageStoreRoot() string { return "" }
+
 func (d *Driver) Detect(context.Context) (bool, error) { return true, nil }
 
 func (d *Driver) ImageExists(_ context.Context, image string) (bool, error) {

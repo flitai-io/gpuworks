@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/agent/gpu"
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	dockerdrv "gpuworks.ai/gpuworks/internal/agent/runtime/docker"
 	nerdctldrv "gpuworks.ai/gpuworks/internal/agent/runtime/nerdctl"
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -21,11 +22,12 @@ type runtimeBoundProber struct {
 	verified string
 }
 
-func (p runtimeBoundProber) RuntimeInjectionForDriver(indexes []int, driverName string) gpu.RuntimeInjection {
+func (p runtimeBoundProber) RuntimeInjectionForDriver(indexes []int, target runtime.Target) gpu.RuntimeInjection {
+	driverName := target.Name
 	if driverName != p.verified {
 		return gpu.RuntimeInjection{UnsupportedReason: "runtime_unsupported: requires " + p.verified + ", not " + driverName}
 	}
-	return gpu.RuntimeInjection{DockerArgs: []string{"--device", "/dev/fake0:/dev/fake0:rwm"}}
+	return gpu.RuntimeInjection{Grant: runtime.DeviceGrant{Devices: []runtime.Device{{Path: "/dev/fake0", Access: runtime.DeviceAccessAll}}}}
 }
 
 // The doctor's job is to predict what a deployment will do on this host, so
@@ -76,7 +78,7 @@ func TestDoctorNeverAsksARuntimeBoundBackendWithoutTheRuntime(t *testing.T) {
 	if got, ok := factValue(report, proto.DoctorFactDeviceInjection); !ok || got != "explicit" {
 		t.Fatalf("injection fact = %q (present %v), want %q", got, ok, "explicit")
 	}
-	if _, err := doctorWorkloadSpec(context.Background(), prober, "docker", cards); err != nil {
+	if _, err := doctorWorkloadSpec(context.Background(), prober, runtime.TargetNamed("docker"), cards); err != nil {
 		t.Fatalf("workload spec: %v", err)
 	}
 }
@@ -99,5 +101,18 @@ func TestDoctorInjectionRefusalNamesTheRuntime(t *testing.T) {
 	got, _ := factValue(report, proto.DoctorFactDeviceInjection)
 	if !strings.Contains(got, "nerdctl") || !strings.Contains(got, "docker") {
 		t.Fatalf("the refusal hides the runtimes involved: %q", got)
+	}
+}
+
+// A report that was handed no runtime and found none it looks for (the
+// command-line doctor on a udocker node, or in an agent pod) does not know
+// what a launch will do, and must not say injection is unavailable there.
+func TestDoctorLeavesInjectionOutWhenItKnowsNoRuntime(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	cards := []proto.GPUInfo{{Index: 0, Healthy: true, Vendor: "nvidia"}}
+	report := proto.DoctorReport{Accelerators: &proto.DoctorAccelerators{}}
+	doctorDeviceFacts(context.Background(), &report, &gpu.FixedProber{VendorName: "nvidia", GPUs: cards}, nil, cards)
+	if got, ok := factValue(report, proto.DoctorFactDeviceInjection); ok {
+		t.Fatalf("injection fact = %q for a runtime the report does not know, want none", got)
 	}
 }

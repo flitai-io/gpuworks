@@ -78,7 +78,7 @@ func TestDomesticPartitionBackendsCrossAPIControllerAgentAndRuntime(t *testing.T
 			env := testenv.New(t)
 			runtimeDriver := tt.runtimeDriver
 			if runtimeDriver == "" {
-				runtimeDriver = "fake"
+				runtimeDriver = "docker"
 			}
 			node := env.AddNode("partition-"+tt.name,
 				testenv.WithAccelerator(tt.vendor, tt.framework, tt.version),
@@ -166,7 +166,7 @@ func TestDomesticAutomaticImageMismatchRemainsAdvisory(t *testing.T) {
 	env := testenv.New(t)
 	// The embedded catalog contains CANN 8.x and 9.x Ascend images. Model a
 	// newer host major so the fixture exercises the advisory compatibility path.
-	node := env.AddNode("blocked-image", testenv.WithAccelerator("ascend", "cann", "10.0.99"), testenv.WithGPUs(1, testenv.GPUSpec{Model: "Ascend 910B4", Vendor: "ascend", ArchID: "910B4"}), testenv.WithDriverName("fake"))
+	node := env.AddNode("blocked-image", testenv.WithAccelerator("ascend", "cann", "10.0.99"), testenv.WithGPUs(1, testenv.GPUSpec{Model: "Ascend 910B4", Vendor: "ascend", ArchID: "910B4"}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "blocked-image")
 	waitForAssetReport(t, env, node.UUID, accelerator.BackendAscendLogical)
 	row, err := env.Store().NodeWithGPUs(node.UUID)
@@ -196,7 +196,7 @@ func TestSparsePhysicalGPUIndexSurvivesProbeStoreSchedulerAndAscendInjection(t *
 		testenv.WithAccelerator("ascend", "cann", ""),
 		testenv.WithGPUs(5, testenv.GPUSpec{Model: "Ascend 910B4", VRAMMB: 32768, Vendor: "ascend", ArchID: "910B4"}),
 		testenv.WithGPUIndexes(2, 4, 5, 6, 7),
-		testenv.WithDriverName("fake"),
+		testenv.WithDriverName("docker"),
 	)
 	env.WaitNodeOnline(t, "sparse-ascend")
 	waitForProbeReport(t, env, node.UUID, accelerator.BackendAscendLogical, proto.PartitionProbePassed)
@@ -287,7 +287,7 @@ func TestSparsePhysicalGPUIndexSurvivesProbeStoreSchedulerAndAscendInjection(t *
 func TestUnusableGPUReportsReadyCapabilityButIsNotScheduled(t *testing.T) {
 	bad := false
 	env := testenv.New(t)
-	node := env.AddNode("warning-gpu", testenv.WithAccelerator("ascend", "cann", "9.0.0"), testenv.WithGPUs(1, testenv.GPUSpec{Model: "Ascend 910B4", Vendor: "ascend", ArchID: "910B4", Healthy: &bad}), testenv.WithDriverName("fake"))
+	node := env.AddNode("warning-gpu", testenv.WithAccelerator("ascend", "cann", "9.0.0"), testenv.WithGPUs(1, testenv.GPUSpec{Model: "Ascend 910B4", Vendor: "ascend", ArchID: "910B4", Healthy: &bad}), testenv.WithDriverName("docker"))
 	node.Prober.SetGPUs([]proto.GPUInfo{{Index: 0, UUID: "warning-0", Name: "Ascend 910B4", Vendor: "ascend", ArchID: "910B4", MemoryTotalBytes: 32 << 30, Healthy: false, HealthStatus: accelerator.HealthError, HealthCode: accelerator.HealthMemoryUncorrectable}})
 	env.WaitNodeOnline(t, "warning-gpu")
 	waitForAssetReport(t, env, node.UUID, accelerator.BackendAscendLogical)
@@ -336,7 +336,7 @@ func TestUnusableGPUReportsReadyCapabilityButIsNotScheduled(t *testing.T) {
 // calls schedulable.
 func TestAWarningGPUStillTakesWork(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("warning-serves", testenv.WithAccelerator("ascend", "cann", "9.0.0"), testenv.WithGPUs(1, testenv.GPUSpec{Model: "Ascend 910B4", Vendor: "ascend", ArchID: "910B4"}), testenv.WithDriverName("fake"))
+	node := env.AddNode("warning-serves", testenv.WithAccelerator("ascend", "cann", "9.0.0"), testenv.WithGPUs(1, testenv.GPUSpec{Model: "Ascend 910B4", Vendor: "ascend", ArchID: "910B4"}), testenv.WithDriverName("docker"))
 	node.Prober.SetGPUs([]proto.GPUInfo{{Index: 0, UUID: "warning-serves-0", Name: "Ascend 910B4", Vendor: "ascend", ArchID: "910B4", MemoryTotalBytes: 32 << 30, Healthy: true, HealthStatus: accelerator.HealthWarning, HealthCode: accelerator.HealthMemoryRepairPending}})
 	env.WaitNodeOnline(t, "warning-serves")
 	waitForAssetReport(t, env, node.UUID, accelerator.BackendAscendLogical)
@@ -418,7 +418,7 @@ func waitForProbeReport(t *testing.T, env *testenv.Env, uuid, backend, status st
 
 func TestOldAgentWithoutPartitionProbesFallsBackToUpgradeReason(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("probe-old-agent", testenv.WithAccelerator("ascend", "cann", ""), testenv.WithGPUs(1, testenv.GPUSpec{Model: "Ascend 910B4", Vendor: "ascend", ArchID: "910B4"}), testenv.WithDriverName("fake"))
+	node := env.AddNode("probe-old-agent", testenv.WithAccelerator("ascend", "cann", ""), testenv.WithGPUs(1, testenv.GPUSpec{Model: "Ascend 910B4", Vendor: "ascend", ArchID: "910B4"}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "probe-old-agent")
 	waitForProbeReport(t, env, node.UUID, accelerator.BackendAscendLogical, proto.PartitionProbePassed)
 	// The in-process agent is a current one and keeps reporting probes: on
@@ -438,7 +438,7 @@ func TestOldAgentWithoutPartitionProbesFallsBackToUpgradeReason(t *testing.T) {
 		t.Fatal(err)
 	}
 	ok := true
-	oldAgent := proto.NodeStatus{Sys: proto.SysInfo{Hostname: row.Hostname, Arch: row.Arch, GPUVendor: "ascend", RuntimeDriver: "fake", Runtimes: []string{"fake"}, PartitionAssets: assets, PartitionProbes: nil}, GPUs: []proto.GPUInfo{{Index: 0, UUID: "old-0", Name: "Ascend 910B4", Vendor: "ascend", ArchID: "910B4", MemoryTotalBytes: 32 << 30, Healthy: true}}, GPUProbeOK: &ok}
+	oldAgent := proto.NodeStatus{Sys: proto.SysInfo{Hostname: row.Hostname, Arch: row.Arch, GPUVendor: "ascend", RuntimeDriver: "docker", Runtimes: []string{"docker"}, PartitionAssets: assets, PartitionProbes: nil}, GPUs: []proto.GPUInfo{{Index: 0, UUID: "old-0", Name: "Ascend 910B4", Vendor: "ascend", ArchID: "910B4", MemoryTotalBytes: 32 << 30, Healthy: true}}, GPUProbeOK: &ok}
 	var updated *store.Node
 	env.Eventually(t, 10*time.Second, func() bool {
 		if err := env.Store().UpdateNodeStatus(node.UUID, oldAgent); err != nil {

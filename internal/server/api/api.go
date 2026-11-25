@@ -91,6 +91,7 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 			r.Get("/healthz", a.health)
 			r.Get("/peer-transfers", a.peerTransferSnapshot)
 			r.Get("/engines", a.engines)
+			r.Get("/accelerator-vendors", a.acceleratorVendors)
 			r.Get("/nodes", a.listNodes)
 			r.Get("/nodes/facets", a.nodeFacets)
 			r.Get("/dashboard/summary", a.dashboardSummary)

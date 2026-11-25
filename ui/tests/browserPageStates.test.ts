@@ -3,14 +3,16 @@ import test from "node:test";
 // @ts-expect-error Browser harness module has no TypeScript declaration.
 import { states } from "./browser/page-states.mjs";
 
-test("browser walker yields a full-page detail before returning to the parent", async () => {
+test("browser walker yields a full-page detail before returning to the parent", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: 1 });
   let url = "";
   const visits: string[] = [];
   const firstLink = { count: async () => 1, click: async () => { url = "http://example.test/monitor/d/7"; } };
   const page = {
     goto: async (next: string) => { url = next; visits.push(next); },
     url: () => url,
-    waitForLoadState: async () => {}, waitForTimeout: async () => {},
+    on: () => {}, evaluate: async () => {},
+    waitForTimeout: async (ms: number) => { t.mock.timers.tick(ms); },
     locator: (selector: string) => selector.startsWith("tbody") ? { first: () => firstLink } : { count: async () => 0 },
   };
   const walk = states(page, "http://example.test", "/monitor");

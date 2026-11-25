@@ -224,6 +224,13 @@ type WorkloadSpec struct {
 	Env        map[string]string
 	Mounts     []Mount
 	GPUIndexes []int // physical GPU indexes to expose
+	// Grant is the accelerator devices the agent's device injection granted;
+	// the zero value for a workload that did not go through it.
+	Grant DeviceGrant
+	// DockerArgs are docker run options: the ones a user wrote, the ones
+	// the server resolved (the compute network's devices and limits among
+	// them) and the ones the agent adds itself. Granted accelerator devices
+	// are in Grant, not here.
 	DockerArgs []string
 	// Labels are container labels naming who launched the workload (see
 	// engine.WorkloadOwner). Runtimes with labels (docker, nerdctl) render

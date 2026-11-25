@@ -61,6 +61,9 @@ fi
 
 echo "src=$SRC dest=$DEST tags=${#TAGS[@]} jobs=$JOBS"
 [[ ${#TAGS[@]} -gt 0 ]] || exit 0
+# 目标 tag 先过 runner tag 文法，一条不合规就整批不推（tag_check.py；文法由
+# make image-manifest 导出到 tag-grammar.txt，这里不另写正则）。
+python3 "$HERE/tag_check.py" "${TAGS[@]}" || { echo "refusing to push: fix the tags above" >&2; exit 2; }
 args=(copy --all --preserve-digests)
 [[ $SRC_INSECURE -eq 1 ]] && args+=(--src-tls-verify=false)
 [[ $DEST_INSECURE -eq 1 ]] && args+=(--dest-tls-verify=false)

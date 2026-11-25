@@ -111,13 +111,13 @@ func TestResolvedNetworkThroughEngineAndCapturedKunlun(t *testing.T) {
 			}
 			for _, arg := range []string{"/dev/infiniband", "memlock=-1", "IPC_LOCK", "/dev/xdrdrv", "/dev/xpu7:/dev/xpu7:rwm", "/dev/xpuctrl:/dev/xpuctrl:rwm"} {
 				count := 0
-				for _, value := range got.DockerArgs {
+				for _, value := range got.DockerRunArgs() {
 					if value == arg {
 						count++
 					}
 				}
 				if count != 1 {
-					t.Fatalf("%s appears %d times: %v", arg, count, got.DockerArgs)
+					t.Fatalf("%s appears %d times: %v", arg, count, got.DockerRunArgs())
 				}
 			}
 			if got.Env["NCCL_IB_HCA"] != "mlx5_1:1" {
@@ -167,11 +167,11 @@ func TestSingleNodeKunlunDPThroughEngineAndCapturedKunlun(t *testing.T) {
 	}
 	for _, device := range []string{"/dev/xpu6:/dev/xpu6:rwm", "/dev/xpu7:/dev/xpu7:rwm"} {
 		found := false
-		for _, arg := range got.DockerArgs {
+		for _, arg := range got.DockerRunArgs() {
 			found = found || arg == device
 		}
 		if !found {
-			t.Fatalf("selected device %s missing: %v", device, got.DockerArgs)
+			t.Fatalf("selected device %s missing: %v", device, got.DockerRunArgs())
 		}
 	}
 }
@@ -194,18 +194,18 @@ func TestExistingNativeBackendsThroughEngineTopologySeam(t *testing.T) {
 				if got == nil {
 					t.Fatalf("backend rejected: %+v", status)
 				}
-				if got.Env["USER_SETTING"] != "keep" || got.DockerArgs[0] != "--ulimit=memlock=65536:65536" {
+				if got.Env["USER_SETTING"] != "keep" || got.DockerRunArgs()[0] != "--ulimit=memlock=65536:65536" {
 					t.Fatalf("user settings changed: %+v", got)
 				}
 				found := false
-				for _, arg := range got.DockerArgs {
+				for _, arg := range got.DockerRunArgs() {
 					found = found || arg == tc.device
 					if arg == "/dev/xdrdrv" {
 						t.Fatal("Kunlun transport leaked into another vendor")
 					}
 				}
 				if !found {
-					t.Fatalf("selected device missing: %v", got.DockerArgs)
+					t.Fatalf("selected device missing: %v", got.DockerRunArgs())
 				}
 			})
 		}

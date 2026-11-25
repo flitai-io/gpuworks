@@ -21,7 +21,7 @@ import (
 // the value it was created with when the catalog later changes.
 func TestTemplateStartTimeoutIsTheBudgetBetweenClusterAndDeployment(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("template-budget", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", Vendor: "nvidia", ArchID: "sm_80", ComputeCapability: "8.0", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("template-budget", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", Vendor: "nvidia", ArchID: "sm_80", ComputeCapability: "8.0", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, node.Name)
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	goruntime "runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
+	dockerdrv "gpuworks.ai/gpuworks/internal/agent/runtime/docker"
 	"gpuworks.ai/gpuworks/internal/agent/runtime/recording"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/test/ocifixture"
@@ -517,5 +519,41 @@ func TestRuntimeImageStoreRootFollowsTheRuntime(t *testing.T) {
 		if got := runtimeImageStoreRoot(driver, "/srv/agent/models"); got != want {
 			t.Errorf("runtimeImageStoreRoot(%q) = %q, want %q", driver, got, want)
 		}
+	}
+}
+
+// A stand-in named after a real runtime does not own that runtime's image
+// store, so its archives are never staged in the host's /var/lib/docker; a
+// real driver of that name does own it.
+func TestAStandInDriverOwnsNoImageStore(t *testing.T) {
+	h := newArchiveLoadHarness(t)
+	if h.driver.Name() != runtime.DriverDocker {
+		t.Fatalf("the recording driver is named %q, want it to stand in for docker", h.driver.Name())
+	}
+	if got := h.node.imageWork().imageStoreRoot(); got != "" {
+		t.Fatalf("a stand-in for docker claims the image store %s", got)
+	}
+	real := NewNodeRuntime(slog.Default(), dockerdrv.New(), t.TempDir()+"/models")
+	if got := real.imageWork().imageStoreRoot(); got != "/var/lib/docker" {
+		t.Fatalf("docker's image store = %q, want /var/lib/docker", got)
+	}
+	// Nor does the stand-in report the host's Docker data root as its
+	// runtime disk, which the scheduler would hold image sizes against.
+	reportsDockerDisk := func(n *NodeRuntime) bool {
+		for _, usage := range n.pathUsage() {
+			if usage.Kind == runtime.DriverDocker {
+				return true
+			}
+		}
+		return false
+	}
+	if goruntime.GOOS == "darwin" {
+		return
+	}
+	if reportsDockerDisk(h.node) {
+		t.Fatal("a stand-in for docker reports the host's Docker data root")
+	}
+	if !reportsDockerDisk(real) {
+		t.Fatal("a docker node does not report its data root")
 	}
 }

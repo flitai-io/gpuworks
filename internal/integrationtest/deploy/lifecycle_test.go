@@ -122,7 +122,7 @@ func waitRunning(t *testing.T, env *testenv.Env, depID uint, n int, avoid []stri
 // restarting all at once replaces every instance, stop removes them and keeps
 // the configuration, start brings the same deployment back.
 func TestStopStartAndRestartAnOrdinaryDeployment(t *testing.T) {
-	env, api, depID := lifecycleEnv(t, testenv.NewFakeDriver("fake"))
+	env, api, depID := lifecycleEnv(t, testenv.NewFakeDriver("docker"))
 	first := waitRunning(t, env, depID, 2, nil)
 
 	postAction(t, api, fmt.Sprintf("/api/v1/deployments/%d/restart", depID), `{"strategy":"all"}`, http.StatusAccepted)
@@ -160,7 +160,7 @@ func TestStopStartAndRestartAnOrdinaryDeployment(t *testing.T) {
 // once the cause is fixed, retrying that replica rebuilds it without touching
 // the running one.
 func TestOrdinaryReplicaRetryAfterTheBudgetIsSpent(t *testing.T) {
-	driver := &switchableDriver{FakeDriver: testenv.NewFakeDriver("fake")}
+	driver := &switchableDriver{FakeDriver: testenv.NewFakeDriver("docker")}
 	env, api, depID := lifecycleEnv(t, driver)
 	env.SetControllerRetryPolicy(50*time.Millisecond, 2)
 	running := waitRunning(t, env, depID, 2, nil)

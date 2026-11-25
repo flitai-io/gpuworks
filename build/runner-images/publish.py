@@ -350,6 +350,21 @@ def matrix_entry(path, tag):
     return None
 
 
+def check_dest_tag(tag, matrix):
+    """目标 tag 必须过 runner tag 文法（tag_check.py，文法由 make image-manifest 导出）。
+
+    检查器或文法文件缺失时拒绝发布而不是放行：单独拷贝 publish.py 到发布机时，
+    要把 tag_check.py、tag-grammar.txt（以及 matrix.yaml）一起拷过去。"""
+    try:
+        import tag_check
+        problem = tag_check.refusal(tag, matrix=matrix)
+    except (ImportError, IOError, ValueError) as e:
+        raise PublishError("cannot check the destination tag (copy tag_check.py, tag-grammar.txt and "
+                           "matrix.yaml next to publish.py): %s" % e, EXIT_USAGE)
+    if problem:
+        raise PublishError(problem, EXIT_USAGE)
+
+
 def read_env(path):
     out = {}
     stream = sys.stdin if path == "-" else open(path, encoding="utf-8")
@@ -670,6 +685,7 @@ def main(argv=None):
     dst_tag = a.dest_tag or a.tag
     tmpdir = None
     try:
+        check_dest_tag(dst_tag, a.matrix)
         # 凭据：dry-run 也尝试读（目标仓库可能是私有的，读存在性需要 pull 令牌），读不到就匿名
         env = {}
         try:

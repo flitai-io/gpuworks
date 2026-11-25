@@ -88,7 +88,7 @@ func TestTransportRefreshRepeatsAnInterruptedGrantInsideItsCycle(t *testing.T) {
 // before: the closed member then withdraws as it always did.
 func TestTransportRefreshStillFailsOnAPersistentInterruption(t *testing.T) {
 	previous := clusterMembershipRetryWindow
-	clusterMembershipRetryWindow = 150 * time.Millisecond
+	clusterMembershipRetryWindow = func() time.Duration { return 150 * time.Millisecond }
 	t.Cleanup(func() { clusterMembershipRetryWindow = previous })
 	st, attempts, applied := transportRefreshFixture(t, func(int32) error { return driver.ErrBadConn })
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)

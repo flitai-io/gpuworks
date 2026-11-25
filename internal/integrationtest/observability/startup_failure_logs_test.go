@@ -23,7 +23,7 @@ import (
 func TestStartupFailureLogsRemainSearchableAfterContainerRemoval(t *testing.T) {
 	env := testenv.New(t)
 	env.SetControllerRetryPolicy(time.Hour, 1)
-	driver := testenv.NewFakeDriver("fake")
+	driver := testenv.NewFakeDriver("docker")
 	diagnostic := "ValueError: Model architectures ['Qwen3ForCausalLM'] failed to be inspected"
 	driver.AfterRun(func(spec runtime.WorkloadSpec) { driver.Exit(spec.Name, 1) })
 	driver.OnLogs(func(id string, follow bool, tail int) (io.ReadCloser, error, bool) {

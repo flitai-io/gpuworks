@@ -78,7 +78,7 @@ func TestASiteRuleRoutesTheDownloadThroughItsMirror(t *testing.T) {
 	// The server itself has no model endpoint: only the rule may redirect
 	// this download.
 	env := testenv.New(t)
-	env.AddNode("explicit-network-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	env.AddNode("explicit-network-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "explicit-network-node")
 	rows, err := env.Store().ListNodes()
 	if err != nil || len(rows) != 1 {
@@ -138,7 +138,7 @@ func TestASiteRuleRoutesTheDownloadThroughItsMirror(t *testing.T) {
 func TestDownloadWithoutARuleGoesToTheSourcesOwnSite(t *testing.T) {
 	hub := testenv.FakeModelHub(t)
 	env := testenv.New(t)
-	env.AddNode("default-network-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	env.AddNode("default-network-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "default-network-node")
 	rows, err := env.Store().ListNodes()
 	if err != nil || len(rows) != 1 {
@@ -177,7 +177,7 @@ func TestDownloadWithoutARuleGoesToTheSourcesOwnSite(t *testing.T) {
 func TestDeployUsesTheLocalCopyWithoutAChoice(t *testing.T) {
 	hub := testenv.FakeModelHub(t)
 	env := testenv.New(t)
-	env.AddNode("acquisition-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+	env.AddNode("acquisition-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "acquisition-node")
 	rows, err := env.Store().ListNodes()
 	if err != nil || len(rows) != 1 {
@@ -236,7 +236,7 @@ func TestDeployUsesTheLocalCopyWithoutAChoice(t *testing.T) {
 func TestDeployRequestRejectsAStorageThatIsGone(t *testing.T) {
 	hub := testenv.FakeModelHub(t)
 	env := testenv.NewWithModelEndpoint(t, hub.Endpoint)
-	env.AddNode("stale-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+	env.AddNode("stale-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "stale-node")
 	rows, err := env.Store().ListNodes()
 	if err != nil || len(rows) != 1 {

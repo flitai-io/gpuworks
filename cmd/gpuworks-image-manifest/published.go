@@ -13,6 +13,7 @@ const swrRunner = manifest.SWRRunnerRepository
 
 var (
 	publishedArchitecture = regexp.MustCompile(`(?:^|-)(amd64|arm64)(?:-|$)`)
+	publishedRevision     = regexp.MustCompile(`-r[0-9]+$`)
 	publishedXRE          = regexp.MustCompile(`^xre-(vllm|sglang)([0-9][0-9A-Za-z.]*)$`)
 	dockerTag             = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$`)
 )
@@ -23,24 +24,75 @@ type publishedItem struct {
 	ID            string   `yaml:"id"`
 	Tag           string   `yaml:"tag"`
 	Platforms     []string `yaml:"platforms"`
-	Alias         bool     `yaml:"alias"`
 	EngineVersion string   `yaml:"engine_version"`
 	Note          string   `yaml:"note"`
+	// LegacyReason declares a tag that is outside the release grammar and says
+	// why it exists. A tag inside the grammar must not carry one, and a tag
+	// outside it must: the number of declarations is a ratcheted budget
+	// (published_tags_outside_grammar).
+	LegacyReason string `yaml:"legacy_reason"`
+	// Alias marks a legacy tag whose name is unrelated to its id; the id then
+	// only supplies the catalog metadata.
+	Alias bool `yaml:"alias"`
 }
 
-func (item publishedItem) version() (manifest.ManifestVersion, parsedTag, error) {
+// grammarProblem says what keeps a tag outside the release grammar, or "" when
+// it is inside.
+func grammarProblem(tag string) string {
+	if releaseTagPattern.MatchString(tag) {
+		return ""
+	}
+	revision := publishedRevision.FindStringIndex(tag)
+	if revision == nil {
+		return "it does not end in a -r<number> revision"
+	}
+	return fmt.Sprintf("%q before the revision is not <backend><version>[-<model>]-<engine><version>", tag[:revision[0]])
+}
+
+// identity reads what the entry says about the image. A tag inside the
+// grammar speaks for itself and its id must repeat it; only a declared legacy
+// tag may take its identity from an id it does not spell out.
+func (item publishedItem) identity() (parsedTag, string, error) {
+	if !dockerTag.MatchString(item.Tag) {
+		return parsedTag{}, "", fmt.Errorf("published tag %q is not a registry tag", item.Tag)
+	}
+	reason := strings.TrimSpace(item.LegacyReason)
+	problem := grammarProblem(item.Tag)
+	if problem == "" {
+		if reason != "" || item.Alias {
+			return parsedTag{}, "", fmt.Errorf("published tag %q follows the tag grammar: remove legacy_reason and alias", item.Tag)
+		}
+		id := item.Tag[:publishedRevision.FindStringIndex(item.Tag)[0]]
+		if item.ID != id {
+			return parsedTag{}, "", fmt.Errorf("published tag %q does not match matrix id %q (want id %q)", item.Tag, item.ID, id)
+		}
+		tag, err := parseTag(id)
+		return tag, "", err
+	}
+	if reason == "" {
+		return parsedTag{}, "", fmt.Errorf("published tag %q is outside the tag grammar: %s. New tags follow <id>-r<number>; "+
+			"a tag that already exists under this name needs a legacy_reason", item.Tag, problem)
+	}
 	tag, err := parseTag(item.ID)
 	if err != nil {
 		// Old Kunlun names identify the engine but carry no XRE release.
 		match := publishedXRE.FindStringSubmatch(item.ID)
 		if match == nil {
-			return manifest.ManifestVersion{}, tag, err
+			return parsedTag{}, "", err
 		}
 		tag = parsedTag{Backend: "xre", Engine: match[1], EngineVersion: match[2]}
 	}
 	suffix, matchingID := strings.CutPrefix(item.Tag, item.ID+"-")
-	if !dockerTag.MatchString(item.Tag) || (!matchingID && item.Tag != item.ID && !item.Alias) {
-		return manifest.ManifestVersion{}, tag, fmt.Errorf("published tag %q does not match matrix id %q", item.Tag, item.ID)
+	if !matchingID && item.Tag != item.ID && !item.Alias {
+		return parsedTag{}, "", fmt.Errorf("published tag %q does not match matrix id %q", item.Tag, item.ID)
+	}
+	return tag, suffix, nil
+}
+
+func (item publishedItem) version() (manifest.ManifestVersion, parsedTag, error) {
+	tag, suffix, err := item.identity()
+	if err != nil {
+		return manifest.ManifestVersion{}, tag, err
 	}
 	arch, err := item.arch(tag.Backend)
 	if err != nil {

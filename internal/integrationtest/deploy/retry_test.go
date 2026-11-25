@@ -20,7 +20,7 @@ func (d *alwaysFailDriver) Run(context.Context, runtime.WorkloadSpec) (string, e
 func TestFailedDeploymentRetryIsBounded(t *testing.T) {
 	env := testenv.New(t)
 	env.SetControllerRetryPolicy(100*time.Millisecond, 3)
-	failed := &alwaysFailDriver{FakeDriver: testenv.NewFakeDriver("fake")}
+	failed := &alwaysFailDriver{FakeDriver: testenv.NewFakeDriver("docker")}
 	env.AddNode("retry-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriver(failed))
 	env.WaitNodeOnline(t, "retry-node")
 	nodes, err := env.Store().ListNodes()

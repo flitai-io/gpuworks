@@ -119,6 +119,7 @@ func cloneWorkloadSpec(spec runtime.WorkloadSpec) runtime.WorkloadSpec {
 	clone.Entrypoint = append([]string(nil), spec.Entrypoint...)
 	clone.GPUIndexes = append([]int(nil), spec.GPUIndexes...)
 	clone.DockerArgs = append([]string(nil), spec.DockerArgs...)
+	clone.Grant = spec.Grant.Clone()
 	clone.PreparationNotes = append([]string(nil), spec.PreparationNotes...)
 	clone.Env = make(map[string]string, len(spec.Env))
 	for k, v := range spec.Env {

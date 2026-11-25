@@ -138,7 +138,7 @@ function EvaluationDetail({ id }: { id: number }) {
 				<Col xs={24} xl={12} data-report-pareto><Card title={<MetricLabel label={t("detail.pareto")} help="pareto" />}><ParetoChart points={run.points || []} selectedSeq={selected?.seq} onSelect={(point) => setSelectedSeq(point.seq)} /></Card></Col>
 			</Row>
 			<div data-report-points><PointResultsTable run={run} selectedSeq={selected?.seq} onSelect={(point) => setSelectedSeq(point.seq)} /></div>
-			<BenchmarkEvidencePanel run={run} point={selected} />
+			<BenchmarkEvidencePanel run={run} point={selected} expanded={capturing} />
 			{selected && (selected.state === "running" ? <Card title={t("timeline.title")}><Alert type="info" showIcon message={t("timeline.running")} /></Card> : <BenchmarkRequestTimeline key={`${id}:${selected.seq}`} data={timeline.data} loading={timeline.loading} error={timeline.error} onRetry={timeline.refetch} />)}
 			<AdvancedResult run={run} point={selected} expanded={capturing} />
 				<BenchmarkSnapshotPanel run={run} expanded={capturing} />

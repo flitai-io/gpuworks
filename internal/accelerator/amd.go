@@ -34,7 +34,7 @@ func (amdLogicalBackend) NeedsInstanceTeardown() bool { return true }
 // build/runtime-assets/manifest.json), so AMD skips the behavioral probe.
 func (amdLogicalBackend) SkipsBehaviorProbe() bool { return true }
 
-// AMD's host runtime contract (internal/accelerator/features.go) admits
+// AMD's definition (amdVendor) admits
 // Docker, nerdctl, runveil (udocker) and kube; libvrocm.so is an LD_PRELOAD
 // interposer that PRoot carries like any other bind-mounted library. The
 // cross-process ledger stays a /dev/shm path on every driver; on Kubernetes
@@ -58,4 +58,33 @@ var amdProfiles = []PartitionProfile{
 
 func (amdLogicalBackend) Profiles() []PartitionProfile {
 	return append([]PartitionProfile(nil), amdProfiles...)
+}
+
+// amdVendor is AMD. It runs every launch feature NVIDIA does: multi-node,
+// pipeline and data parallelism ride RCCL over the same NCCL_* socket and IB
+// variables, vLLM sleep mode uses CuMemAllocator on HIP VMM, and PD uses NIXL
+// over UCX. What is its own is the host it needs and that its cards are
+// selected explicitly.
+var amdVendor = vendorSpec{
+	id:           VendorAMD,
+	brand:        "AMD",
+	frameworks:   []string{"rocm"},
+	named:        contains("amd", "rocm", "gfx"),
+	precedence:   30,
+	namePrefixes: []string{"amd"},
+
+	tool:  "rocminfo",
+	pciID: AMDPCIVendorID,
+	pci:   &pciVendor{drivers: []string{AMDGPUDriver}},
+
+	runtimes:        []string{RuntimeDocker, RuntimeNerdctl, RuntimeUdocker, RuntimeKube},
+	hostOS:          "linux",
+	hostArch:        "amd64",
+	explicitDevices: true,
+	supports:        Features,
+	partition:       amdLogicalBackend{},
+	assetBundles:    true,
+	ownCatalogImage: true,
+
+	cardChecks: true,
 }

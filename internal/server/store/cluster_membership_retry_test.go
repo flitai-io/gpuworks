@@ -100,7 +100,7 @@ func TestGrantClusterMembershipRetriesAnInterruptedGrantTransaction(t *testing.T
 func TestGrantClusterMembershipKeepsThePartitionedRefusalBounded(t *testing.T) {
 	st, id, requester, _ := membershipRetryFixture(t)
 	previousObserve, previousWindow := clusterMembershipObserveTimeout, clusterMembershipRetryWindow
-	clusterMembershipObserveTimeout, clusterMembershipRetryWindow = 150*time.Millisecond, 250*time.Millisecond
+	clusterMembershipObserveTimeout, clusterMembershipRetryWindow = 150*time.Millisecond, func() time.Duration { return 250 * time.Millisecond }
 	t.Cleanup(func() {
 		clusterMembershipObserveTimeout, clusterMembershipRetryWindow = previousObserve, previousWindow
 	})
@@ -119,7 +119,7 @@ func TestGrantClusterMembershipKeepsThePartitionedRefusalBounded(t *testing.T) {
 	if elapsed < 240*time.Millisecond || elapsed > 400*time.Millisecond || calls.Load() != 2 {
 		t.Fatalf("partitioned refusal took %s over %d observations, want the 250ms window and 2 observations", elapsed, calls.Load())
 	}
-	if production := previousWindow; production >= 3*time.Second || production <= previousObserve {
+	if production := previousWindow(); production >= 3*time.Second || production <= previousObserve {
 		t.Fatalf("retry window %s must exceed one observation (%s) and stay under the three-second isolated refusal", production, previousObserve)
 	}
 }

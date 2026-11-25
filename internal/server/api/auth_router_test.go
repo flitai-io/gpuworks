@@ -29,7 +29,7 @@ func TestManagementRoutesRequireJWT(t *testing.T) {
 	}
 	r := Router(Deps{AuthSigner: signer, Store: routerAuthStore(t), PlaygroundV1: http.NotFoundHandler()})
 
-	for _, path := range []string{"/api/v1/healthz", "/api/v1/engines", "/api/v1/nodes", "/api/v1/nodes/facets", "/api/v1/dashboard/summary", "/api/v1/inference-templates", "/api/v1/playground/models", "/api/v1/playground/openapi.json", "/api/v1/playground/v1/chat/completions"} {
+	for _, path := range []string{"/api/v1/healthz", "/api/v1/engines", "/api/v1/accelerator-vendors", "/api/v1/nodes", "/api/v1/nodes/facets", "/api/v1/dashboard/summary", "/api/v1/inference-templates", "/api/v1/playground/models", "/api/v1/playground/openapi.json", "/api/v1/playground/v1/chat/completions"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)

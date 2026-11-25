@@ -109,10 +109,8 @@ func run(rosterPath, nextRosterPath, server, stateRoot, modelDir, readyPath, log
 	startNodes := func(nodes []node) error {
 		for _, n := range nodes {
 			amd := fleetAMDNode(n.Name, amdPercent)
-			driverName := "fake"
-			if amd {
-				driverName = "docker"
-			} // A synthetic authorized runtime, not a daemon.
+			// A synthetic authorized runtime, not a daemon.
+			driverName := "docker"
 			driver := testenv.NewFakeDriver(driverName)
 			// Every node is a separate machine as far as the scheduler is
 			// concerned, so they all get the same engine port. On one host that is

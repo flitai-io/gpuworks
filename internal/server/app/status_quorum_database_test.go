@@ -27,8 +27,10 @@ import (
 // request. A nil answer is the failure a member that is not the leader gives.
 type statusProofPort struct {
 	address string
-	answer  func() []byte
-	served  atomic.Int32
+	// stop closes the port, as a member that is stopped.
+	stop   func()
+	answer func() []byte
+	served atomic.Int32
 }
 
 type statusProofFixture struct {
@@ -116,7 +118,8 @@ func newStatusProofFixture(t *testing.T) *statusProofFixture {
 			t.Fatal(err)
 		}
 		listener := tls.NewListener(raw, &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{pair}, ClientCAs: pool, ClientAuth: tls.RequireAndVerifyClientCert})
-		t.Cleanup(func() { _ = listener.Close() })
+		port.stop = func() { _ = listener.Close() }
+		t.Cleanup(port.stop)
 		go func() {
 			for {
 				conn, err := listener.Accept()

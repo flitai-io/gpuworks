@@ -251,19 +251,22 @@ func TestNVIDIACardsAreNamedFromTheHostDatabaseOnly(t *testing.T) {
 // provenance that justifies it.
 func TestEveryDomesticModelIsVerifiedAndBelongsToASupportedVendor(t *testing.T) {
 	seen := map[[2]uint32]bool{}
-	for _, m := range domesticModels {
-		id := [2]uint32{m.vendor, m.device}
+	for _, m := range accelerator.PCIModels() {
+		id := [2]uint32{m.Vendor, m.Device}
 		if seen[id] {
-			t.Errorf("%04x:%04x listed twice", m.vendor, m.device)
+			t.Errorf("%04x:%04x listed twice", m.Vendor, m.Device)
 		}
 		seen[id] = true
-		if m.name == "" || m.provenance == "" {
-			t.Errorf("%04x:%04x needs a name and the hardware it was read off", m.vendor, m.device)
+		if m.Name == "" || m.Provenance == "" {
+			t.Errorf("%04x:%04x needs a name and the hardware it was read off", m.Vendor, m.Device)
 		}
-		if accelerator.VendorForPCI(m.vendor, m.device, 0x120000, "") == "" &&
-			accelerator.VendorForPCI(m.vendor, m.device, 0x030200, "") == "" {
-			t.Errorf("%04x is not a vendor any rule identifies as an accelerator vendor", m.vendor)
+		if accelerator.VendorForPCI(m.Vendor, m.Device, 0x120000, "") == "" &&
+			accelerator.VendorForPCI(m.Vendor, m.Device, 0x030200, "") == "" {
+			t.Errorf("%04x is not a vendor any rule identifies as an accelerator vendor", m.Vendor)
 		}
+	}
+	if len(seen) == 0 {
+		t.Fatal("no vendor's definition carries a model name")
 	}
 }
 

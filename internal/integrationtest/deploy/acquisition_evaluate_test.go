@@ -71,7 +71,7 @@ func evaluateAcquisition(t *testing.T, env *testenv.Env, body map[string]any) ac
 // use them; nothing is fetched.
 func TestEvaluateForecastsALocalCopy(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("acq-local", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+	env.AddNode("acq-local", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "acq-local")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {
@@ -122,7 +122,7 @@ func TestEvaluateForecastsALocalCopy(t *testing.T) {
 func TestEvaluateForecastsACopyFromASyncGroupPeer(t *testing.T) {
 	env := testenv.New(t)
 	for _, name := range []string{"acq-target", "acq-holder"} {
-		env.AddNode(name, testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+		env.AddNode(name, testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 		env.WaitNodeOnline(t, name)
 	}
 	nodes, err := env.Store().ListNodes()
@@ -173,7 +173,7 @@ func TestEvaluateForecastsACopyFromASyncGroupPeer(t *testing.T) {
 // forecast, because where it lands is decided at launch.
 func TestEvaluateForecastsAPullAndOnlyForNamedNodes(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("acq-public", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("fake"))
+	env.AddNode("acq-public", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 81920}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "acq-public")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

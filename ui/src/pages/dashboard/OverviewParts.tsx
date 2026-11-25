@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 import type { GPUListResponse, SchedulingCardSummary } from "../../api";
 import { VENDOR_LOGO_HEIGHT } from "../../components/vendorAssets";
 import { VendorMarkImage, hasVendorMark, vendorMarkKey } from "../../components/VendorLogo";
-import { compareVendors, vendorForFramework } from "../../vendors";
+import { compareVendors, vendorFallbackName, vendorNamed } from "../../vendors";
 import { storageDetailPath } from "../storage/storageLinks";
 
 const GIB = 1024 ** 3;
@@ -138,7 +138,7 @@ type VendorGroup = { vendor: string; cards: number; vramGiB: number; models: { n
 export function vendorGroups(gpus: GPUListResponse, unknownModel: string): VendorGroup[] {
   const byVendor = new Map<string, Map<string, { cards: number; bytes: number }>>();
   for (const gpu of gpus.items.filter((card) => !card.ownership)) {
-    const vendor = vendorForFramework(gpu.vendor);
+    const vendor = vendorNamed(gpu.vendor);
     const models = byVendor.get(vendor) ?? new Map();
     const name = gpu.name || unknownModel;
     const row = models.get(name) ?? { cards: 0, bytes: 0 };
@@ -155,7 +155,7 @@ export function vendorGroups(gpus: GPUListResponse, unknownModel: string): Vendo
 
 function VendorMark({ vendor }: { vendor: string }) {
   const { t } = useTranslation("common");
-  const name = vendor === "amd" ? "AMD" : t(`vendor.${vendor}`, { defaultValue: vendor.toUpperCase() });
+  const name = t(`vendor.${vendor}`, { defaultValue: vendorFallbackName(vendor) });
   return <span className="dashboard-vendor-mark" title={name}>{hasVendorMark(vendor) ? <VendorMarkImage vendor={vendor} alt={name} style={{ height: VENDOR_LOGO_HEIGHT[vendorMarkKey(vendor)] ?? 14 }} /> : <span>{name}</span>}</span>;
 }
 
@@ -166,7 +166,7 @@ export function ModelComposition({ groups }: { groups: VendorGroup[] }) {
   if (groups.length === 1) {
     const [group] = groups;
     const shown = group.models.slice(0, MAX_SINGLE_VENDOR_ROWS), rest = group.models.slice(shown.length);
-    const vendorName = group.vendor === "amd" ? "AMD" : tc(`vendor.${group.vendor}`, { defaultValue: group.vendor.toUpperCase() });
+    const vendorName = tc(`vendor.${group.vendor}`, { defaultValue: vendorFallbackName(group.vendor) });
     return <div className="dashboard-models is-single">
       <div className="dashboard-models-single-head"><VendorMark vendor={group.vendor} /><span>{t("overview.singleVendor", { vendor: vendorName })}</span><span className="dashboard-models-single-sum"><b>{t("overview.cardsCount", { count: group.cards })}</b> · {gibText(group.vramGiB)}</span></div>
       {shown.map((model) => <div key={model.name} className="dashboard-model-row is-model"><span className="dashboard-model-name" title={model.name}>{model.name}</span>{counts(model.cards, model.vramGiB)}</div>)}

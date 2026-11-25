@@ -10,7 +10,7 @@ import (
 
 func TestAgentGoesOfflineAndReconnectsAfterRealServerRestart(t *testing.T) {
 	env := testenv.NewOnDisk(t)
-	env.AddNode("reconnect-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	env.AddNode("reconnect-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "reconnect-node")
 	before, err := env.Store().ListNodes()
 	if err != nil || len(before) != 1 {

@@ -29,24 +29,38 @@ func TestFeatureSupportByVendor(t *testing.T) {
 	}
 }
 
-// A partial restriction (no vendor carries one today) refuses exactly its
-// features and requires a known launch command.
-func TestPartialRestrictionRefusesOnlyItsFeatures(t *testing.T) {
-	vendor := VendorHygon
-	saved, had := targetConstraints[vendor]
-	targetConstraints[vendor] = targetConstraint{unsupported: []Feature{FeatureDataParallel}}
-	t.Cleanup(func() {
-		if had {
-			targetConstraints[vendor] = saved
-		} else {
-			delete(targetConstraints, vendor)
+// A vendor that lists some features but not all refuses exactly the ones it
+// leaves out and requires a known launch command.
+func TestPartialSupportRefusesOnlyWhatIsNotListed(t *testing.T) {
+	index := -1
+	for i, spec := range vendorSpecs {
+		if spec.id == VendorHygon {
+			index = i
 		}
-	})
-	if missing := Unsupported(vendor, FeatureDataParallel, FeatureEngineSleep); !slices.Equal(missing, []Feature{FeatureDataParallel}) {
-		t.Fatalf("partial restriction lacks %v, want data parallelism only", missing)
 	}
-	if !RequiresKnownLaunchFeatures(vendor) {
-		t.Fatal("a partial restriction must require a known launch")
+	saved := vendorSpecs[index].supports
+	t.Cleanup(func() { vendorSpecs[index].supports = saved })
+	var listed []Feature
+	for _, feature := range Features {
+		if feature != FeatureDataParallel {
+			listed = append(listed, feature)
+		}
+	}
+	vendorSpecs[index].supports = listed
+	if missing := Unsupported(VendorHygon, FeatureDataParallel, FeatureEngineSleep); !slices.Equal(missing, []Feature{FeatureDataParallel}) {
+		t.Fatalf("partial support lacks %v, want data parallelism only", missing)
+	}
+	if !RequiresKnownLaunchFeatures(VendorHygon) {
+		t.Fatal("partial support must require a known launch")
+	}
+	// Listing nothing is not a partial list: every feature is refused, and
+	// plain inference with a command that cannot be read still runs.
+	vendorSpecs[index].supports = nil
+	if missing := Unsupported(VendorHygon, Features...); len(missing) != len(Features) {
+		t.Fatalf("a vendor that lists nothing lacks %v, want every feature", missing)
+	}
+	if RequiresKnownLaunchFeatures(VendorHygon) {
+		t.Fatal("a vendor that supports no feature refused plain inference with an unknown command")
 	}
 }
 

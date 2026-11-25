@@ -21,7 +21,7 @@ import (
 
 func TestInstanceLogsStreamFromAgentThroughHub(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("logs-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("logs-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "logs-node")
 	nodes, _ := env.Store().ListNodes()
 	model, err := env.Store().UpsertModel(&store.Model{Source: "huggingface", SourceID: "logs-model", Revision: "main", Name: "logs-model", Arch: "Qwen3ForCausalLM", WeightBytes: 1 << 30, Meta: `{"model_type":"qwen3","num_hidden_layers":1,"hidden_size":256,"num_attention_heads":8,"num_key_value_heads":8,"max_position_embeddings":2048}`})
@@ -72,7 +72,7 @@ func respStatus(r *http.Response) any {
 
 func TestCollectorMetricsReachAuthenticatedAPI(t *testing.T) {
 	env := testenv.New(t)
-	node := env.AddNode("metrics-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("metrics-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	node.Prober.SetMetrics([]gpu.Metric{{Index: 0, UUID: "metric-gpu-0", Vendor: "nvidia", Values: map[string]float64{"gpuworks_gpu_utilization": 73}}})
 	env.WaitNodeOnline(t, "metrics-node")
 	api := env.API(t)

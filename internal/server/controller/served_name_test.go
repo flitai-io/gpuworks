@@ -46,6 +46,12 @@ func TestClearedAliasLaunchNamesTheModelUnlessTheHostAgentWouldTranslateIt(t *te
 			if err := st.DB().Model(&store.Node{}).Where("id = ?", node.ID).Update("runtime_driver", tc.driver).Error; err != nil {
 				t.Fatal(err)
 			}
+			if tc.driver == proto.RuntimeDriverHost {
+				// The host runtime exists only on a Mac, so the node's cards are a Mac's.
+				if err := st.DB().Model(&store.GPU{}).Where("node_id = ?", node.ID).Update("vendor", "apple").Error; err != nil {
+					t.Fatal(err)
+				}
+			}
 			model, err := st.UpsertModel(&store.Model{
 				Source: "huggingface", SourceID: fmt.Sprintf("fixture/cleared-alias-%d", i), Revision: "main", Name: "cleared-alias",
 				WeightBytes: 1 << 30,
@@ -122,6 +128,10 @@ func TestManualCommandNameIsNotExpectedFromAnOlderHostAgent(t *testing.T) {
 			t.Cleanup(func() { _ = st.Close() })
 			node := sparseGPUNode(t, st, fmt.Sprintf("manual-name-node-%d", i))
 			if err := st.DB().Model(&store.Node{}).Where("id = ?", node.ID).Update("runtime_driver", proto.RuntimeDriverHost).Error; err != nil {
+				t.Fatal(err)
+			}
+			// The host runtime exists only on a Mac, so the node's cards are a Mac's.
+			if err := st.DB().Model(&store.GPU{}).Where("node_id = ?", node.ID).Update("vendor", "apple").Error; err != nil {
 				t.Fatal(err)
 			}
 			model, err := st.UpsertModel(&store.Model{

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/cluster"
 	"gpuworks.ai/gpuworks/internal/server/enrollment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -58,6 +59,10 @@ func clusterUpgradeHandler(bundle *enrollmentBundle, session joinedRaftSession, 
 			Applied: status.Applied, Known: status.Known, Base: status.Base, Ready: status.Ready(),
 			AppliedExtensions: status.AppliedExtensions, KnownExtensions: status.KnownExtensions,
 			AppliedByExtension: status.AppliedExtensionMarkers(),
+			StorageTier:        string(cluster.ProcessStorageTier()),
+		}
+		if recorded, err := RecordedStorageTier(bundle.dataDir); err == nil {
+			response.RecordedStorageTier = string(recorded)
 		}
 		if agents != nil {
 			if held, known := agents(); known {

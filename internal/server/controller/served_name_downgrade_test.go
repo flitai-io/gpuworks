@@ -29,6 +29,10 @@ func TestDowngradedHostAgentRetriesAFlaggedReplicaWithoutTheName(t *testing.T) {
 	if err := st.DB().Model(&store.Node{}).Where("id = ?", node.ID).Update("runtime_driver", proto.RuntimeDriverHost).Error; err != nil {
 		t.Fatal(err)
 	}
+	// The host runtime exists only on a Mac, so the node's cards are a Mac's.
+	if err := st.DB().Model(&store.GPU{}).Where("node_id = ?", node.ID).Update("vendor", "apple").Error; err != nil {
+		t.Fatal(err)
+	}
 	model, err := st.UpsertModel(&store.Model{
 		Source: "huggingface", SourceID: "fixture/served-name-downgrade", Revision: "main", Name: "served-name-downgrade",
 		WeightBytes: 1 << 30,

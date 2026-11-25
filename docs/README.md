@@ -130,6 +130,7 @@
 - [开发者文档总览](dev/README.md)
 - [代码地图：逐包职责](dev/code-map.md)
 - [扩展点：模块契约与可安装扩展](dev/extensions.md)
+- [接入一个新的加速卡厂商](dev/add-accelerator-vendor.md)
 - [本地搭建](dev/setup.md)
 - [测试指南与云端分层](dev/testing.md)
 - [AMD 接入结构与硬件验收](dev/amd-hardware-validation.md)

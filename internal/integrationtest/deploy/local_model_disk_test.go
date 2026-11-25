@@ -49,7 +49,7 @@ func TestExistingModelDirectoryCanBeRegisteredAfterDiskRefusal(t *testing.T) {
 	}))
 	t.Cleanup(hub.Close)
 	env := testenv.NewWithModelEndpoint(t, hub.URL)
-	node := env.AddNode("local-disk-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("local-disk-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, node.Name)
 	api := env.API(t)
 	post := func(path string, body any, status int) []byte {

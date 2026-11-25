@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	agentruntime "gpuworks.ai/gpuworks/internal/agent/runtime"
 )
 
 type kunlunDeviceInfo struct {
@@ -283,7 +284,7 @@ func TestKunlunSelectedDevicesIsolation(t *testing.T) {
 				}
 				return originalRead(path)
 			}
-			got := p.RuntimeInjectionForDriver(indexes, driver)
+			got := p.RuntimeInjectionForDriver(indexes, agentruntime.TargetNamed(driver))
 			pass := kind == "single" || kind == "multi" || kind == "empty"
 			if !pass {
 				wantCause := map[string]string{
@@ -304,7 +305,7 @@ func TestKunlunSelectedDevicesIsolation(t *testing.T) {
 				if !strings.Contains(got.UnsupportedReason, wantCause) {
 					t.Fatalf("%s cause = %q, want %q", kind, got.UnsupportedReason, wantCause)
 				}
-				if got.UnsupportedReason == "" || len(got.DockerArgs) != 0 || len(got.Env) != 0 {
+				if got.UnsupportedReason == "" || len(got.Grant.DockerDeviceArgs()) != 0 || len(got.Env) != 0 {
 					t.Fatalf("unsafe injection %+v", got)
 				}
 				return
@@ -313,7 +314,7 @@ func TestKunlunSelectedDevicesIsolation(t *testing.T) {
 				t.Fatal(got)
 			}
 			if kind == "empty" {
-				if len(got.Env) != 0 || len(got.DockerArgs) != 0 {
+				if len(got.Env) != 0 || len(got.Grant.DockerDeviceArgs()) != 0 {
 					t.Fatal(got)
 				}
 				return
@@ -326,7 +327,7 @@ func TestKunlunSelectedDevicesIsolation(t *testing.T) {
 				wantEnv["XPU_VISIBLE_DEVICES"] = "0,1"
 			}
 			want = append(want, "--device", "/dev/xpuctrl:/dev/xpuctrl:rwm")
-			if !reflect.DeepEqual(got.DockerArgs, want) || !reflect.DeepEqual(got.Env, wantEnv) {
+			if !reflect.DeepEqual(got.Grant.DockerDeviceArgs(), want) || !reflect.DeepEqual(got.Env, wantEnv) {
 				t.Fatal(got, want, wantEnv)
 			}
 		})
@@ -378,7 +379,7 @@ func TestKunlunInjectionChecksFreshCLIWhenQueryCacheIsStale(t *testing.T) {
 	if cached, err := p.inventory(t.Context()); err != nil || cached.Cards[1].UUID != "GPU-fixture-2" {
 		t.Fatalf("query cache was not stale: %+v, %v", cached, err)
 	}
-	if got := p.RuntimeInjectionForDriver([]int{1}, "docker"); !strings.Contains(got.UnsupportedReason, "identity changed") || len(got.DockerArgs) != 0 {
+	if got := p.RuntimeInjectionForDriver([]int{1}, agentruntime.TargetNamed("docker")); !strings.Contains(got.UnsupportedReason, "identity changed") || len(got.Grant.DockerDeviceArgs()) != 0 {
 		t.Fatalf("stale query authorized injection: %+v", got)
 	}
 }

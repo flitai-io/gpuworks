@@ -8,11 +8,22 @@ import (
 	"strings"
 	"syscall"
 
+	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/agent/runtime/procgroup"
 )
 
+// isAscendSpec and isNVIDIASpec say whether a workload needs this driver's
+// Ascend preparation (support paths, compatibility library) or its NVIDIA
+// one (driver library shim). The answer is the vendor the workload's grant
+// names. A workload that names none, such as one read back from a record on
+// disk that has no grant, is classified from the variables and devices it
+// carries; that inference knows only the vendors below and takes any other
+// whose images set CUDA_VISIBLE_DEVICES for NVIDIA.
 func isAscendSpec(spec runtime.WorkloadSpec) bool {
+	if spec.Grant.Vendor != "" {
+		return spec.Grant.Vendor == accelerator.VendorAscend
+	}
 	return strings.TrimSpace(spec.Env["ASCEND_VISIBLE_DEVICES"]) != ""
 }
 
@@ -30,6 +41,9 @@ func isHygonSpec(spec runtime.WorkloadSpec) bool {
 }
 
 func isNVIDIASpec(spec runtime.WorkloadSpec) bool {
+	if spec.Grant.Vendor != "" {
+		return spec.Grant.Vendor == accelerator.VendorNVIDIA
+	}
 	return strings.TrimSpace(spec.Env["CUDA_VISIBLE_DEVICES"]) != ""
 }
 
@@ -43,6 +57,9 @@ func isAMDSpec(spec runtime.WorkloadSpec) bool {
 // isNonNVIDIASpec reports a workload whose accelerator needs none of the
 // NVIDIA shim setup (libraries, CUDA_VISIBLE_DEVICES, nvidia-smi).
 func isNonNVIDIASpec(spec runtime.WorkloadSpec) bool {
+	if spec.Grant.Vendor != "" {
+		return spec.Grant.Vendor != accelerator.VendorNVIDIA
+	}
 	return isAscendSpec(spec) || isPPUSpec(spec) || isHygonSpec(spec) || isAMDSpec(spec)
 }
 
@@ -83,19 +100,25 @@ func acceleratorMounts(spec runtime.WorkloadSpec) []runtime.Mount {
 			}
 		}
 	}
-	// Raw device arguments are emitted by the Ascend/PPU/Hygon probers. Parse
-	// the Docker-compatible spellings uniformly so a new vendor does not need
-	// another permission branch in the udocker driver.
-	for i := 0; i < len(spec.DockerArgs); i++ {
-		arg := spec.DockerArgs[i]
-		if arg == "--device" && i+1 < len(spec.DockerArgs) {
+	// Devices among the workload's own options: the ones a user wrote or the
+	// server resolved (a compute network's /dev/infiniband), and every
+	// device of a record on disk that has no grant.
+	own := spec.OwnDockerArgs()
+	for i := 0; i < len(own); i++ {
+		arg := own[i]
+		if arg == "--device" && i+1 < len(own) {
 			i++
-			add(strings.SplitN(spec.DockerArgs[i], ":", 2)[0])
+			add(strings.SplitN(own[i], ":", 2)[0])
 			continue
 		}
 		if value, ok := strings.CutPrefix(arg, "--device="); ok {
 			add(strings.SplitN(value, ":", 2)[0])
 		}
+	}
+	// The devices the workload was granted are bound as they are, whichever
+	// vendor's they are.
+	for _, device := range spec.Grant.Devices {
+		add(device.Path)
 	}
 	if isNVIDIASpec(spec) {
 		// The device node backing CUDA index N is named after the driver's

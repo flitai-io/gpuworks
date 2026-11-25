@@ -22,7 +22,7 @@ func TestLocalModelCanBeSavedAndReusedThroughHTTP(t *testing.T) {
 	for _, sourceID := range []string{"company-tuned-model", "Company Tuned Model", "公司模型:微调"} {
 		t.Run(sourceID, func(t *testing.T) {
 			env := testenv.New(t)
-			node := env.AddNode("local-template-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+			node := env.AddNode("local-template-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 			env.WaitNodeOnline(t, node.Name)
 			client := env.API(t)
 			call := func(method, path, contentType string, body []byte, want int) []byte {
@@ -250,7 +250,7 @@ func TestLocalModelCanBeSavedAndReusedThroughHTTP(t *testing.T) {
 			// Importing a local template into a cluster without its registered weights
 			// must explain what is missing, not create a fake downloadable model.
 			missingEnv := testenv.New(t)
-			missingNode := missingEnv.AddNode("missing-local-weights", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+			missingNode := missingEnv.AddNode("missing-local-weights", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 			missingEnv.WaitNodeOnline(t, missingNode.Name)
 			client = missingEnv.API(t)
 			call(http.MethodPost, "/api/v1/inference-templates/import", "application/yaml", []byte(exported.YAML), http.StatusOK)

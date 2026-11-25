@@ -12,10 +12,20 @@ import (
 var processStorageTier atomic.Pointer[storagetier.Tier]
 
 // UseStorageTier sets the tier every database node started by this process
-// runs with, unless its DatabaseConfig names one. A command calls it once,
-// with the tier its installation records, before it opens the database.
+// runs with. A command calls it once, with the tier its installation records
+// (a joining member: the tier the cluster told it), before it opens the
+// database.
 func UseStorageTier(tier storagetier.Tier) {
 	processStorageTier.Store(&tier)
+}
+
+// ProcessStorageTier is the tier this process was told, whatever its
+// installation records by now. It is the one source of the member's timing
+// for everything outside the node: the membership grant's retry window, how
+// long a leader observation is acted on, the liveness limit of the
+// connections this process dials.
+func ProcessStorageTier() storagetier.Tier {
+	return DatabaseConfig{}.storageTier()
 }
 
 // storageTier resolves the tier a node starts with: the configuration's own,

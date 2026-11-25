@@ -77,7 +77,8 @@ func runCLI(t *testing.T, root, base string, extra ...string) (string, int) {
 	cmd.Dir = root
 	for _, v := range os.Environ() {
 		key, _, _ := strings.Cut(v, "=")
-		if key == "CI" || strings.HasPrefix(key, "CI_") || strings.HasPrefix(key, "CHANGE_RECORD_") || key == "GITLAB_TOKEN" {
+		if key == "CI" || strings.HasPrefix(key, "CI_") || strings.HasPrefix(key, "CHANGE_RECORD_") || key == "GITLAB_TOKEN" ||
+			strings.HasPrefix(key, "GITHUB_") {
 			continue
 		}
 		cmd.Env = append(cmd.Env, v)
@@ -275,5 +276,61 @@ func TestCLIDeletingDocsDoesNotRecordContract(t *testing.T) {
 	gitCLI(t, root, "commit", "-m", "delete old doc with contract change")
 	if out, code := runCLI(t, root, base); code == 0 {
 		t.Fatalf("deleting docs does not describe the contract: %s", out)
+	}
+}
+
+// A GitHub pull request is a merge gate too: contract records are checked
+// from its own diff against its own base branch.
+func TestCLIGitHubPullRequestChecksContractRecords(t *testing.T) {
+	root, base := newCLIRepo(t)
+	gitCLI(t, root, "reset", "--hard", base)
+	gitCLI(t, root, "update-ref", "refs/remotes/origin/main", base)
+	writeCLI(t, root, "internal/server/api/errors.go", "changed\n")
+	gitCLI(t, root, "add", ".")
+	gitCLI(t, root, "commit", "-m", "contract change")
+	github := []string{"CI=true", "GITHUB_ACTIONS=true", "GITHUB_EVENT_NAME=pull_request", "GITHUB_BASE_REF=main", "GITHUB_HEAD_REF=work/record"}
+	// CHANGE_RECORD_BASE (set by runCLI) names the head itself: were it used,
+	// the diff would be empty and the gate would pass.
+	head := gitCLI(t, root, "rev-parse", "HEAD")
+	out, code := runCLI(t, root, head, github...)
+	if code == 0 || !strings.Contains(out, "contract paths changed") || !strings.Contains(out, "internal/server/api/errors.go") {
+		t.Fatalf("missing docs must fail on a GitHub pull request: %d %s", code, out)
+	}
+	writeCLI(t, root, "docs/reference/api.md", "new contract\n")
+	gitCLI(t, root, "add", ".")
+	gitCLI(t, root, "commit", "-m", "source record")
+	if out, code := runCLI(t, root, head, github...); code != 0 || !strings.Contains(out, "contract 1") {
+		t.Fatalf("updated source docs must pass: %d %s", code, out)
+	}
+}
+
+// Decision records live behind the GitLab API. The GitHub run passes, and
+// says in so many words that it did not check them.
+func TestCLIGitHubPullRequestSaysDecisionRecordIsUnverified(t *testing.T) {
+	root, base := newCLIRepo(t)
+	gitCLI(t, root, "update-ref", "refs/remotes/origin/main", base)
+	out, code := runCLI(t, root, base, "CI=true", "GITHUB_ACTIONS=true", "GITHUB_EVENT_NAME=pull_request", "GITHUB_BASE_REF=main")
+	if code != 0 || !strings.Contains(out, "NOT verified on GitHub") || !strings.Contains(out, "internal/agent/modelsync/payload.go") {
+		t.Fatalf("decision change on a GitHub pull request: %d %s", code, out)
+	}
+}
+
+// Without the pull request's base the diff is unknown, and an unknown diff is
+// a failure, not a skip.
+func TestCLIGitHubPullRequestNeedsItsBase(t *testing.T) {
+	root, base := newCLIRepo(t)
+	out, code := runCLI(t, root, base, "CI=true", "GITHUB_ACTIONS=true", "GITHUB_EVENT_NAME=pull_request", "GITHUB_BASE_REF=main")
+	if code == 0 || !strings.Contains(out, "no merge base with origin/main") {
+		t.Fatalf("a missing base must fail: %d %s", code, out)
+	}
+}
+
+func TestCLIGitHubNonPullRequestRunIsNotTheGate(t *testing.T) {
+	root, base := newCLIRepo(t)
+	for _, event := range []string{"push", "workflow_dispatch", "schedule"} {
+		out, code := runCLI(t, root, base, "CI=true", "GITHUB_ACTIONS=true", "GITHUB_EVENT_NAME="+event)
+		if code != 0 || !strings.Contains(out, "non-MR") {
+			t.Fatalf("%s run must not act as the merge gate: %d %s", event, code, out)
+		}
 	}
 }

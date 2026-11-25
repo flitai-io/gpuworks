@@ -22,3 +22,10 @@ decision	internal/server/hub/network_sync.go
 decision	internal/server/hub/image_direct_sync.go
 decision	internal/server/hub/image_archive_relay.go
 decision	internal/server/deploy/startup_budget.go
+
+# Rules and the checks that enforce them. Changing one is a rule change, and
+# the record says what was relaxed or tightened and why.
+decision	build/runner-images/README.md
+decision	cmd/gpuworks-image-manifest/*.go
+decision	.golangci.yml
+decision	scripts/change-record-rules.txt

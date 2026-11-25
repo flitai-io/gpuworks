@@ -284,6 +284,7 @@ test-host-env-adapters:
 .PHONY: test-runner-image-scripts
 test-runner-image-scripts:
 	python3 -B build/runner-images/test_prebuilt.py
+	python3 -B build/runner-images/test_tag_check.py
 	python3 -B build/runner-images/test_ascend_reload_patch.py
 
 .PHONY: test-inference-template-assets
@@ -623,11 +624,12 @@ runtime-assets-verify:
 
 IMAGE_MATRIX ?= build/runner-images/matrix.yaml
 IMAGE_MANIFEST_SEED := internal/server/imagecatalog/catalog-seed.json
+IMAGE_TAG_GRAMMAR := build/runner-images/tag-grammar.txt
 
 .PHONY: image-manifest
 ## image-manifest: regenerate the system image catalog seed from the gpuworks-runner matrix
 image-manifest:
-	$(GO) run ./cmd/gpuworks-image-manifest -in $(IMAGE_MATRIX) -out $(IMAGE_MANIFEST_SEED) $(if $(IMAGE_MANIFEST_DATE),-date $(IMAGE_MANIFEST_DATE))
+	$(GO) run ./cmd/gpuworks-image-manifest -in $(IMAGE_MATRIX) -out $(IMAGE_MANIFEST_SEED) -grammar-out $(IMAGE_TAG_GRAMMAR) $(if $(IMAGE_MANIFEST_DATE),-date $(IMAGE_MANIFEST_DATE))
 
 .PHONY: image-manifest-verify
 ## image-manifest-verify: check every reference in the seed pulls whole from every registry it lists

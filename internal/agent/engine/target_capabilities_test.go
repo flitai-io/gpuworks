@@ -128,15 +128,17 @@ func TestTargetDesiredAcceptsAMDDistributedAndSleepWire(t *testing.T) {
 func TestTargetDesiredLeavesOtherVendorLaunchPolicyToServer(t *testing.T) {
 	for _, tc := range []struct {
 		vendor string
+		driver string
 		spec   proto.InstanceDesiredState
 	}{
-		{vendor: "apple", spec: proto.InstanceDesiredState{}},
-		{vendor: "nvidia", spec: proto.InstanceDesiredState{NNodes: 2}},
-		{vendor: "ascend", spec: proto.InstanceDesiredState{SMLimitPct: 50}},
+		// A Mac's engines are host processes; its cards are on no other runtime.
+		{vendor: "apple", driver: "host", spec: proto.InstanceDesiredState{}},
+		{vendor: "nvidia", driver: "docker", spec: proto.InstanceDesiredState{NNodes: 2}},
+		{vendor: "ascend", driver: "docker", spec: proto.InstanceDesiredState{SMLimitPct: 50}},
 	} {
 		t.Run(tc.vendor, func(t *testing.T) {
 			factsRead := false
-			e := NewWithProber(&headlessTestDriver{name: "docker"}, nil, nil, t.TempDir(), &gpu.FixedProber{VendorName: tc.vendor}, WithHostRuntimeFacts(func() accelerator.HostRuntime {
+			e := NewWithProber(&headlessTestDriver{name: tc.driver}, nil, nil, t.TempDir(), &gpu.FixedProber{VendorName: tc.vendor}, WithHostRuntimeFacts(func() accelerator.HostRuntime {
 				factsRead = true
 				return accelerator.HostRuntime{}
 			}))
@@ -222,7 +224,11 @@ func (d *preflightTrackingDriver) Run(context.Context, runtime.WorkloadSpec) (st
 
 func TestTargetDesiredUnknownSnapshotIsVendorScoped(t *testing.T) {
 	for _, vendor := range []string{"amd", "nvidia", "ascend", "apple"} {
-		e := NewWithProber(&headlessTestDriver{name: "docker"}, nil, nil, t.TempDir(), &gpu.FixedProber{VendorName: vendor})
+		driver := "docker"
+		if vendor == "apple" {
+			driver = "host" // a Mac's cards are on no other runtime
+		}
+		e := NewWithProber(&headlessTestDriver{name: driver}, nil, nil, t.TempDir(), &gpu.FixedProber{VendorName: vendor})
 		spec := proto.InstanceDesiredState{GPUIndexes: []int{0}, ResolvedLaunch: proto.ResolvedLaunch{RequestedFeatures: &proto.RequestedFeatures{CommandKnown: false}}}
 		// No vendor carries a partial restriction today, so an unknown
 		// command needs no proof anywhere.
@@ -246,8 +252,9 @@ func TestTargetDesiredRejectsContradictorySnapshotButAllowsSleepAPIMetadata(t *t
 }
 
 func TestLegacyTargetDesiredSleepMetadataIsNotARequest(t *testing.T) {
-	// Apple is the vendor that refuses engine sleep.
-	e := NewWithProber(&headlessTestDriver{name: "docker"}, nil, nil, t.TempDir(), &gpu.FixedProber{VendorName: "apple"})
+	// Apple is the vendor that refuses engine sleep; its cards are on the
+	// host runtime.
+	e := NewWithProber(&headlessTestDriver{name: "host"}, nil, nil, t.TempDir(), &gpu.FixedProber{VendorName: "apple"})
 	for _, tc := range []struct {
 		name   string
 		spec   proto.InstanceDesiredState
@@ -289,5 +296,32 @@ func TestTargetDesiredReChecksExternalKVCache(t *testing.T) {
 	raw, _ := json.Marshal(proto.RequestedFeatures{CommandKnown: true})
 	if string(raw) != `{"command_known":true}` {
 		t.Fatalf("wire = %s, want the field omitted", raw)
+	}
+}
+
+// A launch on a runtime the cards' vendor does not list is refused at
+// admission, before an image is prepared: a Mac's card under docker, and a
+// Linux vendor's card under the host runtime.
+func TestTargetDesiredRefusesARuntimeTheVendorDoesNotList(t *testing.T) {
+	for _, tc := range []struct {
+		vendor, driver string
+		refuse         bool
+	}{
+		{"apple", "docker", true},
+		{"apple", "host", false},
+		{"nvidia", "host", true},
+		{"nvidia", "udocker", false},
+		{"ppu", "kube", false},
+	} {
+		e := NewWithProber(&headlessTestDriver{name: tc.driver}, nil, nil, t.TempDir(), &gpu.FixedProber{VendorName: tc.vendor})
+		err := e.validateTargetDesired(proto.InstanceDesiredState{GPUIndexes: []int{0}})
+		if (err != nil) != tc.refuse {
+			t.Fatalf("%s on %s: err = %v, want refusal %v", tc.vendor, tc.driver, err, tc.refuse)
+		}
+		if err != nil {
+			if failure := failureOf(err, "", ""); failure.Code != proto.ErrorAcceleratorRuntimeUnsupported {
+				t.Fatalf("%s on %s: failure = %+v", tc.vendor, tc.driver, failure)
+			}
+		}
 	}
 }

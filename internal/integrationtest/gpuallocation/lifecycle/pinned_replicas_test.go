@@ -20,7 +20,7 @@ import (
 // for the extra replica; the controller must explain why it is waiting.
 func TestPinnedReplicaScaleReportsBusyAndPreservesDesiredCount(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("pinned-replica", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	env.AddNode("pinned-replica", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "pinned-replica")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

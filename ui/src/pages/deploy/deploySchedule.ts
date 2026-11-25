@@ -1,4 +1,4 @@
-import { acceleratorMessageParams } from "../../acceleratorMessages";
+import { acceleratorMessageParams, hostRequirement } from "../../acceleratorMessages";
 import type { TFunction } from "i18next";
 
 import type { GPUPredicate, ScheduleMessageLike } from "../../api";
@@ -36,7 +36,9 @@ export function scheduleText(
           ? heldParams(t, value.params)
           : code === "held_outside_platform_not_allowed"
             ? { ...value.params, gpus: listText(value.params?.gpus) }
-            : value.params;
+            : code === "runtime_unsupported" || code === "runtime_unreported"
+              ? { ...value.params, required: hostRequirement(value.params) }
+              : value.params;
     const translated = t(key, { ...params, defaultValue: "" });
     if (translated && translated !== key) return translated + scheduleNote(t, value);
   }

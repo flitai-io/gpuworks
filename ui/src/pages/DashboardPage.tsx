@@ -1,3 +1,4 @@
+import { useVendorDictionary } from "../hooks/useVendorDictionary";
 import { useEffect, useState, type ReactNode } from "react";
 import { ConsoleIcon } from "../ui-kit/consoleIcons";
 import { Button } from "../components/ui/button";
@@ -172,6 +173,7 @@ export default function DashboardPage() {
     if (refreshState === "finished") setRefreshState(refreshFailed ? "incomplete" : "idle");
     if (refreshState === "incomplete" && !refreshFailed) setRefreshState("idle");
   }, [refreshState, refreshFailed]);
+  useVendorDictionary();
   const groups = gpus.data ? vendorGroups(gpus.data, t("overview.unknownGpu")) : [];
   const modelCount = groups.reduce((sum, group) => sum + group.models.length, 0);
 

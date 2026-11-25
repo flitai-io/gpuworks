@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/agent/runtime/kube/podresources"
 )
 
@@ -129,14 +130,16 @@ func kunlunRig(t *testing.T) *rig {
 	return r
 }
 
-// TestRunHandsKunlunDevicesThroughThePlugin: the Kunlun injection for the
-// driver "kube" names no --runtime, so the pod has no runtime class (a
-// "runc" class does not exist); it asks the plugin for its card and the
-// shared control node, unprivileged.
+// TestRunHandsKunlunDevicesThroughThePlugin: the Kunlun grant names the
+// plain runtime, which a pod has no class for (a "runc" class does not
+// exist), so the pod has no runtime class; it asks the plugin for its card
+// and the shared control node, unprivileged.
 func TestRunHandsKunlunDevicesThroughThePlugin(t *testing.T) {
 	r := kunlunRig(t)
 	s := spec("gpuworks-bbbbbbbbbbb1", 1)
-	s.DockerArgs = []string{"--device", "/dev/xpu1:/dev/xpu1:rwm", "--device", "/dev/xpuctrl:/dev/xpuctrl:rwm"}
+	s.Grant = runtime.DeviceGrant{RuntimeClass: runtime.PlainRuntimeClass, Devices: []runtime.Device{
+		{Path: "/dev/xpu1", Access: runtime.DeviceAccessAll}, {Path: "/dev/xpuctrl", Access: runtime.DeviceAccessAll},
+	}}
 	s.Env["XPU_VISIBLE_DEVICES"] = "0"
 	id, err := r.d.Run(context.Background(), s)
 	if err != nil {
@@ -172,18 +175,21 @@ func TestRunHandsKunlunDevicesThroughThePlugin(t *testing.T) {
 	}
 }
 
-// TestKunlunDockerRuntimeOptionBecomesARuntimeClass pins why the Kunlun
-// injection leaves --runtime out for Kubernetes: a pod made from the docker
-// form names a RuntimeClass "runc", which a cluster does not define.
-func TestKunlunDockerRuntimeOptionBecomesARuntimeClass(t *testing.T) {
+// TestPlainRuntimeGrantLeavesTheWorkloadsOwnRuntimeClass: a pod has no class
+// for the plain runtime, so a grant of it neither becomes the pod's class
+// nor displaces one the workload names itself.
+func TestPlainRuntimeGrantLeavesTheWorkloadsOwnRuntimeClass(t *testing.T) {
 	r := kunlunRig(t)
 	s := spec("gpuworks-bbbbbbbbbbb2", 0)
-	s.DockerArgs = []string{"--runtime", "runc", "--device", "/dev/xpu0:/dev/xpu0:rwm", "--device", "/dev/xpuctrl:/dev/xpuctrl:rwm"}
+	s.DockerArgs = []string{"--runtime", "kata"}
+	s.Grant = runtime.DeviceGrant{RuntimeClass: runtime.PlainRuntimeClass, Devices: []runtime.Device{
+		{Path: "/dev/xpu0", Access: runtime.DeviceAccessAll}, {Path: "/dev/xpuctrl", Access: runtime.DeviceAccessAll},
+	}}
 	id, err := r.d.Run(context.Background(), s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rc := r.srv.Pod(testNS, id).Spec.RuntimeClassName; rc == nil || *rc != "runc" {
-		t.Fatalf("runtime class = %v", rc)
+	if rc := r.srv.Pod(testNS, id).Spec.RuntimeClassName; rc == nil || *rc != "kata" {
+		t.Fatalf("runtime class = %v, want the workload's own", rc)
 	}
 }

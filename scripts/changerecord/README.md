@@ -17,6 +17,13 @@ credentials, denied access, invalid responses and truncated diffs fail the gate.
 Default-branch, scheduled and release pipelines do not re-require an open MR
 after it may have been merged.
 
+A GitHub pull request run (`GITHUB_EVENT_NAME=pull_request`) is a merge gate
+for contract changes: it diffs the pull request against `origin/$GITHUB_BASE_REF`
+and fails when that base is missing (the checkout needs `fetch-depth: 0`).
+Decision records are not verified there, because the companion MR is read
+through the GitLab API; the run prints the decision paths it did not check and
+passes. Other GitHub runs (push, manual, scheduled) are not the gate.
+
 The first CI job runs the gate's CLI/HTTP regression tests and the check before
 UI, documentation builds or other tests start. The CI graph check rejects jobs
 that bypass this dependency. `make test` and `make test-unit` also wait for the

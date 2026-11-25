@@ -7,7 +7,7 @@
 | AMD / ROCm | amdgpu sysfs、KFD | Linux amd64、Docker/nerdctl/runveil/Kubernetes 上的整卡部署；上游 vLLM ROCm 镜像已在 MI325X（gfx942）与 AMD395（gfx1151）单卡 BF16 文本推理实测，其余组合逐档待验 | amd-dgpu 显存配额（rocm-slicing-shim，用户态；已在 MI300X/gfx942 的 Docker 与 runveil、MI325X 的 Kubernetes 下实测；Docker/nerdctl/runveil/Kubernetes） | 多机与 PP 经 vLLM mp 后端运行（RCCL 读取 NCCL_* 网络变量，已在两台 MI325X 上实测 PP=2 与跨机 TP=2）；vLLM sleep/wake（L1/L2）与 PD（`vllm-nixl`，以太网 UCX TCP）已在 MI300X 上实测；这不是对所有 AMD 卡或 ROCm 组合的兼容性承诺 |
 | PPU / HGGC | ppu-smi | provider/runtime 依赖 | ppu-slicing-shim 显存配额与加权 QoS（Docker、Kubernetes） | 20/80 长负载已证明繁忙时吞吐权重，不是硬 SM 分区 |
 | 海光 / DTK | hy-smi | 由目录 spec 和 runtime 决定 | Z100 / K100_AI / BW 原生 vdev（实验性，x86_64，Docker 或 runveil/udocker） | 需可选原生 helper、宿主库和逐卡行为探针；其他型号仍只支持整卡 |
-| Apple / Metal | sysctl、ioreg（macOS 15+，Apple silicon） | host（引擎为宿主机进程，镜像是 darwin 环境包） | 无；一台 Mac 按统一内存同时跑多个实例 | 1 张统一内存卡，显存为 Metal 工作集；不支持引擎休眠、多机、KV 磁盘层；见 [ADR 0044](../adr/0044-mac-engines-as-host-processes.md) |
+| Apple / Metal | sysctl、ioreg（macOS 15+，Apple silicon） | host（引擎为宿主机进程，镜像是 darwin 环境包） | 无；一台 Mac 按统一内存同时跑多个实例 | 1 张统一内存卡，显存为 Metal 工作集；不支持引擎休眠、多机、KV 磁盘层等平台功能（完整列表见下文「定义里声明的支持范围」）；见 [ADR 0044](../adr/0044-mac-engines-as-host-processes.md) |
 | 昆仑芯 / XRE | xpu-smi XML、PCI/sysfs 设备身份 | Linux amd64、Docker/nerdctl/Kubernetes、P800 PCIe / KL3、整卡 TP / PP / DP | 不支持 | TP、PP、引擎 DP；跨节点须满足通信前提；不开放 PD、sleep、runveil；镜像和模型使用显式目录 spec |
 
 上表的 dGPU 能力状态由 server 的 partition capability（分区能力判定）推导：
@@ -24,6 +24,24 @@ Kubernetes 节点（见[接入 Kubernetes 集群](../how-to/connect-kubernetes.m
 
 Slurm 节点（线下 Slurm 集群，或阿里云 E-HPC 集群，见[接入 Slurm 集群](../how-to/connect-slurm-nodes.md)）目前只支持 NVIDIA 卡：卡仍归 Slurm 分配，部署用占位作业借卡；没有 NVIDIA GPU 的节点（CPU 队列）不装 agent，也不会出现在平台。E-HPC 之外的云厂商 HPC 产品、非 Slurm 的调度器（PBS 等）还不能接入。
 
+
+## 定义里声明的支持范围
+
+下表由各厂商的定义（`internal/accelerator/<厂商>.go`）生成，不手写。节点的系统与架构不是「要求的宿主机」、运行时不在「可承载负载的运行时」里、或请求了「不提供的平台功能」时，server 在调度前拒绝。「概览命令」是给运维看卡用的厂商工具，驱动不一定靠它探测（AMD 读 sysfs）。表里说的是平台放行什么：新加进定义的每一项要有真机证据（见[接入指南](../dev/add-accelerator-vendor.md)的评审规范），沿用下来的组合并非都验证过，验证情况见上表与各节。
+
+<!-- declared-support:begin -->
+| 厂商 | 镜像框架 | 概览命令 | 要求的宿主机 | 可承载负载的运行时 | 不提供的平台功能 | dGPU 后端（运行时） |
+|---|---|---|---|---|---|---|
+| NVIDIA | `cuda` | `nvidia-smi` | 不限 | `docker`、`nerdctl`、`udocker`、`kube` | 无 | `nvidia-dgpu`（`docker`、`nerdctl`、`udocker`、`kube`） |
+| AMD | `rocm` | `rocminfo` | `linux/amd64` | `docker`、`nerdctl`、`udocker`、`kube` | 无 | `amd-dgpu`（`docker`、`nerdctl`、`udocker`、`kube`） |
+| Ascend | `cann` | `npu-smi info` | 不限 | `docker`、`nerdctl`、`udocker`、`kube` | 无 | `ascend-dgpu`（`docker`、`nerdctl`、`udocker`、`kube`） |
+| T-Head | `hggc` | `ppu-smi` | 不限 | `docker`、`nerdctl`、`udocker`、`kube` | 无 | `ppu-dgpu`（`docker`、`kube`） |
+| Hygon | `dtk` | `hy-smi` | 不限 | `docker`、`nerdctl`、`udocker`、`kube` | 无 | `hygon-dgpu`（`docker`、`udocker`） |
+| Apple | `metal` | 无 | 不限 | `host` | `engine_sleep`、`multi_node`、`prefill_decode_disaggregation`、`kv_disk_tier`、`pipeline_parallelism`、`data_parallelism`、`external_kv_cache` | 无 |
+| Kunlunxin | `xre` | `xpu-smi -q -x` | `linux/amd64` | `docker`、`nerdctl`、`kube` | `engine_sleep`、`prefill_decode_disaggregation` | 无 |
+<!-- declared-support:end -->
+
+修改定义后用 `GPUWORKS_UPDATE_SUPPORT_MATRIX=1 go test -run TestSupportMatrixTableIsWrittenFromTheDefinitions ./internal/accelerator/` 重新生成，再用 `python3 docs-site/check_translations.py --write docs/reference/support-matrix.md` 记下本页新的来源哈希，否则翻译检查会报这一节已变。
 
 ## dGPU 能力对比
 

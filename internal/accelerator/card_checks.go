@@ -47,13 +47,8 @@ const (
 // RDMA NICs register its cards' memory, or "" for a vendor without one this
 // platform checks.
 func PeerMemoryModule(vendor string) string {
-	switch NormalizeVendor(vendor) {
-	case VendorPPU:
-		return "alixpu_peermem"
-	case VendorNVIDIA:
-		return "nvidia_peermem"
-	}
-	return ""
+	spec, _ := vendorSpecOf(vendor)
+	return spec.peerMemoryModule
 }
 
 // PeerMemoryFix is the command that loads a vendor's peer-memory module now
@@ -94,18 +89,32 @@ var cardCheckCatalog = []CardCheckSpec{
 	{ID: CheckOccupancy, Period: ReportPeriod},
 	{ID: CheckPCIeLink, Period: ReportPeriod},
 	{ID: CheckPCIeErrors, Period: ReportPeriod},
-	{ID: CheckXid, Period: ReportPeriod, Vendors: []string{VendorNVIDIA}},
-	{ID: CheckNVLink, Period: NVLinkCheckPeriod, Vendors: []string{VendorNVIDIA}},
-	{ID: CheckRuntime, Period: RuntimeCheckPeriod, Vendors: []string{VendorNVIDIA, VendorAscend, VendorHygon, VendorPPU}},
-	{ID: CheckPeerMemory, Period: ReportPeriod, Vendors: []string{VendorNVIDIA, VendorPPU}},
+	{ID: CheckXid, Period: ReportPeriod, Vendors: vendorsChecked(CheckXid)},
+	{ID: CheckNVLink, Period: NVLinkCheckPeriod, Vendors: vendorsChecked(CheckNVLink)},
+	{ID: CheckRuntime, Period: RuntimeCheckPeriod, Vendors: vendorsChecked(CheckRuntime)},
+	{ID: CheckPeerMemory, Period: ReportPeriod, Vendors: vendorsChecked(CheckPeerMemory)},
+}
+
+// vendorsChecked lists the vendors whose entry names a check.
+func vendorsChecked(check string) []string {
+	var vendors []string
+	for _, spec := range vendorSpecs {
+		for _, own := range spec.checks {
+			if own == check {
+				vendors = append(vendors, spec.id)
+			}
+		}
+	}
+	return vendors
 }
 
 // CardChecks are the checks that exist for a vendor's cards, in display order.
 func CardChecks(vendor string) []CardCheckSpec {
-	vendor = NormalizeVendor(vendor)
-	if vendor == VendorApple || vendor == "" {
+	spec, _ := vendorSpecOf(vendor)
+	if !spec.cardChecks {
 		return nil
 	}
+	vendor = spec.id
 	out := make([]CardCheckSpec, 0, len(cardCheckCatalog))
 	for _, spec := range cardCheckCatalog {
 		if len(spec.Vendors) == 0 || containsVendor(spec.Vendors, vendor) {
@@ -167,22 +176,8 @@ func CardCheckProbe(check string, card HealthCard) string {
 	bdf := NormalizeBDF(strings.TrimSpace(card.BDF))
 	switch check {
 	case CheckVendorHealth:
-		switch card.Vendor {
-		case VendorNVIDIA:
-			if target != "" {
-				return "nvidia-smi -q -d ECC,PAGE_RETIREMENT,ROW_REMAPPER -i " + target
-			}
-		case VendorPPU:
-			if target != "" {
-				return "ppu-smi -q -d ECC,PAGE_RETIREMENT,ROW_REMAPPER -i " + target
-			}
-		case VendorAscend:
-			return "npu-smi info"
-		case VendorHygon:
-			if bdf != "" {
-				ras := "/sys/bus/pci/devices/" + bdf + "/ras/"
-				return "grep . " + ras + "*_err_count; cat " + ras + "gpu_vram_bad_pages"
-			}
+		if spec, _ := vendorSpecByID(card.Vendor); spec.healthProbe != nil {
+			return spec.healthProbe(target, bdf)
 		}
 	case CheckVendorCLI, CheckOccupancy:
 		return ToolCommand(card.Vendor)

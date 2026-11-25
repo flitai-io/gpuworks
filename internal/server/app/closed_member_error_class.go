@@ -17,6 +17,7 @@ import (
 // by the caller for its normal fail-closed behavior.
 func closedMemberErrorClass(err error) string {
 	var timeout net.Error
+	refused := store.Causes(err, store.CauseRefused)
 	switch {
 	case err == nil:
 		return "none"
@@ -26,13 +27,13 @@ func closedMemberErrorClass(err error) string {
 		return "deadline_exceeded"
 	case errors.Is(err, driver.ErrBadConn):
 		return "bad_connection"
-	case errors.Is(err, store.ErrClusterAdmissionRejected):
+	case refused&store.CauseAdmissionRejected != 0:
 		return "admission_rejected"
-	case errors.Is(err, store.ErrClusterIdentityConflict):
+	case refused&store.CauseIdentityConflict != 0:
 		return "identity_conflict"
-	case errors.Is(err, store.ErrMaintenanceNotServing):
+	case refused&store.CauseMaintenanceNotServing != 0:
 		return "maintenance_not_serving"
-	case errors.Is(err, store.ErrBusinessWritesClosed):
+	case refused&store.CauseBusinessWritesClosed != 0:
 		return "business_writes_closed"
 	case store.ReplicatedLeaderUnavailable(err):
 		return "no_leader"

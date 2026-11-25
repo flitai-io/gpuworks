@@ -13,6 +13,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/agent/conn"
 	"gpuworks.ai/gpuworks/internal/agent/hostsim"
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/agent/runtime/hostproc"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/pkg/bench/loadgen"
@@ -273,7 +274,11 @@ func (n *NodeRuntime) pathUsage() []proto.PathUsage {
 		paths = append(paths, statAgentOwnedPath(hostproc.DriverName, hostproc.EnvsDir(n.stateDir)))
 	} else {
 		paths = append(paths, statAgentOwnedPath("udocker", filepath.Join(n.stateDir, "udocker")))
-		paths = append(paths, statManagedPath("docker", "/var/lib/docker"))
+		// A stand-in named after docker owns no Docker data root, and the
+		// host's is not this node's runtime disk.
+		if standIn, ok := n.runtimeDriver().(runtime.ImageStoreRooter); !ok || standIn.ImageStoreRoot() != "" {
+			paths = append(paths, statManagedPath("docker", "/var/lib/docker"))
+		}
 	}
 	if n.engine != nil {
 		if root := n.engine.ManagedDirRoot(); root != "" {

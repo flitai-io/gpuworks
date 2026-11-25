@@ -414,3 +414,91 @@ func TestAStepDownWithoutASuccessorIsFiledPastTheBudget(t *testing.T) {
 		t.Fatalf("summaries without a successor: %v", changes)
 	}
 }
+
+// The time without a leader is measured on the database process' monotonic
+// clock when its records carry it, so a wall clock set backwards or forwards
+// between the loss and the next leader does not show in it. Records without
+// that clock fall back to the wall clock, never below zero.
+func TestWithoutLeaderIsMeasuredOnTheMonotonicClock(t *testing.T) {
+	cases := []struct {
+		name    string
+		lost    string
+		found   string
+		want    int64
+		comment string
+	}{
+		{"wall clock set back 10 s in between", at(20000) + " mono=5000", at(10700) + " mono=5700", 700, ""},
+		{"wall clock set forward an hour in between", at(20000) + " mono=5000", at(3620000) + " mono=5700", 700, ""},
+		{"no monotonic clock, clock set back", at(20000), at(10700), 0, "clamped"},
+		{"no monotonic clock", at(20000), at(20700), 700, ""},
+		{"only the later record has it", at(20000), at(20700) + " mono=9", 700, "wall clock"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tracker, sink := trackerFor(t)
+			tracker.record(at(0) + " mono=1 event=state old=UNAVAILABLE new=FOLLOWER term=1 id=2 address=b:9001")
+			tracker.record(at(10) + " mono=11 event=following leader=1 leader_address=a:9001 term=1")
+			tracker.record(tc.lost + " event=election_start reason=election_timeout term=1 leader=1 since_leader_contact_ms=900 timeout_ms=800")
+			tracker.record(tc.found + " event=following leader=3 leader_address=c:9001 term=2")
+			changes := sink.named("cluster database leader changed")
+			if len(changes) != 2 {
+				t.Fatalf("changes: %v", changes)
+			}
+			if got := changes[1].attrs["without_leader_ms"]; got != tc.want {
+				t.Fatalf("without_leader_ms = %v, want %d", got, tc.want)
+			}
+			for _, r := range sink.named("cluster database role event") {
+				if _, filed := r.attrs["mono"]; filed {
+					t.Fatalf("the raw monotonic stamp was filed: %v", r.attrs)
+				}
+			}
+		})
+	}
+}
+
+// Records that end or begin a leadership have a budget of their own. A
+// database process that writes them without limit fills at most that budget
+// in a minute, the first of each kind is filed even then, and the number left
+// out is reported under its own kind.
+func TestDecisiveRecordsHaveTheirOwnBudget(t *testing.T) {
+	tracker, sink := trackerFor(t)
+	clock := time.Unix(1700000000, 0)
+	tracker.now = func() time.Time { return clock }
+	tracker.record(at(0) + " event=state old=UNAVAILABLE new=FOLLOWER term=1 id=1 address=a:9001")
+	const flood = roleDecisivePerMinute + 500
+	for i := 0; i < flood; i++ {
+		tracker.record(at(int64(i)) + " event=step_down reason=higher_term was=candidate term=1 new_term=2 from=2 from_address=b:9001")
+	}
+	// Another kind, first in this minute: filed although the budget is spent.
+	tracker.record(at(5000) + " event=peer_io trigger=step_down peers=2:send=10:sent=10:recv=900:out=up/5000:in=1/5000")
+	tracker.record(at(5001) + " event=peer_io trigger=step_down peers=2:send=10:sent=10:recv=901:out=up/5000:in=1/5000")
+	// An ordinary record is still filed: the two budgets are separate.
+	tracker.record(at(5002) + " event=snapshot_take index=1 status=ok took_ms=300")
+	count := func(event string) (n int) {
+		for _, r := range sink.named("cluster database role event") {
+			if r.attrs["event"] == event {
+				n++
+			}
+		}
+		return n
+	}
+	if got := count("step_down"); got != roleDecisivePerMinute {
+		t.Fatalf("filed %d step-down records in a minute, want %d", got, roleDecisivePerMinute)
+	}
+	if got := count("peer_io"); got != 1 {
+		t.Fatalf("filed %d peer_io records past the budget, want the first of the kind", got)
+	}
+	if got := count("snapshot_take"); got != 1 {
+		t.Fatalf("an ordinary record was held back by the decisive budget: %d", got)
+	}
+	clock = clock.Add(time.Minute)
+	tracker.record(at(60000) + " event=snapshot_take index=2 status=ok took_ms=300")
+	reports := sink.named("cluster database role events suppressed")
+	if len(reports) != 1 || reports[0].attrs["suppressed"] != int64(500+1) || reports[0].attrs["kind"] != "leadership" || reports[0].attrs["per_minute"] != int64(roleDecisivePerMinute) {
+		t.Fatalf("reports: %v", reports)
+	}
+	// A transport record that is not beside a role change is ordinary.
+	if roleDecisive(parseRoleRecord("at=1 event=tcp trigger=interval peers=x")) != "" || roleDecisive(parseRoleRecord("at=1 event=tcp trigger=role_change peers=x")) != "tcp" {
+		t.Fatal("which transport records are decisive")
+	}
+}

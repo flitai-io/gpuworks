@@ -8,32 +8,28 @@ package gpu
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/agent/gpu/pcicards"
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 // RuntimeInjection describes how a runtime should expose selected devices.
 type RuntimeInjection struct {
-	// ManagedSelection names stale accelerator settings to replace. It is
-	// independent of the atomic copy/apply contract used by every injector.
-	ManagedSelection  *RuntimeSelectionCleanup
-	Env               map[string]string
-	DockerArgs        []string
+	// ClearEnv names stale accelerator variables of the workload to unset
+	// before Env is applied.
+	ClearEnv []string
+	Env      map[string]string
+	// Grant is the devices handed over. ResolveInjection sets its Vendor.
+	Grant             runtime.DeviceGrant
 	Mounts            []RuntimeMount
 	UnsupportedReason string
 	// Failure augments the legacy reason; old backends need not implement it.
 	Failure *proto.RuntimeFailure
-}
-
-// RuntimeSelectionCleanup identifies only accelerator-owned workload settings.
-type RuntimeSelectionCleanup struct {
-	Env           []string
-	DockerOptions []string
-	DevicePaths   []string
 }
 
 // RuntimeMount is a host bind mount required for device visibility (for
@@ -55,7 +51,7 @@ type RuntimeMount struct {
 // driver"). Probers that don't implement this use RuntimeInjection for every
 // driver.
 type DriverAwareInjector interface {
-	RuntimeInjectionForDriver(indexes []int, driverName string) RuntimeInjection
+	RuntimeInjectionForDriver(indexes []int, target runtime.Target) RuntimeInjection
 }
 
 // TopologyAwareInjector extends the same device-injection seam for backends
@@ -68,14 +64,14 @@ type TopologyAwareInjector interface {
 }
 
 // InjectionRequest is what the caller knows about the workload whose devices
-// it is asking for. DriverName is the container runtime driver that will start
+// it is asking for. Runtime is the container runtime that will start
 // it, NNodes its rank count, and DockerArgs the options already resolved for
 // it (the compute network's, among others), which a backend may require but
 // must not duplicate. Env and the other request fields are read-only for the
 // prober.
 type InjectionRequest struct {
 	Indexes    []int
-	DriverName string
+	Runtime    runtime.Target
 	NNodes     int
 	DockerArgs []string
 	Env        map[string]string
@@ -87,20 +83,42 @@ type InjectionRequest struct {
 // predict it ask the same question of the same backend.
 //
 // Asking through a plainer seam than the backend implements means inventing
-// the facts the seam leaves out: a caller that drops DriverName has to assume
+// the facts the seam leaves out: a caller that drops Runtime has to assume
 // some container runtime, and a backend whose contract depends on it then
 // answers for a host that may not be this one.
 func ResolveInjection(ctx context.Context, p Prober, req InjectionRequest) RuntimeInjection {
-	switch injector := p.(type) {
-	case nil:
+	if p == nil {
 		return RuntimeInjection{}
-	case TopologyAwareInjector:
-		return injector.RuntimeInjectionForLaunch(ctx, req)
-	case DriverAwareInjector:
-		return injector.RuntimeInjectionForDriver(req.Indexes, req.DriverName)
-	default:
-		return injector.RuntimeInjection(req.Indexes)
 	}
+	// Which devices a container of this runtime sees decides how a backend
+	// numbers the selection. For a runtime that does not say, every backend
+	// would have to guess, each in its own way.
+	if len(req.Indexes) > 0 && req.Runtime.View == runtime.ViewUnknown {
+		if req.Runtime.Name == "" {
+			return RuntimeInjection{UnsupportedReason: "this agent has no container runtime to grant devices in"}
+		}
+		return RuntimeInjection{UnsupportedReason: fmt.Sprintf("which devices a container of runtime %q sees is not known", req.Runtime.Name)}
+	}
+	var inj RuntimeInjection
+	switch injector := p.(type) {
+	case TopologyAwareInjector:
+		inj = injector.RuntimeInjectionForLaunch(ctx, req)
+	case DriverAwareInjector:
+		inj = injector.RuntimeInjectionForDriver(req.Indexes, req.Runtime)
+	default:
+		inj = injector.RuntimeInjection(req.Indexes)
+	}
+	// A runtime without a container has nothing to hand a device to. Its
+	// driver reads no grant, so one a backend returns for it is refused
+	// rather than dropped.
+	if req.Runtime.View == runtime.ViewNone && inj.UnsupportedReason == "" && !inj.Grant.Empty() {
+		return RuntimeInjection{UnsupportedReason: fmt.Sprintf("runtime %q runs engines as host processes and cannot be given devices", req.Runtime.Name)}
+	}
+	// The grant's vendor is the backend's, written here for every backend.
+	if len(req.Indexes) > 0 && inj.UnsupportedReason == "" && inj.Failure == nil {
+		inj.Grant.Vendor = accelerator.NormalizeVendor(p.Vendor())
+	}
+	return inj
 }
 
 // AcceleratorPortProber is an optional Prober extension for accelerators
@@ -257,29 +275,6 @@ func pciBusVendors(hostRoot string) (func(string) bool, func(string) bool) {
 	return func(vendor string) bool { scan(); return vendors[vendor] }, func(vendor string) bool { scan(); return managed[vendor] }
 }
 
-// vendorDeviceFiles are control devices a vendor's kernel driver creates.
-// When no backend can query its driver, the one whose devices exist is the
-// host's real vendor, and reporting it keeps the failure attributable (for
-// example "npu-smi: dcmi module initialize failed" instead of "0 NVIDIA GPUs").
-var vendorDeviceFiles = map[string][]string{
-	accelerator.VendorKunlunxin: {"/dev/xpuctrl"},
-	accelerator.VendorNVIDIA:    {"/dev/nvidiactl"},
-	accelerator.VendorAscend:    {"/dev/davinci_manager"},
-	accelerator.VendorPPU:       {"/dev/alixpu_ctl"},
-}
-
-// xpu-smi is deliberately absent: Intel uses that name too. Kunlun fallback
-// needs its control device or PCI identity, not an executable name alone.
-// vendorCommands are the CLIs each backend queries its driver with, in the
-// order fallbackProber trusts them: NVIDIA's last, because a stale
-// nvidia-smi is the one commonly left on hosts of other vendors.
-var vendorCommands = []struct{ vendor, command string }{
-	{accelerator.VendorAscend, "npu-smi"},
-	{accelerator.VendorHygon, "hy-smi"},
-	{accelerator.VendorPPU, "ppu-smi"},
-	{accelerator.VendorNVIDIA, "nvidia-smi"},
-}
-
 // deviceExists checks the host's live /dev when CLIs run there: a
 // privileged container's own /dev is a copy made at container start, so a
 // device node created afterward (a driver still initializing) would
@@ -310,21 +305,23 @@ func commandExists(name string) bool {
 // exactly the cards its operator needed to see. Every vendor's prober
 // lists the bus's cards when its CLI is missing (Roster).
 func fallbackProber(probers []Prober, exists, installed, onBus func(string) bool) Prober {
+	// A control device first: when no backend can query its driver, the one
+	// whose devices exist is the host's real vendor, and reporting it keeps
+	// the failure attributable (for example "npu-smi: dcmi module initialize
+	// failed" instead of "0 NVIDIA GPUs").
 	for _, p := range probers {
-		for _, path := range vendorDeviceFiles[p.Vendor()] {
+		for _, path := range accelerator.ControlDevices(p.Vendor()) {
 			if exists(path) {
 				return p
 			}
 		}
 	}
-	for _, c := range vendorCommands {
-		if !installed(c.command) {
-			continue
-		}
-		for _, p := range probers {
-			if p.Vendor() == c.vendor {
-				return p
-			}
+	// Then an installed tool, in the probers' order: NVIDIA's comes after
+	// the other vendors', because a stale nvidia-smi is the one commonly
+	// left on their hosts.
+	for _, p := range probers {
+		if command := accelerator.DetectCommand(p.Vendor()); command != "" && installed(command) {
+			return p
 		}
 	}
 	for _, p := range probers {
@@ -336,6 +333,10 @@ func fallbackProber(probers []Prober, exists, installed, onBus func(string) bool
 }
 
 func defaultProbers() []Prober {
+	// The order is also the one an installed tool is believed in when no
+	// tool answers (fallbackProber), so NVIDIA comes after every vendor
+	// whose hosts are commonly left with a stale nvidia-smi.
+	//
 	// Keep the existing automatic-probe order stable. AMD is an explicit
 	// choice on mixed-vendor nodes; inserting it before NVIDIA would silently
 	// change which vendor the single-prober agent reports in auto mode.

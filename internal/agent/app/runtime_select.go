@@ -98,13 +98,30 @@ func (n *NodeRuntime) RuntimeFallback() (from, reason string, socket *proto.Runt
 // The host driver runs macOS environment packages, which exist only for
 // darwin; runveil (udocker) is PRoot on Linux ptrace, which macOS lacks.
 func driverUnavailableOn(goos, driver string) string {
-	switch {
-	case driver == hostproc.DriverName && !hostproc.SupportedOn(goos):
-		return "the host runtime runs macOS environment packages and is only available on macOS"
-	case driver == "udocker" && goos == "darwin":
-		return "the runveil runtime needs Linux; a Mac uses the host runtime"
+	info, _ := runtime.DriverNamed(driver)
+	return info.UnavailableOn(goos)
+}
+
+// driverBuilders constructs each driver an agent can be told to use by name
+// alone. The kube driver is not among them: it is built from the pod's
+// environment and the node's cards.
+func driverBuilders(baseDir string) map[string]func() runtime.Driver {
+	return map[string]func() runtime.Driver{
+		runtime.DriverHost:    func() runtime.Driver { return hostproc.New(baseDir) },
+		runtime.DriverDocker:  func() runtime.Driver { return dockerdrv.New() },
+		runtime.DriverNerdctl: func() runtime.Driver { return nerdctldrv.New() },
+		runtime.DriverUdocker: func() runtime.Driver { return udockerdrv.New(baseDir) },
 	}
-	return ""
+}
+
+// allowedDrivers is what --driver accepts, for the message that refuses
+// anything else.
+func allowedDrivers() string {
+	var names []string
+	for _, info := range runtime.Drivers() {
+		names = append(names, info.Name)
+	}
+	return strings.Join(append(names, "none"), "|")
 }
 
 // detectDriver returns the forced driver, or auto-selects one when force is
@@ -140,21 +157,11 @@ func detectDriverWaiting(log *slog.Logger, baseDir, force string, prober gpu.Pro
 		log.Error("runtime driver not available on this OS", "driver", force, "os", goruntime.GOOS, "reason", reason)
 		return runtimeSelection{}
 	}
+	builders := driverBuilders(baseDir)
 	switch force {
 	case "none":
 		log.Info("runtime driver disabled", "driver", "none")
 		return runtimeSelection{}
-	case "udocker":
-		log.Info("runtime driver forced", "driver", "udocker")
-		return runtimeSelection{driver: udockerdrv.New(baseDir)}
-	case "docker":
-		return runtimeSelection{driver: dockerdrv.New()}
-	case "nerdctl":
-		log.Info("runtime driver forced", "driver", "nerdctl")
-		return runtimeSelection{driver: nerdctldrv.New()}
-	case hostproc.DriverName:
-		log.Info("runtime driver forced", "driver", hostproc.DriverName)
-		return runtimeSelection{driver: hostproc.New(baseDir)}
 	case kube.DriverName:
 		d, err := kube.FromEnvironment(baseDir, cardUUIDs(prober), cardBDFs(prober), cardDevices(prober, log), log)
 		if err == nil {
@@ -169,21 +176,21 @@ func detectDriverWaiting(log *slog.Logger, baseDir, force string, prober gpu.Pro
 	case "":
 		// auto-detect below
 	default:
-		log.Error("invalid runtime driver", "driver", force, "allowed", "docker|udocker|nerdctl|host|kube|none")
-		return runtimeSelection{}
-	}
-	candidates := []struct {
-		build func() runtime.Driver
-		label string
-	}{
-		{func() runtime.Driver { return hostproc.New(baseDir) }, hostproc.DriverName + " (macOS host processes)"},
-		{func() runtime.Driver { return dockerdrv.New() }, "docker"},
-		{func() runtime.Driver { return nerdctldrv.New() }, "nerdctl (no docker daemon)"},
-		{func() runtime.Driver { return udockerdrv.New(baseDir) }, "udocker (no docker daemon)"},
+		build, ok := builders[force]
+		if !ok {
+			log.Error("invalid runtime driver", "driver", force, "allowed", allowedDrivers())
+			return runtimeSelection{}
+		}
+		log.Info("runtime driver forced", "driver", force)
+		return runtimeSelection{driver: build()}
 	}
 	var fallback runtimeFallback
-	for _, candidate := range candidates {
-		driver := candidate.build()
+	for _, candidate := range runtime.Drivers() {
+		build, ok := builders[candidate.Name]
+		if !ok {
+			continue
+		}
+		driver := build()
 		ok, err := driver.Detect(ctx)
 		if !ok && errors.Is(err, runtime.ErrDaemonNotReady) && wait > 0 {
 			ok, err = waitForDaemon(ctx, log, driver, err, wait)
@@ -220,7 +227,10 @@ func detectDriverWaiting(log *slog.Logger, baseDir, force string, prober gpu.Pro
 			}
 			continue
 		}
-		label := candidate.label
+		label := candidate.Name
+		if candidate.Note != "" {
+			label += " (" + candidate.Note + ")"
+		}
 		switch {
 		case fallback.reason == proto.RuntimeFallbackDaemonNotReady:
 			label = fmt.Sprintf("%s (%s daemon not answering)", driver.Name(), fallback.from)

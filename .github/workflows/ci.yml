@@ -142,7 +142,8 @@ jobs:
       - uses: actions/checkout@v5
         with:
           # check_architecture.sh compares scripts/arch-constraints.txt with
-          # its copy at the merge base with origin/master.
+          # its copy at the merge base with origin/master; the change-record
+          # gate diffs the pull request against its base branch.
           fetch-depth: 0
       - uses: actions/setup-go@v6
         with:
@@ -151,6 +152,10 @@ jobs:
         with:
           name: webui-dist
           path: internal/server/webui/dist/
+      # Contract paths need a docs/ record in the same pull request. Decision
+      # records are verified by the GitLab merge-request gate only; this step
+      # prints which decision paths it did not check.
+      - run: CGO_ENABLED=0 go run ./scripts/changerecord
       - run: make seed-manifest
       - run: SEED_CATALOG_MANIFEST=bin/seed-catalog/manifest.yaml make test-seed-catalog-build
       - uses: actions/upload-artifact@v5

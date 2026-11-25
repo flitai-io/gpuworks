@@ -70,8 +70,16 @@ type ClusterUpgradeResponse struct {
 	// AgentConnections is how many agent control connections the answering
 	// member holds itself; absent when it cannot say. Stopping that member
 	// makes those agents connect again.
-	AgentConnections *int   `json:"agent_connections,omitempty"`
-	Refused          string `json:"refused,omitempty"`
+	AgentConnections *int `json:"agent_connections,omitempty"`
+	// StorageTier is the storage tier the answering member runs (the one
+	// it started with, not the one it records by now); absent from a
+	// member whose program does not say.
+	StorageTier string `json:"storage_tier,omitempty"`
+	// RecordedStorageTier is the tier the answering member's installation
+	// records now, which it runs from its next start; absent when the
+	// member cannot read its record or its program does not say.
+	RecordedStorageTier string `json:"recorded_storage_tier,omitempty"`
+	Refused             string `json:"refused,omitempty"`
 	// RefusedCode is the stable code of a refusal a caller acts on, beside
 	// its text in Refused; absent from a refusal that is only reported. It
 	// is for a caller to tell this refusal apart; the enterprise upgrade

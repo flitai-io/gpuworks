@@ -59,7 +59,7 @@ func TestReimportedRankScopedTemplateDeploysTheRevisionItNowStates(t *testing.T)
 	for rank, address := range addresses {
 		nodes = append(nodes, env.AddNode(fmt.Sprintf("ranked-revision-%d", rank),
 			testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}),
-			testenv.WithDriverName("fake"), testenv.WithManagementAddress(address)))
+			testenv.WithDriverName("docker"), testenv.WithManagementAddress(address)))
 	}
 	for _, node := range nodes {
 		env.WaitNodeOnline(t, node.Name)

@@ -18,14 +18,16 @@ import (
 
 // StartPersistedClusterRaft reopens an existing joined identity for a later
 // process. It starts Raft under the same runtime lease as the Join command and
-// leaves application traffic closed. The locked StartClusterRaft path validates
-// the persisted target again before starting the database.
+// leaves application traffic closed. The locked start validates
+// the persisted target again before starting the database. It leaves the
+// process on the tier it was told (its installation's record), not the one
+// the member was given when it joined.
 func StartPersistedClusterRaft(ctx context.Context, cfg Config) (*ClusterRaftSession, error) {
 	target, err := persistedClusterJoinTarget(cfg)
 	if err != nil {
 		return nil, err
 	}
-	return StartClusterRaft(ctx, cfg, target)
+	return startClusterRaft(ctx, cfg, target, false)
 }
 
 // OpenPersistedJoinedStore hands a resumed Raft member and its runtime lease

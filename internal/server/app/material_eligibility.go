@@ -4,7 +4,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -66,16 +65,24 @@ type materialEligibility struct {
 	mu        sync.Mutex
 	proofSlot chan struct{}
 	now       func() time.Time
-	prove     func(context.Context) (bool, error)
-	interval  time.Duration
-	idleRest  time.Duration
-	deadline  time.Time
-	bridging  bool
-	provedAt  time.Time
+	// prove runs one proof. A refusal of a member (store.CauseMemberRefused)
+	// in its error closes admission at once, so it must return only the
+	// refusal of the proving member itself; thisMembersVerdict is the exit
+	// that guarantees it.
+	prove    func(context.Context) (bool, error)
+	interval time.Duration
+	idleRest time.Duration
+	deadline time.Time
+	bridging bool
+	provedAt time.Time
 	// answered is set when an answer other than success, an invalidation or
 	// Stop was seen since the last successful proof. From then on an attempt
 	// that brings no answer extends nothing; only a successful proof clears it.
-	answered      bool
+	answered bool
+	// refusal is the refusal code of the database's refusal of this member
+	// that a proof ended on, cleared by the next successful proof. While it
+	// stands the closed member answers with it, not "no proof yet".
+	refusal       string
 	expiry        *time.Timer
 	epoch         uint64
 	cancel        context.CancelFunc
@@ -155,6 +162,17 @@ func (e *materialEligibility) Eligible() bool {
 	return e.EligibleFor(0)
 }
 
+// refusedAs is the refusal code of the database's refusal a proof last ended
+// on, or empty when the last proof was not refused.
+func (e *materialEligibility) refusedAs() string {
+	if e == nil {
+		return ""
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.refusal
+}
+
 // EligibleFor additionally requires enough remaining proof lifetime for the
 // caller's next bounded operation. Insufficient headroom does not expire the
 // proof or change ordinary business admission.
@@ -175,6 +193,8 @@ func (e *materialEligibility) eligibleForResult(minRemaining time.Duration) (boo
 			reason = "stopped"
 		} else if !e.deadline.IsZero() {
 			reason = "run_canceled"
+		} else if e.refusal != "" {
+			reason = e.refusal
 		}
 		e.mu.Unlock()
 		return false, reason, 0
@@ -378,10 +398,8 @@ func (e *materialEligibility) Reprove(ctx context.Context) (bool, error) {
 	//     window; past it, the attempt's own start, or for a proof that
 	//     outlived its window one more window, bounds admission, never beyond
 	//     the unconfirmed limit. Otherwise one blip closes every member.
-	//   - a refusal by the database: closes at once, also inside a live window.
-	//     The proof this member runs reports a refusal as "not ready", so it
-	//     arrives as the next kind; only a prove function that returns the
-	//     refusal itself reaches this one.
+	//   - a refusal of this member by the database: closes at once, also
+	//     inside a live window and also when it arrives after the window.
 	//   - any other answer ("not ready", an error nothing classifies): a read
 	//     cut by a leadership change looks the same, so the earlier result
 	//     keeps its own window, but the answer is latched:
@@ -389,7 +407,7 @@ func (e *materialEligibility) Reprove(ctx context.Context) (bool, error) {
 	// Cancellation and an invalidation close at once. Only a successful proof
 	// reopens what an answer or an invalidation closed.
 	noAnswer := lateSuccess || (!verdict && store.ProofUnanswered.Unanswered(err))
-	refused := errors.Is(err, store.ErrClusterAdmissionRejected) || errors.Is(err, store.ErrClusterIdentityConflict)
+	refused := store.Causes(err, store.CauseMemberRefused) != 0
 	live := proofCtx.Err() == nil && !pastWindow && e.epoch == epoch && !e.stopped
 	unexpired := !e.deadline.IsZero() && now.Before(e.deadline)
 	outlived := noAnswer && (e.outlivedWindow(ctx, proofCtx, epoch) || (pastWindow && e.undisturbed(ctx, proofCtx, epoch))) && e.confirmedRecently(now)
@@ -400,7 +418,7 @@ func (e *materialEligibility) Reprove(ctx context.Context) (bool, error) {
 	notifyInvalidated := invalidated && e.epoch == epoch
 	switch {
 	case proved:
-		e.provedAt, e.answered = started, false
+		e.provedAt, e.answered, e.refusal = started, false, ""
 		e.admitUntil(attemptDeadline)
 	case keepEarlier:
 		e.answered = e.answered || !noAnswer
@@ -420,6 +438,12 @@ func (e *materialEligibility) Reprove(ctx context.Context) (bool, error) {
 	default:
 		if e.epoch == epoch {
 			e.closeAdmission()
+		}
+		if refused {
+			e.refusal = refusalMemberRevoked
+			if store.Causes(err, store.CauseIdentityConflict) != 0 {
+				e.refusal = refusalIdentityConflict
+			}
 		}
 		ready = false
 	}

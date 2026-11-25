@@ -145,3 +145,13 @@ func lockHolder(path string) int {
 	}
 	return pid
 }
+
+// RequireServerStopped is the server lock for a command registered through
+// Options.Commands that changes what a running server holds in memory: it
+// takes the lock of dataDir without waiting and refuses, naming the server,
+// when one holds it. The returned function releases the lock.
+func RequireServerStopped(dataDir string) (func(), error) { return requireServerStopped(dataDir) }
+
+// ServerRunning reports whether a server holds dataDir's lock, and its pid
+// when the lock file names a live one, without creating the file.
+func ServerRunning(dataDir string) (bool, int) { return serverRunning(dataDir) }

@@ -38,7 +38,7 @@ func TestGrantClusterMembershipObservationFailsBeforeTheGrantBudget(t *testing.T
 	st, id, admissions := membershipFixture(t)
 	previous, previousWindow := clusterMembershipObserveTimeout, clusterMembershipRetryWindow
 	// The window bounds how long an interrupted observation is repeated.
-	clusterMembershipObserveTimeout, clusterMembershipRetryWindow = 40*time.Millisecond, 100*time.Millisecond
+	clusterMembershipObserveTimeout, clusterMembershipRetryWindow = 40*time.Millisecond, func() time.Duration { return 100 * time.Millisecond }
 	t.Cleanup(func() { clusterMembershipObserveTimeout, clusterMembershipRetryWindow = previous, previousWindow })
 	st.bindClusterMembership(id, func(ctx context.Context) ([]cluster.Member, error) {
 		<-ctx.Done()

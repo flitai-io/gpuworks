@@ -16,7 +16,7 @@ import (
 // other.
 func TestStartWaitsForARuntimeCheckOnItsCards(t *testing.T) {
 	h := newSleepHTTPServer(t)
-	driver := &imageToleranceDriver{exists: []bool{true}}
+	driver := &imageToleranceDriver{headlessTestDriver: headlessTestDriver{name: "docker"}, exists: []bool{true}}
 	prober := &gpu.FixedProber{VendorName: "ascend", GPUs: []proto.GPUInfo{{Index: 3, UUID: "ascend-3", PCIeBDF: "0000:41:00.0"}}}
 	e := NewWithProber(driver, func(proto.InstanceStatus) {}, slog.Default(), t.TempDir(), prober)
 	ident := accelerator.CardIdent("ascend-3", "0000:41:00.0")

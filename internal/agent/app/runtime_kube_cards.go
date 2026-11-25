@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"gpuworks.ai/gpuworks/internal/agent/gpu"
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/agent/runtime/kube"
 )
 
@@ -76,7 +77,7 @@ func cardDevices(prober gpu.Prober, log *slog.Logger) func(context.Context) (map
 			}
 			var inj gpu.RuntimeInjection
 			if aware, ok := prober.(gpu.DriverAwareInjector); ok {
-				inj = aware.RuntimeInjectionForDriver([]int{g.Index}, kube.DriverName)
+				inj = aware.RuntimeInjectionForDriver([]int{g.Index}, runtime.TargetNamed(kube.DriverName))
 			} else {
 				inj = prober.RuntimeInjection([]int{g.Index})
 			}
@@ -84,11 +85,8 @@ func cardDevices(prober gpu.Prober, log *slog.Logger) func(context.Context) (map
 				log.Warn("a card's devices cannot be injected; it is not offered", "card", g.Index, "reason", inj.UnsupportedReason)
 				continue
 			}
-			for i := 0; i+1 < len(inj.DockerArgs); i++ {
-				if inj.DockerArgs[i] == "--device" {
-					out[g.Index] = append(out[g.Index], inj.DockerArgs[i+1])
-					i++
-				}
+			for _, device := range inj.Grant.Devices {
+				out[g.Index] = append(out[g.Index], device.DockerValue())
 			}
 		}
 		return out, nil

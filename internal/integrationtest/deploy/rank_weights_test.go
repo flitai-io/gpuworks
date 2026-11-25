@@ -23,10 +23,10 @@ func TestRankScopedTemplateMountsEachRanksOwnSubfolder(t *testing.T) {
 	env := testenv.New(t)
 	leader := env.AddNode("rank-weights-0",
 		testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}),
-		testenv.WithDriverName("fake"), testenv.WithManagementAddress("10.43.0.10"))
+		testenv.WithDriverName("docker"), testenv.WithManagementAddress("10.43.0.10"))
 	follower := env.AddNode("rank-weights-1",
 		testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}),
-		testenv.WithDriverName("fake"), testenv.WithManagementAddress("10.43.0.11"))
+		testenv.WithDriverName("docker"), testenv.WithManagementAddress("10.43.0.11"))
 	runs := []chan runtime.WorkloadSpec{make(chan runtime.WorkloadSpec, 1), make(chan runtime.WorkloadSpec, 1)}
 	leader.Driver.AfterRun(func(spec runtime.WorkloadSpec) { captureWorkload(runs[0], spec) })
 	follower.Driver.AfterRun(func(spec runtime.WorkloadSpec) { captureWorkload(runs[1], spec) })

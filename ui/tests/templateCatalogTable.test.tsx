@@ -76,3 +76,22 @@ test("a weight artifact names its first source and lists every download source o
   assert.match(tip.textContent ?? "", /huggingface: org\/model/);
   assert.match(tip.textContent ?? "", /modelscope: org-ms\/model/);
 });
+
+test("the vendor filter lists vendors in the server's order once the dictionary arrives", async () => {
+  const fs = await import("node:fs");
+  const { act } = await import("@testing-library/react");
+  const { setVendorDictionary } = await import("../src/vendors.ts");
+  const served = JSON.parse(fs.readFileSync(new URL("./fixtures/accelerator-vendors.json", import.meta.url), "utf8"));
+  setVendorDictionary([]);
+  try {
+    renderTable([
+      model("org/a", "A", [spec({ gpus: { vendor: "nvidia", name: "H100" } })]),
+      model("org/b", "B", [spec({ gpus: { vendor: "amd", name: "MI300X" } })]),
+    ]);
+    act(() => setVendorDictionary(served.items));
+    const user = userEvent.setup();
+    assert.deepEqual(await filterOptions(user, "GPU vendor"), ["NVIDIA", "AMD"]);
+  } finally {
+    setVendorDictionary(served.items);
+  }
+});

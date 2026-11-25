@@ -15,7 +15,7 @@ import (
 func TestInjectionFailureReportsFactsWithoutInventingRuntimeState(t *testing.T) {
 	var got proto.InstanceStatus
 	e := NewWithProber(&headlessTestDriver{name: "docker"}, func(s proto.InstanceStatus) { got = s }, nil, t.TempDir(), &gpu.KunlunProber{})
-	err := e.applyDeviceInjectionForLaunch(t.Context(), &runtime.WorkloadSpec{}, nil, "docker", 1)
+	err := e.applyDeviceInjectionForLaunch(t.Context(), &runtime.WorkloadSpec{}, nil, runtime.TargetNamed("docker"), 1)
 	var refusal *gpu.InjectionError
 	if !errors.As(err, &refusal) || refusal.Failure.Code != proto.ErrorAcceleratorDeviceSelectionRequired {
 		t.Fatalf("err=%v", err)

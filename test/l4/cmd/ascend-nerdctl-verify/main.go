@@ -84,7 +84,7 @@ func verifyDeviceInjection(driver *nerdctl.Driver, image string, indexes []int) 
 	// engine.applyDeviceInjection dispatches to for an Ascend node whose
 	// driver is nerdctl.
 	prober := &gpu.AscendProber{}
-	inj := prober.RuntimeInjectionForDriver(indexes, "nerdctl")
+	inj := prober.RuntimeInjectionForDriver(indexes, runtime.TargetNamed(runtime.DriverNerdctl))
 	if inj.UnsupportedReason != "" {
 		return fmt.Errorf("unsupported: %s", inj.UnsupportedReason)
 	}
@@ -97,8 +97,9 @@ func verifyDeviceInjection(driver *nerdctl.Driver, image string, indexes []int) 
 		Cmd:         []string{"300"},
 		Env:         inj.Env,
 		HostNetwork: true,
-		DockerArgs:  inj.DockerArgs,
+		Grant:       inj.Grant,
 	}
+	ws.Grant.Vendor = accelerator.VendorAscend
 	for _, m := range inj.Mounts {
 		ws.Mounts = append(ws.Mounts, runtime.Mount{Source: m.Source, Target: m.Target, ReadOnly: m.ReadOnly})
 	}

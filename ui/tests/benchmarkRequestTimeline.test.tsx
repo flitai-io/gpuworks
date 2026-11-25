@@ -59,6 +59,9 @@ test('keyboard selection retains timing and nullable metric/source details', () 
   for (const phase of ['wait', 'generate', 'finish', 'content']) assert.ok(container.querySelector(`[data-phase="${phase}"]`));
   const row = screen.getByRole('button', { name: /Session session-1.*Turn 2.*Attempt 1/ });
   assert.equal(row.getAttribute('aria-pressed'), 'false');
+  // Nothing is selected, and no request details are shown, until the reader picks a request.
+  assert.equal(container.querySelector('[aria-pressed="true"]'), null);
+  assert.equal(screen.queryByText('Request details'), null);
   fireEvent.keyDown(row, { key: 'Enter' });
   assert.equal(row.getAttribute('aria-pressed'), 'true');
   assert.ok(screen.getByText('Request details'));
@@ -93,5 +96,8 @@ test('errors allow retry and pagination shows at most 25 retained requests', () 
   fireEvent.click(screen.getByTitle('2'));
   assert.equal(container.querySelectorAll('svg [role="button"]').length, 1);
   assert.ok(screen.getByText('26–26 of 26 retained requests'));
+  // The new page starts with no request selected.
+  assert.equal(screen.queryByText('session-25'), null);
+  fireEvent.click(screen.getByRole('button', { name: /Session session-25/ }));
   assert.ok(screen.getByText('session-25'));
 });

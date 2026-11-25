@@ -32,17 +32,17 @@ func TestExistingBackendInjectionPreservedWithTopology(t *testing.T) {
 				user := []string{"--ulimit=memlock=65536:65536", "--ipc=host"}
 				mount := runtime.Mount{Source: "/weights", Target: "/model", ReadOnly: true}
 				ws := runtime.WorkloadSpec{Env: map[string]string{"USER_SETTING": "kept"}, DockerArgs: append([]string(nil), user...), Mounts: []runtime.Mount{mount}}
-				if err := e.applyDeviceInjectionForLaunch(context.Background(), &ws, []int{3, 7}, tc.driver, nodes); err != nil {
+				if err := e.applyDeviceInjectionForLaunch(context.Background(), &ws, []int{3, 7}, runtime.TargetNamed(tc.driver), nodes); err != nil {
 					t.Fatal(err)
 				}
 				wantEnv := map[string]string{"USER_SETTING": "kept"}
 				for k, v := range tc.env {
 					wantEnv[k] = v
 				}
-				if !reflect.DeepEqual(ws.DockerArgs, append(user, tc.args...)) || !reflect.DeepEqual(ws.Env, wantEnv) || !reflect.DeepEqual(ws.Mounts, []runtime.Mount{mount}) {
+				if !reflect.DeepEqual(ws.DockerRunArgs(), append(user, tc.args...)) || !reflect.DeepEqual(ws.Env, wantEnv) || !reflect.DeepEqual(ws.Mounts, []runtime.Mount{mount}) {
 					t.Fatalf("existing backend contract changed: %+v", ws)
 				}
-				if err := e.applyDeviceInjectionForLaunch(context.Background(), &runtime.WorkloadSpec{}, nil, tc.driver, nodes); err != nil {
+				if err := e.applyDeviceInjectionForLaunch(context.Background(), &runtime.WorkloadSpec{}, nil, runtime.TargetNamed(tc.driver), nodes); err != nil {
 					t.Fatal(err)
 				}
 			})
@@ -63,11 +63,11 @@ func TestExistingNativeBackendsKeepTheirValidation(t *testing.T) {
 		e := NewWithProber(&headlessTestDriver{name: "docker"}, nil, slog.Default(), t.TempDir(), tc.prober)
 		for _, nodes := range []int{1, 2} {
 			ws := runtime.WorkloadSpec{DockerArgs: []string{"--ipc=host"}, Env: map[string]string{"kept": "yes"}}
-			err := e.applyDeviceInjectionForLaunch(t.Context(), &ws, []int{0}, "docker", nodes)
-			if err == nil || !strings.Contains(err.Error(), tc.cli) || !reflect.DeepEqual(ws.DockerArgs, []string{"--ipc=host"}) || !reflect.DeepEqual(ws.Env, map[string]string{"kept": "yes"}) {
+			err := e.applyDeviceInjectionForLaunch(t.Context(), &ws, []int{0}, runtime.TargetNamed("docker"), nodes)
+			if err == nil || !strings.Contains(err.Error(), tc.cli) || !reflect.DeepEqual(ws.DockerRunArgs(), []string{"--ipc=host"}) || !reflect.DeepEqual(ws.Env, map[string]string{"kept": "yes"}) {
 				t.Fatalf("%s: %+v %v", tc.cli, ws, err)
 			}
-			if err := e.applyDeviceInjectionForLaunch(t.Context(), &ws, nil, "docker", nodes); err != nil {
+			if err := e.applyDeviceInjectionForLaunch(t.Context(), &ws, nil, runtime.TargetNamed("docker"), nodes); err != nil {
 				t.Fatal(err)
 			}
 		}

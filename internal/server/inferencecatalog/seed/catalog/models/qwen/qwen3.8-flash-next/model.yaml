@@ -552,6 +552,106 @@ specs:
   placement: *q38_910b_placement
   api: *q38_910b_api
   shm_bytes: 137438953472
+# Ascend 910B (A2), eight cards, TP8 with expert parallelism, W4A8 weights
+# with the checkpoint's MTP layer. The switches in --additional-config (CPU
+# binding, shared-expert DP, FlashComm1, shared-expert multistream overlap,
+# NPUGraph EX), async scheduling, KV sized by --gpu-memory-utilization and
+# the environment come from a published vLLM-Ascend v0.32.0rc1 recipe for
+# eight NPUs. Four values are not the recipe's: 16 sequences and 8192 batched
+# tokens (the recipe has 8 and 4096), decode graphs captured at multiples of
+# four up to 64 (one target plus three draft tokens for 16 sequences), and
+# OMP_NUM_THREADS 8 (the recipe has 10, which the engine warns against).
+# Measured on 8x 910B4 32 GiB on 2026-11-23 against the four-card profiles'
+# arguments on the same eight cards, 196 input tokens, thinking off: at 16
+# concurrent requests 219 against 193 output tokens/s with 360-token
+# outputs and 284 against 234 with 1024-token outputs, median TTFT 1.1-1.6 s
+# against 4.3-6.9 s; a single stream decodes 31 tokens/s against 36, and
+# with the recipe's own 8 sequences the profile stayed at 164 and 198. The
+# floor is the measured card's 32 GiB (11.2 GiB of weights per card; there
+# is no fixed KV pool as in the four-card profiles, which need 64 GiB).
+# Thinking is off unless a request turns it on
+# (chat_template_kwargs.enable_thinking).
+# The image is the pinned v0.32.0rc1 openEuler index the four-card profiles
+# run; the speculative method is `mtp`, this image's name for the recipe's
+# deprecated `qwen3_5_mtp`. The recipe's node-specific settings (HCCL_IF_IP,
+# the *_SOCKET_IFNAME interface names) and its jemalloc preload are left
+# out. --engram-config maps one copy of the embedding table per rank: the
+# run logged 11.9 GiB mapped per rank, about 95 GiB of host memory for eight.
+- name: w4a8-vllm-910b-tp8-mtp
+  display_name_zh_cn: 910B (A2) · INT4 W4A8 · 8 卡 · MTP 投机解码
+  display_name_en: 910B (A2) · INT4 W4A8 · 8 cards · MTP speculative
+  scenario: balanced
+  engine: vllm
+  image: quay.io/ascend/vllm-ascend@sha256:53a60329962f843fa4c8965c28e98c194a894e34ce5e473edf79e57cbb723188
+  image_sources:
+  - quay.nju.edu.cn/ascend/vllm-ascend@sha256:53a60329962f843fa4c8965c28e98c194a894e34ce5e473edf79e57cbb723188
+  - swr.cn-southwest-2.myhuaweicloud.com/gpuworks/vllm-ascend@sha256:53a60329962f843fa4c8965c28e98c194a894e34ce5e473edf79e57cbb723188
+  weights:
+    quantization: w4a8
+    sources:
+    - modelscope:
+        repo_id: Eco-Tech/Qwen3.8-Flash-Next-w4a8
+        revision: d75537fdf781e6a8e85bfb6bf091b987e3b0ab96
+  weight_bytes: 194325007155
+  gpus:
+    vendor: ascend
+    name: (^|[^A-Za-z0-9])910B[A-Za-z0-9]*([^A-Za-z0-9]|$)
+  args:
+  - --trust-remote-code
+  - --quantization
+  - ascend
+  - --data-parallel-size
+  - '1'
+  - --enable-expert-parallel
+  - --max-model-len
+  - '262144'
+  - --max-num-seqs
+  - '16'
+  - --max-num-batched-tokens
+  - '8192'
+  - --gpu-memory-utilization
+  - '0.90'
+  - --enable-prefix-caching
+  - --mamba-cache-mode
+  - align
+  - --async-scheduling
+  - --enable-auto-tool-choice
+  - --tool-call-parser
+  - qwen3_xml
+  - --reasoning-parser
+  - qwen3
+  - --engram-config
+  - '{"cpu_offload":true,"dp_shared_memory":false}'
+  - --compilation-config
+  - '{"cudagraph_capture_sizes":[4,8,12,16,24,32,48,64],"cudagraph_mode":"FULL_DECODE_ONLY"}'
+  - --speculative-config
+  - '{"method":"mtp","num_speculative_tokens":3,"enforce_eager":false}'
+  - --default-chat-template-kwargs
+  - '{"enable_thinking":false}'
+  - --additional-config
+  - '{"enable_cpu_binding":true,"enable_shared_expert_dp":true,"enable_fused_mc2":0,"enable_flashcomm1":true,"multistream_overlap_shared_expert":true,"ascend_compilation_config":{"fuse_norm_quant":false,"enable_npugraph_ex":true,"enable_static_kernel":false,"enable_super_kernel":false}}'
+  env:
+    VLLM_USE_V2_MODEL_RUNNER: '1'
+    VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '3000'
+    VLLM_CHAT_TEMPLATE_RENDER_TIMEOUT: '300'
+    HCCL_BUFFSIZE: '1024'
+    HCCL_CONNECT_TIMEOUT: '1200'
+    PYTORCH_NPU_ALLOC_CONF: expandable_segments:True
+    OMP_PROC_BIND: 'false'
+    OMP_NUM_THREADS: '8'
+    TASK_QUEUE_ENABLE: '1'
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.count != 8:
+              return reject("the eight-card 910B recipe runs exactly 8 cards on one node")
+          if gpu.min_memory_gib < 32:
+              return reject("each card requires at least 32 GiB")
+          return {"GPU_COUNT": 8, "TP_SIZE": 8, "SP_DEGREE": 1}
+  api: *q38_910b_api
+  shm_bytes: 274877906944
 - name: fp8-sglang-ppu-m890p-tp8-256k
   display_name_zh_cn: PPU M890P · FP8 · 8 卡
   display_name_en: PPU M890P · FP8 · 8 GPUs

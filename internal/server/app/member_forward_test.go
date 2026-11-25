@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/cluster"
+	"gpuworks.ai/gpuworks/internal/server/cluster/storagetier"
 	"gpuworks.ai/gpuworks/internal/server/hub"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -717,5 +719,49 @@ level=INFO msg="business follows a new database leader" new_leader=7 this_member
 	}
 	if dropped != 1 {
 		t.Fatalf("sessions were closed %d times", dropped)
+	}
+}
+
+// A leader observation is acted on for three seconds at the tiers' own
+// timing and longer, in proportion, on a tier that elects later: at an
+// election timeout of 3 s a leader's death takes up to two of them to a new
+// leader, and three seconds of freshness would make every member refuse
+// business on every leader change.
+func TestALeaderObservationStaysFreshThroughAnElectionOfTheTier(t *testing.T) {
+	at := func(name string) storagetier.Tier {
+		tier, err := storagetier.Parse(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tier
+	}
+	previous := cluster.ProcessStorageTier()
+	t.Cleanup(func() { cluster.UseStorageTier(previous) })
+	// The member acts on what the tier of its own process allows.
+	fresh := func(name string, age time.Duration) bool {
+		cluster.UseStorageTier(at(name))
+		f := &memberForward{}
+		f.observed.Store(&memberLeaderObservation{leader: 2, at: time.Now().Add(-age)})
+		leader, ok := f.observedLeader()
+		return ok && leader == 2
+	}
+	for _, tc := range []struct {
+		tier string
+		age  time.Duration
+		want bool
+	}{
+		{"standard", 2 * time.Second, true}, {"standard", 4 * time.Second, false},
+		{"slow-storage", 2 * time.Second, true}, {"slow-storage", 4 * time.Second, false},
+		{"slow-storage@100ms", 5 * time.Second, true}, {"slow-storage@100ms", 7 * time.Second, false},
+		{"slow-storage@200ms", 8 * time.Second, true}, {"slow-storage@200ms", 13 * time.Second, false},
+	} {
+		if got := fresh(tc.tier, tc.age); got != tc.want {
+			t.Errorf("%s: an observation %s old is acted on: %v, want %v", tc.tier, tc.age, got, tc.want)
+		}
+		// The window never ends before the tier's longest election can.
+		tier := at(tc.tier)
+		if _, longest := tier.ElectionTimer(); tier.Stretch(memberLeaderFresh) < longest+memberLeaderObserveInterval {
+			t.Errorf("%s: an observation is fresh for %s, shorter than the tier's longest election timer %s and one observation", tc.tier, tier.Stretch(memberLeaderFresh), longest)
+		}
 	}
 }

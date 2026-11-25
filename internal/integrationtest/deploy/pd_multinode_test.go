@@ -45,9 +45,9 @@ func runPDMultiNodeDecodeRebuild(t *testing.T, firstLaunchFails bool) {
 	env := testenv.New(t)
 	const leaderAddress, followerAddress = "10.43.0.10", "10.43.0.11"
 	a := env.AddNode("pd-rank-0", testenv.WithGPUs(2, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}),
-		testenv.WithDriverName("fake"), testenv.WithManagementAddress(leaderAddress))
+		testenv.WithDriverName("docker"), testenv.WithManagementAddress(leaderAddress))
 	b := env.AddNode("pd-rank-1", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}),
-		testenv.WithDriverName("fake"), testenv.WithManagementAddress(followerAddress))
+		testenv.WithDriverName("docker"), testenv.WithManagementAddress(followerAddress))
 	// Every launch on the follower node is captured, not only the first: a
 	// generation that fails while it starts is rebuilt, and the test must
 	// exit the follower of the generation that serves, not of one that is gone.

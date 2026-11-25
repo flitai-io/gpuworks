@@ -24,7 +24,7 @@ func TestRestartedAppRetainsRequestHistoryAndQuality(t *testing.T) {
 	collectorServer := httptest.NewServer(collector)
 	defer collectorServer.Close()
 	env := testenv.NewWithPrivateHTTPHosts(t, "127.0.0.1")
-	env.AddNode("audit-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	env.AddNode("audit-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "audit-node")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

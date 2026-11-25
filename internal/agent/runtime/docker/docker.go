@@ -32,7 +32,7 @@ type Driver struct {
 func New() *Driver { return &Driver{} }
 
 // Name implements runtime.Driver.
-func (d *Driver) Name() string { return "docker" }
+func (d *Driver) Name() string { return runtime.DriverDocker }
 
 // NamedVolumes: docker creates a named volume on first use and keeps it.
 func (d *Driver) NamedVolumes() bool { return true }
@@ -367,7 +367,7 @@ func buildRunArgs(spec runtime.WorkloadSpec) []string {
 		}
 	}
 
-	args = append(args, spec.DockerArgs...)
+	args = append(args, spec.DockerRunArgs()...)
 	args = append(args, runtime.LabelArgs(spec.Labels)...)
 
 	if spec.ShmBytes > 0 {

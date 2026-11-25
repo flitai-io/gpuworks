@@ -513,6 +513,10 @@ func (d *headlessTestDriver) Name() string {
 	}
 	return "headless-test"
 }
+
+// DeviceView is asked when the name is not a registered driver's: such a
+// stand-in gives a container only the devices it was granted.
+func (d *headlessTestDriver) DeviceView() runtime.DeviceView                        { return runtime.ViewGranted }
 func (d *headlessTestDriver) Detect(context.Context) (bool, error)                  { return true, nil }
 func (d *headlessTestDriver) ImageExists(context.Context, string) (bool, error)     { return true, nil }
 func (d *headlessTestDriver) PullImage(context.Context, string, func(string)) error { return nil }
@@ -566,18 +570,18 @@ type driverAwareInjectionProber struct {
 	injectionProber
 }
 
-func (p driverAwareInjectionProber) RuntimeInjectionForDriver(indexes []int, driverName string) gpu.RuntimeInjection {
-	if inj, ok := p.driverInj[driverName]; ok {
+func (p driverAwareInjectionProber) RuntimeInjectionForDriver(indexes []int, target runtime.Target) gpu.RuntimeInjection {
+	if inj, ok := p.driverInj[target.Name]; ok {
 		return inj
 	}
 	return p.inj
 }
 
 func TestApplyDeviceInjection(t *testing.T) {
-	e := NewWithProber(nil, nil, slog.Default(), t.TempDir(), injectionProber{
+	e := NewWithProber(&headlessTestDriver{name: "docker"}, nil, slog.Default(), t.TempDir(), injectionProber{
 		inj: gpu.RuntimeInjection{
-			Env:        map[string]string{"ASCEND_RT_VISIBLE_DEVICES": "2,4"},
-			DockerArgs: []string{"--runtime", "ascend"},
+			Env:   map[string]string{"ASCEND_RT_VISIBLE_DEVICES": "2,4"},
+			Grant: runtime.DeviceGrant{RuntimeClass: "ascend"},
 		},
 	})
 	ws := runtime.WorkloadSpec{Env: map[string]string{"HF_HUB_OFFLINE": "1"}}
@@ -592,8 +596,8 @@ func TestApplyDeviceInjection(t *testing.T) {
 	if got := ws.Env["HF_HUB_OFFLINE"]; got != "1" {
 		t.Fatalf("existing env was not preserved: %q", got)
 	}
-	if len(ws.DockerArgs) != 2 || ws.DockerArgs[0] != "--runtime" || ws.DockerArgs[1] != "ascend" {
-		t.Fatalf("DockerArgs = %+v", ws.DockerArgs)
+	if len(ws.DockerRunArgs()) != 2 || ws.DockerRunArgs()[0] != "--runtime" || ws.DockerRunArgs()[1] != "ascend" {
+		t.Fatalf("DockerArgs = %+v", ws.DockerRunArgs())
 	}
 }
 
@@ -619,7 +623,7 @@ func (d *oomMarkerDriver) Logs(context.Context, string, bool, int) (io.ReadClose
 }
 
 func TestApplyDeviceInjectionRejectsUnsupportedRuntime(t *testing.T) {
-	e := NewWithProber(nil, nil, slog.Default(), t.TempDir(), injectionProber{
+	e := NewWithProber(&headlessTestDriver{name: "docker"}, nil, slog.Default(), t.TempDir(), injectionProber{
 		inj: gpu.RuntimeInjection{UnsupportedReason: "vendor runtime is not configured"},
 	})
 	ws := runtime.WorkloadSpec{Env: map[string]string{}}
@@ -634,16 +638,16 @@ func TestApplyDeviceInjectionUsesDriverAwareInjectorAndPropagatesMounts(t *testi
 		// optional-interface dispatch were broken; assert against it never
 		// being used for the nerdctl case below.
 		inj: gpu.RuntimeInjection{
-			Env:        map[string]string{"ASCEND_VISIBLE_DEVICES": "2,4"},
-			DockerArgs: []string{"--runtime", "ascend"},
+			Env:   map[string]string{"ASCEND_VISIBLE_DEVICES": "2,4"},
+			Grant: runtime.DeviceGrant{RuntimeClass: "ascend"},
 		},
 		driverInj: map[string]gpu.RuntimeInjection{
 			"nerdctl": {
-				Env:        map[string]string{"ASCEND_RT_VISIBLE_DEVICES": "0,1"},
-				DockerArgs: []string{"--device", "/dev/davinci2", "--device", "/dev/davinci4"},
+				Env: map[string]string{"ASCEND_RT_VISIBLE_DEVICES": "0,1"},
 				Mounts: []gpu.RuntimeMount{
 					{Source: "/usr/local/dcmi", Target: "/usr/local/dcmi", ReadOnly: true},
 				},
+				Grant: runtime.DeviceGrant{Devices: []runtime.Device{{Path: "/dev/davinci2"}, {Path: "/dev/davinci4"}}},
 			},
 		},
 	}}
@@ -659,8 +663,8 @@ func TestApplyDeviceInjectionUsesDriverAwareInjectorAndPropagatesMounts(t *testi
 	if got := ws.Env["ASCEND_RT_VISIBLE_DEVICES"]; got != "0,1" {
 		t.Fatalf("ASCEND_RT_VISIBLE_DEVICES = %q", got)
 	}
-	if len(ws.DockerArgs) != 4 {
-		t.Fatalf("DockerArgs = %+v", ws.DockerArgs)
+	if len(ws.DockerRunArgs()) != 4 {
+		t.Fatalf("DockerArgs = %+v", ws.DockerRunArgs())
 	}
 	if len(ws.Mounts) != 1 || ws.Mounts[0].Source != "/usr/local/dcmi" || !ws.Mounts[0].ReadOnly {
 		t.Fatalf("driver-injected mounts were not propagated to WorkloadSpec: %+v", ws.Mounts)

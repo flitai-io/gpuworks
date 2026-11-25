@@ -3,6 +3,7 @@
 package app
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/cluster"
 	"gpuworks.ai/gpuworks/internal/server/cluster/storagetier"
 )
 
@@ -84,6 +86,30 @@ func TestRuntimeDqliteStorageTierIsRecordedBySeedAndAdoptedByJoiner(t *testing.T
 	})
 	if err != nil || adopted != "slow-storage" {
 		t.Fatalf("join materials record tier %q err %v, want the cluster's slow-storage", adopted, err)
+	}
+
+	// The join itself tells its process the cluster's tier before it starts
+	// the node, whatever the process was told before; reopening the joined
+	// identity later leaves the process on the tier it was told.
+	previous := cluster.ProcessStorageTier()
+	t.Cleanup(func() { cluster.UseStorageTier(previous) })
+	cluster.UseStorageTier(storagetier.Standard)
+	started, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	session, startErr := StartClusterRaft(started, joining, target)
+	if got := cluster.ProcessStorageTier(); got != storagetier.SlowStorage {
+		t.Fatalf("the join left its process on %s (start: %v), want the cluster's slow-storage", got, startErr)
+	}
+	if session != nil {
+		_ = session.Close()
+	}
+	cluster.UseStorageTier("slow-storage@100ms")
+	reopened, reopenErr := startClusterRaft(started, joining, target, false)
+	if reopened != nil {
+		t.Cleanup(func() { _ = reopened.Close() })
+	}
+	if got := cluster.ProcessStorageTier(); got != "slow-storage@100ms" {
+		t.Fatalf("reopening the joined identity moved the process to %s (start: %v), want the tier it was told", got, reopenErr)
 	}
 }
 

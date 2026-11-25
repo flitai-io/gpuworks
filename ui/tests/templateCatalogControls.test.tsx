@@ -5,7 +5,7 @@ import React from "react";
 import { I18nextProvider } from "react-i18next";
 import type { DetectedTemplateChip, InferenceTemplateChip } from "../src/api";
 const { i18n } = await createI18n(["inferenceTemplates"]);
-const { cleanup, render, screen } = await import("@testing-library/react");
+const { act, cleanup, render, screen } = await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
 const { TemplateChipPicker } = await import("../src/pages/inferenceTemplates/TemplateChipPicker");
 const { TemplateHardwareFilters } = await import("../src/pages/inferenceTemplates/TemplateHardwareFilters");
@@ -94,4 +94,42 @@ test("saved chips arriving after opening the picker stay checked and cancelling 
   await user.click(screen.getByRole("button", { name: "Cancel", exact: true }));
   assert.equal(closes, 1);
   assert.equal(saves, 0);
+});
+
+test("the picker's brands follow the server's order once the dictionary arrives, and so does the brand shown", async () => {
+  const fs = await import("node:fs");
+  const { setVendorDictionary } = await import("../src/vendors.ts");
+  const served = JSON.parse(fs.readFileSync(new URL("./fixtures/accelerator-vendors.json", import.meta.url), "utf8"));
+  const brands = () => screen.getByRole("navigation").querySelectorAll("button");
+  setVendorDictionary([]);
+  try {
+    render(wrap(<TemplateChipPicker catalog={catalog} existing={[]} detectedKeys={new Set<string>()} onClose={() => {}} onApply={() => {}} />));
+    // Without the dictionary the brands sort by name, and AMD's models show.
+    assert.deepEqual([...brands()].map((button) => button.getAttribute("aria-label")), ["AMD", "NVIDIA"]);
+    assert.ok(screen.getByRole("checkbox", { name: /8060S/ }));
+    act(() => setVendorDictionary(served.items));
+    assert.deepEqual([...brands()].map((button) => button.getAttribute("aria-label")), ["NVIDIA", "AMD"]);
+    assert.ok(screen.getByRole("checkbox", { name: "A100" }));
+    assert.equal(screen.queryByRole("checkbox", { name: /8060S/ }), null);
+  } finally {
+    setVendorDictionary(served.items);
+  }
+});
+
+test("the hardware filter's brands follow the server's order once the dictionary arrives, and a brand the console has no name for takes the server's", async () => {
+  const fs = await import("node:fs");
+  const { setVendorDictionary } = await import("../src/vendors.ts");
+  const served = JSON.parse(fs.readFileSync(new URL("./fixtures/accelerator-vendors.json", import.meta.url), "utf8"));
+  const chips = [{ vendor: "example", name: "Example X1" }, { vendor: "amd", name: "AMD Radeon 8060S", arch_id: "gfx1151" }, detected];
+  setVendorDictionary([]);
+  try {
+    const { container } = render(wrap(<TemplateHardwareFilters chips={chips} detectedKeys={new Set<string>()} value="" onChange={() => {}} />));
+    const brands = () => [...container.querySelectorAll(".template-hardware-group .vendor-logo")].map((logo) => logo.className.replace(/.*vendor-logo-/, ""));
+    assert.deepEqual(brands(), ["amd", "unknown", "nvidia"]);
+    act(() => setVendorDictionary([...served.items, { id: "example", brand: "Example", frameworks: [], runtimes: [], features: [] }]));
+    assert.deepEqual(brands(), ["nvidia", "amd", "example"]);
+    assert.ok(screen.getByRole("group", { name: "Example" }));
+  } finally {
+    setVendorDictionary(served.items);
+  }
 });

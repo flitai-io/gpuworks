@@ -14,6 +14,8 @@ import (
 	"github.com/canonical/go-dqlite/v3/client"
 	dqlitedriver "github.com/canonical/go-dqlite/v3/driver"
 	"golang.org/x/sys/unix"
+
+	"gpuworks.ai/gpuworks/internal/server/cluster/storagetier"
 )
 
 // The accepting side of this policy runs in the database process and is
@@ -196,4 +198,40 @@ func TestNativeDatabasePeerLivenessDoesNotExpireHealthyConnections(t *testing.T)
 		time.Sleep(150 * time.Millisecond)
 	}
 	t.Logf("same healthy native connection: idle6s busy%s cycles=%d", time.Since(started), cycles)
+}
+
+// At a tier that elects later than slow-storage the limit grows with it, so
+// that a connection is not closed at the moment the election timeout runs out.
+func TestPeerLivenessGrowsWithTheStorageTier(t *testing.T) {
+	at200, err := storagetier.SlowStorage.WithLatency(200 * time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := processStorageTier.Load()
+	t.Cleanup(func() { processStorageTier.Store(previous) })
+	UseStorageTier(at200)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := configureDatabasePeerSocket(conn); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := conn.(*net.TCPConn).SyscallConn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, check := range map[string][2]int{"user_timeout_ms": {unix.TCP_USER_TIMEOUT, 12000}, "keepalive_count": {unix.TCP_KEEPCNT, 12}} {
+		var value int
+		var socketErr error
+		if err := raw.Control(func(fd uintptr) { value, socketErr = unix.GetsockoptInt(int(fd), unix.IPPROTO_TCP, check[0]) }); err != nil || socketErr != nil || value != check[1] {
+			t.Errorf("%s = %d (%v, %v), want %d", name, value, err, socketErr, check[1])
+		}
+	}
 }

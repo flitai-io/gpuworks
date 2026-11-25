@@ -166,7 +166,7 @@ func TestModelRegistrationUsesFakeHubThroughRealApp(t *testing.T) {
 func TestModelDownloadRunsThroughDesiredStateAndCompletionMarker(t *testing.T) {
 	hub := testenv.FakeModelHub(t)
 	env := testenv.NewWithModelEndpoint(t, hub.Endpoint)
-	node := env.AddNode("model-download-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("model-download-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "model-download-node")
 	rows, err := env.Store().ListNodes()
 	if err != nil || len(rows) != 1 {
@@ -222,7 +222,7 @@ func TestModelDownloadRunsThroughDesiredStateAndCompletionMarker(t *testing.T) {
 func TestModelScopeEmptyRevisionPinsRegistrationAndDownload(t *testing.T) {
 	hub := testenv.FakeModelHub(t)
 	env := testenv.NewWithModelEndpoint(t, hub.Endpoint)
-	env.AddNode("modelscope-download-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	env.AddNode("modelscope-download-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, "modelscope-download-node")
 	rows, err := env.Store().ListNodes()
 	if err != nil || len(rows) != 1 {
@@ -272,8 +272,8 @@ func TestModelScopeEmptyRevisionPinsRegistrationAndDownload(t *testing.T) {
 
 func TestPeerModelSyncRunsThroughTwoRealAgents(t *testing.T) {
 	env := testenv.New(t)
-	source := env.AddNode("model-peer-source", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
-	target := env.AddNode("model-peer-target", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A10", VRAMMB: 16384}), testenv.WithDriverName("fake"))
+	source := env.AddNode("model-peer-source", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
+	target := env.AddNode("model-peer-target", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A10", VRAMMB: 16384}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, source.Name)
 	env.WaitNodeOnline(t, target.Name)
 	// Online is reported before the first GPU metadata update can arrive. On

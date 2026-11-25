@@ -149,3 +149,7 @@ func (d *FakeDriver) TagImage(_ context.Context, source, target string) error {
 // once, so a node that already loaded an archive reports it present on its
 // next presence report, before any retry has asked it to load again.
 func (d *FakeDriver) FixImageAtNextLoad() { d.mu.Lock(); d.imageFixedByLoad = true; d.mu.Unlock() }
+
+// ImageStoreRoot: the fake keeps images in memory, whatever runtime it is
+// named after.
+func (d *FakeDriver) ImageStoreRoot() string { return "" }

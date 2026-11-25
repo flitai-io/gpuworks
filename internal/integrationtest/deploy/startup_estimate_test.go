@@ -88,7 +88,7 @@ func TestStartupEstimateSelectsInitializationFromFinalEngineOverHTTP(t *testing.
 func startupEstimateFixture(t *testing.T) (*testenv.Env, *store.Model, string) {
 	t.Helper()
 	env := testenv.New(t)
-	node := env.AddNode("startup-estimate", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("startup-estimate", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("docker"))
 	env.WaitNodeOnline(t, node.Name)
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {

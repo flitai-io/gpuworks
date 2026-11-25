@@ -57,7 +57,9 @@ func (s *Store) grantClusterTransportAdmissionKeys(ctx context.Context, expected
 			}
 			next, err := grantClusterMaterials(tx, current)
 			if err != nil {
-				return err
+				// A missing or revoked admission is refused here, and
+				// the caller must be able to tell whose it was.
+				return refusedKey(err, key)
 			}
 			granted = append(granted, next)
 		}
@@ -68,7 +70,7 @@ func (s *Store) grantClusterTransportAdmissionKeys(ctx context.Context, expected
 		}
 		for _, row := range granted {
 			if err := requireClusterMaterialGrantRecordedAndPhase(tx, ctx, row, phase); err != nil {
-				return err
+				return refusedKey(err, row.KeyFingerprint)
 			}
 		}
 		return nil

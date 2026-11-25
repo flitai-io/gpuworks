@@ -45,13 +45,40 @@ function evidence(): BenchmarkPointEvidence {
     sessions_truncated: false,
   };
 }
-function show(e?: BenchmarkPointEvidence) {
+function panel(e?: BenchmarkPointEvidence, expanded = false) {
   const point = { seq: 1, detail_path: e ? "retained.jsonl.gz" : undefined, long_tail: e ? { evidence: e } : undefined } as BenchmarkPoint;
-  return render(<I18nextProvider i18n={i18n}><BenchmarkEvidencePanel run={run} point={point} /></I18nextProvider>);
+  return <I18nextProvider i18n={i18n}><BenchmarkEvidencePanel run={run} point={point} expanded={expanded} /></I18nextProvider>;
+}
+// The section starts collapsed; the reader opens it from its header.
+async function show(e?: BenchmarkPointEvidence) {
+  const view = render(panel(e));
+  await userEvent.setup().click(screen.getByRole("button", { name: /Request and session evidence/ }));
+  return view;
 }
 
+test("the section starts collapsed, opens from the keyboard, and a report capture shows it without interaction", async () => {
+  const view = render(panel(evidence()));
+  const header = screen.getByRole("button", { name: /Request and session evidence/ });
+  assert.equal(header.getAttribute("aria-expanded"), "false");
+  assert.equal(screen.queryByText("97.5%"), null);
+  assert.equal(screen.queryByText("First turns"), null);
+  // The download stays reachable while collapsed, and using it does not toggle the section.
+  await userEvent.setup().click(screen.getByRole("link", { name: "Download request JSONL" }));
+  assert.equal(header.getAttribute("aria-expanded"), "false");
+  header.focus();
+  await userEvent.setup().keyboard("{Enter}");
+  assert.equal(header.getAttribute("aria-expanded"), "true");
+  assert.ok(screen.getByText("97.5%"));
+  view.unmount();
+  render(panel(evidence(), true));
+  assert.ok(screen.getByText("97.5%"));
+  cleanup();
+  render(panel());
+  assert.equal(screen.queryByText(/Historical identities and cache states cannot be reconstructed/), null);
+});
+
 test("the report distinguishes request success from complete sessions and explains skipped rounds", async () => {
-  show(evidence());
+  await show(evidence());
   assert.ok(screen.getByText("52"));
   assert.ok(screen.getByText("97.5%"));
   assert.ok(screen.getByText("75%"));
@@ -70,8 +97,8 @@ test("the report distinguishes request success from complete sessions and explai
   assert.ok(screen.getByText("0 / 13"));
 });
 
-test("cache coverage and weighted usage are separate and an unreported group stays unknown", () => {
-  show(evidence());
+test("cache coverage and weighted usage are separate and an unreported group stays unknown", async () => {
+  await show(evidence());
   const rows = screen.getAllByText("All requests");
   const cache = rows[1].closest("tr")!;
   assert.ok(within(cache).getByText("36 / 40"));
@@ -84,21 +111,21 @@ test("cache coverage and weighted usage are separate and an unreported group sta
   assert.ok(screen.getByText(/Local counts are estimates/));
 });
 
-test("legacy and future evidence versions cannot manufacture a zero completion rate", () => {
-  const view = show();
+test("legacy and future evidence versions cannot manufacture a zero completion rate", async () => {
+  const view = await show();
   assert.ok(screen.getByText(/Historical identities and cache states cannot be reconstructed/));
   assert.equal(screen.queryByText("0%"), null);
   view.unmount();
-  show({ ...evidence(), version: 99 });
+  await show({ ...evidence(), version: 99 });
   assert.ok(screen.getByText(/no supported session or round evidence/));
   assert.equal(screen.queryByText("75%"), null);
 });
 
-test("first visible content is shown beside TTFT and reasoning-only requests are counted, not hidden", () => {
+test("first visible content is shown beside TTFT and reasoning-only requests are counted, not hidden", async () => {
   const e = evidence();
   e.followup_turns.first_content = { count: 30, mean_ms: 4100, p50_ms: 4000, p99_ms: 6000 };
   e.followup_turns.no_content = 6;
-  show(e);
+  await show(e);
   assert.ok(screen.getByRole("columnheader", { name: "First content" }));
   const follow = screen.getAllByText("Follow-up turns")[0].closest("tr")!;
   assert.ok(within(follow).getByText("4,000 / 6,000 ms · n=30 · 6 without content"));

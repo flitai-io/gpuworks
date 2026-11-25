@@ -12,14 +12,15 @@ import (
 // Where a card's model name comes from when the driver cannot be asked.
 //
 // The order is deliberate and the driver is not in it: this package answers
-// only from the domestic table (domestic.go) and the host's pci.ids, and a
+// only from the vendors' definitions (accelerator.PCIModels) and the host's pci.ids, and a
 // caller that can reach the driver overrides the name with what the driver
 // says (it is the better name: "NVIDIA GeForce RTX 3090" against pci.ids'
 // "GA102 [GeForce RTX 3090]"). Nothing is cached to disk — the name is
 // looked up per scan and the driver wins whenever it answers, so there is no
 // stored name to go stale.
 //
-//  1. domesticModels: the few accelerators upstream pci.ids does not have.
+//  1. accelerator.PCIModels: the few accelerators upstream pci.ids does not
+//     have, named in their vendors' definitions.
 //  2. The host's pci.ids, for everything upstream covers (NVIDIA above all).
 //  3. Neither: the caller names the card by its ids (PCIDeviceLabel).
 
@@ -63,7 +64,10 @@ func (s Scanner) ModelNames(cards []Card) map[string]string {
 // only inside the vendor sections actually wanted.
 func (s Scanner) lookupPCIIDs(wanted map[[2]uint32]bool) map[[2]uint32]string {
 	found := map[[2]uint32]string{}
-	domestic := domesticNames()
+	domestic := map[[2]uint32]string{}
+	for _, model := range accelerator.PCIModels() {
+		domestic[[2]uint32{model.Vendor, model.Device}] = model.Name
+	}
 	missing := map[[2]uint32]bool{}
 	vendors := map[uint32]bool{}
 	for pair := range wanted {
@@ -77,7 +81,7 @@ func (s Scanner) lookupPCIIDs(wanted map[[2]uint32]bool) map[[2]uint32]string {
 	if len(missing) == 0 {
 		return found
 	}
-	// Everything the domestic table does not carry is the host's to name,
+	// Everything the vendors' definitions do not carry is the host's to name,
 	// and a card that postdates both is named by its ids.
 	for _, candidate := range pciIDsPaths {
 		file, err := os.Open(s.path(candidate))

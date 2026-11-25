@@ -1,4 +1,4 @@
-import { acceleratorMessageParams } from "./acceleratorMessages";
+import { acceleratorMessageParams, hostRequirement } from "./acceleratorMessages";
 import { formatBytes } from "./format";
 import { notifySessionExpired } from "./session";
 import { CLUSTER_UPGRADE_CODE, notifyClusterUpgrade } from "./clusterUpgrade";
@@ -107,6 +107,7 @@ export function apiErrorText(t: APIErrorTranslator, error: unknown): string {
   if (error.code === "ACCELERATOR_FEATURE_UNSUPPORTED") {
     return t("acceleratorFeature.unsupported", { ...acceleratorMessageParams(t, params), defaultValue: error.fallback || error.code });
   }
+  if (error.code === "ACCELERATOR_RUNTIME_UNSUPPORTED") params.required = hostRequirement(params);
   if (error.code === "UNIT_PLACEMENT_NONE") params.reasons = placementShortfall(t, params);
   if (error.code === "DISTRIBUTED_PARALLELISM_UNAVAILABLE") params.reason = distributedRefusal(t, params);
   if (error.code === "SERVER_STORAGE_FULL" && typeof params.path === "string" && typeof params.available_bytes === "number" && typeof params.total_bytes === "number") {

@@ -588,7 +588,7 @@ func (e *Env) AddNode(name string, options ...NodeOption) *Node {
 	if err != nil {
 		e.t.Fatalf("create pending node %q: %v", name, err)
 	}
-	o := nodeOptions{driverName: "fake"}
+	o := nodeOptions{driverName: runtime.DriverDocker}
 	for _, f := range options {
 		f(&o)
 	}
@@ -1028,15 +1028,16 @@ func (p *FakeProber) RuntimeInjection(indexes []int) gpu.RuntimeInjection {
 		}
 		return gpu.RuntimeInjection{Env: map[string]string{
 			"ASCEND_VISIBLE_DEVICES": strings.Join(visible, ","), "ASCEND_RT_VISIBLE_DEVICES": strings.Join(compact, ","), "NPU_VISIBLE_DEVICES": strings.Join(compact, ","),
-		}, DockerArgs: []string{"--runtime", "ascend"}}
+		},
+			Grant: runtime.DeviceGrant{RuntimeClass: "ascend"}}
 	case "ppu", "t-head", "thead":
-		args := []string{"--device", "/dev/alixpu:/dev/alixpu:rwm", "--device", "/dev/alixpu_ctl:/dev/alixpu_ctl:rwm"}
+		devices := []runtime.Device{{Path: "/dev/alixpu", Access: runtime.DeviceAccessAll}, {Path: "/dev/alixpu_ctl", Access: runtime.DeviceAccessAll}}
 		compact := make([]string, len(indexes))
 		for i := range compact {
 			compact[i] = fmt.Sprint(i)
-			args = append(args, "--device", fmt.Sprintf("/dev/alixpu_ppu%d:/dev/alixpu_ppu%d:rwm", indexes[i], indexes[i]))
+			devices = append(devices, runtime.Device{Path: fmt.Sprintf("/dev/alixpu_ppu%d", indexes[i]), Access: runtime.DeviceAccessAll})
 		}
-		return gpu.RuntimeInjection{Env: map[string]string{"NVIDIA_VISIBLE_DEVICES": "void", "CUDA_VISIBLE_DEVICES": strings.Join(compact, ",")}, DockerArgs: args}
+		return gpu.RuntimeInjection{Env: map[string]string{"NVIDIA_VISIBLE_DEVICES": "void", "CUDA_VISIBLE_DEVICES": strings.Join(compact, ",")}, Grant: runtime.DeviceGrant{Devices: devices}}
 	default:
 		return gpu.RuntimeInjection{}
 	}

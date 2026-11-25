@@ -43,7 +43,7 @@ type PluginDetector interface {
 // Doctor check.
 func DetectPlugin(ctx context.Context, prober interface{ Vendor() string }, driver string) PluginInfo {
 	driver = strings.ToLower(strings.TrimSpace(driver))
-	if driver == "udocker" || driver == "" {
+	if driver == DriverUdocker || driver == "" {
 		return PluginInfo{}
 	}
 	detector, ok := prober.(PluginDetector)
