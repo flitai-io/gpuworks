@@ -273,7 +273,10 @@ func (e *Engine) removeContainer(ctx context.Context, uuid string) error {
 		return nil
 	}
 	e.log.Info("stopping instance container", "uuid", uuid, "container", name)
-	if err := d.Stop(ctx, name); err != nil {
+	stopCtx, cancelStop := gracefulStopContext(ctx)
+	err = d.Stop(stopCtx, name)
+	cancelStop()
+	if err != nil {
 		// Remove is forced, so a stop that merely timed out is still reclaimed
 		// below; the failure only loses the graceful shutdown window.
 		e.log.Warn("instance container stop failed; continuing with forced removal", "uuid", uuid, "container", name, "err", err)
@@ -286,6 +289,22 @@ func (e *Engine) removeContainer(ctx context.Context, uuid string) error {
 		return fmt.Errorf("remove container %s: %w", name, err)
 	}
 	return nil
+}
+
+// removeReserve is the part of a removal deadline the graceful stop may not
+// spend: a stop that hangs (a wedged daemon, a process stuck in the kernel)
+// must still leave the forced removal time to run.
+const removeReserve = 10 * time.Second
+
+// gracefulStopContext bounds the stop of a removal so that removeReserve of
+// the caller's deadline is left for the forced removal. With no time to spare
+// the stop is skipped: the removal is forced anyway.
+func gracefulStopContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return ctx, func() {}
+	}
+	return context.WithDeadline(ctx, deadline.Add(-removeReserve))
 }
 
 const (

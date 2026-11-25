@@ -139,8 +139,19 @@ func TestDockerChildReadinessRejectsWaitersAndRecoversSameContainer(t *testing.T
 	originalID := physicalID(container)
 	defer func() {
 		e.SetDesiredFull(context.Background(), nil)
+		// CI has seen `docker stop` of this container hang past every budget
+		// while other containers stop at once; keep the daemon's view of it
+		// when that happens.
+		defer func() {
+			if t.Failed() {
+				out, _ := exec.Command("docker", "inspect", "--format", "{{json .State}}", container).CombinedOutput()
+				t.Logf("container state: %s", out)
+				out, _ = exec.Command("docker", "top", container).CombinedOutput()
+				t.Logf("container processes: %s", out)
+			}
+			exec.Command("docker", "rm", "-f", container).Run()
+		}()
 		wait("container removed", func() bool { in, _ := st.InstanceByUUID(uuid); return in != nil && in.State == proto.InstStopped })
-		exec.Command("docker", "rm", "-f", container).Run()
 	}()
 	p := proxy.New(storeplane.New(st), childReadinessNetworks{}, childReadinessTunnel{}, nil, 0)
 	defer p.Close()
