@@ -282,6 +282,26 @@
           "image": "acme/adapter:latest",
           "reason": "template_image",
           "compatible": true
+        },
+        {
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1",
+          "reason": "catalog_match",
+          "compatible": true
+        },
+        {
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-r5",
+          "reason": "catalog_match",
+          "compatible": true
+        },
+        {
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.59-deepseek41-amd64-r5",
+          "reason": "catalog_match",
+          "compatible": true
+        },
+        {
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.59-deepseek41-r4",
+          "reason": "catalog_match",
+          "compatible": true
         }
       ]
     },

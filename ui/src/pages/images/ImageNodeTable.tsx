@@ -247,7 +247,8 @@ export default function ImageNodeTable({
         }
         if (row.source === "local") return <span className="text-fg-muted">{t("nodeTable.localLoading")}</span>;
         if (row.source === "runtime") return <span className="text-fg-muted">{t("nodeTable.namespaceCopy", { size: bytes(row.transferred_bytes || 0) })}</span>;
-        const expected = row.size_bytes || selectedVersion.size_bytes || 0;
+        // Only the transfer source can measure this stream's total.
+        const expected = row.size_bytes || 0;
         const done = row.transferred_bytes || 0;
         return (
           <Space direction="vertical" style={{ width: 108 }} size={2}>

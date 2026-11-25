@@ -43,8 +43,7 @@ Agent 的周期 `status.node` 消息在 `images[]` 中上报以下字段（仅�
 ## 系统镜像
 
 内置目录 `internal/server/imagecatalog/catalog-seed.json` 由 [`gpuworks-image-manifest`](cli.md#gpuworks-image-manifest)
-从 gpuworks-runner 构建矩阵生成，当前 39 个版本，全部是 `gpuworks/gpuworks-runner:<id>-<revision>`，
-按引擎 × 框架分 16 个系列：
+从 runner 矩阵生成。147 个版本按引擎和框架分为 22 个系列，其中 108 个版本仅供手动选择。下表列举常见系列。
 
 | 系列 | 厂商 / framework | 引擎 | 示例 image_ref | 架构 |
 |---|---|---|---|---|
@@ -67,9 +66,7 @@ Agent 的周期 `status.node` 消息在 `images[]` 中上报以下字段（仅�
 
 tag 文法是 `<framework><framework 版本>[-<型号>]-<引擎><引擎版本>-<revision>`；llama.cpp 按上游写作 `llama.cpp-b<构建号>`。引擎、引擎版本、framework 与
 framework 版本都从 tag 解析；昇腾型号段（`910b`、`a3`、`310p`、`950`）只在 tag 与版本备注里，不是独立字段；
-架构取自构建平台（多平台为 `multi`）。每个版本的 `registry_sources` 列出同一 tag 在 Docker Hub 之外的副本：
-`quay.io/gpuworks/gpuworks-runner`、`swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner`。
-内部仓库 registry.zstack.ai 不在清单里。manifest 带上这份清单，节点拉取时把它们和 Docker Hub 地址一起按可达性排序。
+架构取自构建平台（多平台为 `multi`）。矩阵中列出的第一个已验证仓库提供 `image_ref`；其余提供相同平台内容的仓库列入 `registry_sources`。因此一个版本可以只有一个地址，也可以有 Docker Hub、Quay 和 SWR 的多个副本。节点按拉取源策略选择地址。
 
 各引擎的命令：
 
@@ -104,7 +101,7 @@ image catalog synced catalog_version=2026-10-09.f085e40b created=0 updated=25 de
   `UPDATE_SOURCES_UNAVAILABLE`，索引可用但没有源提供与索引一致的目录文件时返回 502 `UPDATE_DOWNLOAD_FAILED`
   （`detail` 都列出每个源的原因），渠道没有发布镜像目录时返回 404 `UPDATE_NOT_PUBLISHED`，库都不动。
 - **上传 manifest**：`POST /api/v1/images/import`，请求体就是 manifest JSON 本身。服务器不能访问公网时用它：
-  在能联网的机器上从任一发布源下载当前渠道的 `<channel>/manifest.json`（如 `https://dl.gpuworks.ai/release/manifest.json`，与渠道索引里的镜像目录是同一文件）再上传。
+  在能联网的机器上从任一发布源下载当前渠道的 `<channel>/manifest.json`（如 `https://dl.gpuworks.ai/release/manifest.json`，对应签名索引的 `image_catalog`）再上传。
 
 两条路径都把本次的 `catalog_version` 记为当前目录版本，设置页「版本与更新」据此显示是否有更新。
 
@@ -131,7 +128,7 @@ image catalog synced catalog_version=2026-10-09.f085e40b created=0 updated=25 de
 
 ### manifest 格式
 
-内嵌种子与上游 `manifest.json` 是同一个文件。`schema_version` 必须是 `3`（兼容导入 `2`，其他值 400
+内嵌种子使用 schema 4，以 `download_size_bytes` 记录各平台中最大的压缩下载量。签名索引的 `image_catalog_v4` 提供完整目录，固定地址 `manifest.json` 提供兼容目录。`schema_version` 接受 `2`、`3` 和 `4`（其他值 400
 `IMAGE_MANIFEST_INVALID`）；`catalog_version` 必填，形如 `<日期>.<内容 hash 前 8 位>`，只用于展示与日志，
 不参与比较；可选的 `sha256` 是正文完整性哈希（按 `sha256` 字段置空后的规范 JSON 计算），存在时不匹配即拒绝。
 

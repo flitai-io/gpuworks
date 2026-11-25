@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -46,7 +47,7 @@ var (
 // callableServers are the runner tags whose engine is a server the inference
 // templates start through the callable engine (with the gpuworks adapter in
 // the package), named the way their projects write them.
-var callableServers = map[string]string{"mlx-vlm": "MLX-VLM", "mlx-audio": "MLX Audio", "llama.cpp": "llama.cpp", "systemone": "System One"}
+var callableServers = map[string]string{"mlx-vlm": "MLX-VLM", "mlx-audio": "MLX Audio", "llama.cpp": "llama.cpp", "systemone": "System One", "strata": "Strata"}
 
 // catalogEngine is the image catalog's engine for a tag's engine.
 func catalogEngine(tagEngine string) string {
@@ -59,10 +60,11 @@ func catalogEngine(tagEngine string) string {
 func main() {
 	inPath := flag.String("in", "", "gpuworks-runner matrix.yaml")
 	outPath := flag.String("out", "-", "output manifest JSON")
-	registry := flag.String("registry", DefaultRegistry, "canonical image repository")
+	registry := flag.String("registry", "", "canonical build repository (defaults to the first build_repositories entry)")
 	date := flag.String("date", "", "catalog date (YYYY-MM-DD); defaults to today")
 	verifyPath := flag.String("verify", "", "instead of generating, check that every reference in this manifest pulls whole from every registry it lists")
 	grammarPath := flag.String("grammar-out", "", "also write the release tag grammar the publishing scripts read")
+	legacy := flag.Bool("legacy", false, "emit an importable catalog for servers reading schema 3")
 	flag.Parse()
 	if strings.TrimSpace(*verifyPath) != "" {
 		os.Exit(runVerify(*verifyPath))
@@ -81,6 +83,12 @@ func main() {
 	out, err := generate(data, options{Registry: *registry, Date: catalogDate})
 	if err != nil {
 		fatal(err)
+	}
+	if *legacy {
+		out, err = manifest.LegacyCatalog(out)
+		if err != nil {
+			fatal(err)
+		}
 	}
 	if err := writePath(*outPath, out); err != nil {
 		fatal(err)
@@ -108,16 +116,30 @@ type options struct {
 
 type matrixFile struct {
 	Defaults struct {
-		Platforms []string `yaml:"platforms"`
+		Platforms           []string `yaml:"platforms"`
+		BuildRepositories   []string `yaml:"build_repositories"`
+		CatalogRepositories []string `yaml:"catalog_repositories"`
 	} `yaml:"defaults"`
-	Items      []matrixItem `yaml:"items"`
-	LegacyTags []struct {
-		Tag    string `yaml:"tag"`
-		Reason string `yaml:"legacy_reason"`
-	} `yaml:"legacy_tags"`
+	Items []matrixItem `yaml:"items"`
+
+	// Refuse obsolete inputs before import can reconcile away their omitted images.
+	RetiredPublished yaml.Node                   `yaml:"published"`
+	DownloadSizes    map[string]map[string]int64 `yaml:"download_sizes"`
 }
 
 type matrixItem struct {
+	Builder       string   `yaml:"builder"`
+	Tag           string   `yaml:"tag"`
+	Repositories  []string `yaml:"repositories"`
+	EngineVersion string   `yaml:"engine_version"`
+	// LegacyReason declares a tag that is outside the release grammar and says
+	// why it exists. A tag inside the grammar must not carry one, and a tag
+	// outside it must: the number of declarations is a ratcheted budget
+	// (published_tags_outside_grammar).
+	LegacyReason string `yaml:"legacy_reason"`
+	// Alias marks a legacy tag whose name is unrelated to its id; the id then
+	// only supplies the catalog metadata.
+	Alias     bool              `yaml:"alias"`
 	ID        string            `yaml:"id"`
 	Revision  string            `yaml:"revision"`
 	Backend   string            `yaml:"backend"`
@@ -159,26 +181,29 @@ func generate(data []byte, opt options) ([]byte, error) {
 	if err := yaml.Unmarshal(data, &matrix); err != nil {
 		return nil, fmt.Errorf("parse matrix: %w", err)
 	}
-	for _, entry := range matrix.LegacyTags {
-		if entry.Tag == "" || strings.TrimSpace(entry.Reason) == "" || releaseTagPattern.MatchString(entry.Tag) {
-			return nil, fmt.Errorf("invalid legacy tag declaration for %q", entry.Tag)
+	if matrix.RetiredPublished.Kind != 0 {
+		return nil, fmt.Errorf("move published releases under items with builder: catalog")
+	}
+	buildRepositories := matrix.Defaults.BuildRepositories
+	if buildRepositories == nil {
+		buildRepositories = []string{DefaultRegistry}
+	}
+	if registry := strings.TrimSuffix(strings.TrimSpace(opt.Registry), "/"); registry != "" {
+		i := slices.Index(buildRepositories, registry)
+		if i < 0 {
+			return nil, fmt.Errorf("no published copies are known for %s", registry)
 		}
-	}
-	if len(matrix.Items) == 0 {
-		return nil, fmt.Errorf("matrix has no items")
-	}
-	registry := strings.TrimSuffix(strings.TrimSpace(opt.Registry), "/")
-	if registry == "" {
-		registry = DefaultRegistry
+		buildRepositories = slices.Concat([]string{registry}, buildRepositories[:i], buildRepositories[i+1:])
 	}
 	seriesByName := map[string]*manifest.ManifestSeries{}
-	for _, item := range matrix.Items {
-		version, tag, err := versionFromItem(item, matrix.Defaults.Platforms, registry)
-		if err != nil {
-			return nil, err
-		}
-		if item.Catalog != nil && !*item.Catalog {
-			continue
+	listedTags := map[string]bool{}
+	addVersion := func(version manifest.ManifestVersion, tag parsedTag, platforms []string) error {
+		if matrix.DownloadSizes != nil {
+			size, err := compressedSizeForPlatforms(version.Name, platforms, matrix.DownloadSizes[version.Name])
+			if err != nil {
+				return err
+			}
+			version.DownloadBytes = size
 		}
 		name := seriesName(tag.Engine, tag.Backend)
 		series := seriesByName[name]
@@ -187,6 +212,39 @@ func generate(data []byte, opt options) ([]byte, error) {
 			seriesByName[name] = series
 		}
 		series.Versions = append(series.Versions, version)
+		return nil
+	}
+	hasRecipe, hasManual := false, false
+	for _, item := range matrix.Items {
+		platforms := item.catalogPlatforms(matrix.Defaults.Platforms)
+		version, tag, err := item.catalogVersion(platforms, buildRepositories, matrix.Defaults.CatalogRepositories)
+		if err != nil {
+			return nil, err
+		}
+		if item.Catalog != nil && !*item.Catalog {
+			continue
+		}
+		if item.Builder == "catalog" {
+			hasManual = true
+		} else {
+			hasRecipe = true
+		}
+		if listedTags[version.Name] {
+			return nil, fmt.Errorf("tag %q is already listed", version.Name)
+		}
+		listedTags[version.Name] = true
+		if err := addVersion(version, tag, platforms); err != nil {
+			return nil, err
+		}
+	}
+	// Import reconciles missing official rows, so a manual-only list cannot replace the catalog.
+	if !hasRecipe {
+		return nil, fmt.Errorf("matrix has no catalogued build items")
+	}
+	for name := range matrix.DownloadSizes {
+		if !listedTags[name] {
+			return nil, fmt.Errorf("download_sizes names unlisted tag %q", name)
+		}
 	}
 	series := make([]manifest.ManifestSeries, 0, len(seriesByName))
 	for _, value := range seriesByName {
@@ -199,7 +257,11 @@ func generate(data []byte, opt options) ([]byte, error) {
 		return nil, err
 	}
 	sum := sha256.Sum256(seriesJSON)
-	m := manifest.Manifest{SchemaVersion: 3, CatalogVersion: opt.Date + "." + hex.EncodeToString(sum[:])[:8], Series: series}
+	schema := 3
+	if matrix.DownloadSizes != nil || hasManual {
+		schema = 4
+	}
+	m := manifest.Manifest{SchemaVersion: schema, CatalogVersion: opt.Date + "." + hex.EncodeToString(sum[:])[:8], Series: series}
 	if err := m.Validate(); err != nil {
 		return nil, err
 	}
@@ -211,7 +273,48 @@ func generate(data []byte, opt options) ([]byte, error) {
 	return append(out, '\n'), nil
 }
 
-func versionFromItem(item matrixItem, defaultPlatforms []string, registry string) (manifest.ManifestVersion, parsedTag, error) {
+func (item matrixItem) catalogPlatforms(defaults []string) []string {
+	if len(item.Platforms) == 0 {
+		return defaults
+	}
+	return item.Platforms
+}
+
+// The catalog shows a single download estimate. A node pulls exactly one
+// platform, so use the largest platform as the budget for a multi-arch tag.
+func compressedSizeForPlatforms(tag string, platforms []string, sizes map[string]int64) (int64, error) {
+	var largest int64
+	for _, platform := range platforms {
+		size := sizes[platform]
+		if size <= 0 {
+			return 0, fmt.Errorf("missing or invalid compressed size for %s (%s)", tag, platform)
+		}
+		largest = max(largest, size)
+	}
+	if largest == 0 || len(sizes) != len(platforms) {
+		return 0, fmt.Errorf("compressed size platforms disagree with %s", tag)
+	}
+	return largest, nil
+}
+
+func (item matrixItem) catalogVersion(platforms, buildRepositories, catalogRepositories []string) (manifest.ManifestVersion, parsedTag, error) {
+	switch item.Builder {
+	case "catalog":
+		if item.Catalog != nil || item.Base != "" || len(item.Args) != 0 || len(item.Requires) != 0 {
+			return manifest.ManifestVersion{}, parsedTag{}, fmt.Errorf("catalog-only item %q cannot set build inputs or catalog", item.ID)
+		}
+		return item.manualVersion(catalogRepositories)
+	case "", "prebuilt", "host-env":
+		if item.Tag != "" || item.LegacyReason != "" || item.Alias || item.EngineVersion != "" || item.Repositories != nil {
+			return manifest.ManifestVersion{}, parsedTag{}, fmt.Errorf("item %q: release metadata requires builder: catalog", item.ID)
+		}
+		return versionFromItem(item, platforms, buildRepositories)
+	default:
+		return manifest.ManifestVersion{}, parsedTag{}, fmt.Errorf("item %q: unknown builder %q", item.ID, item.Builder)
+	}
+}
+
+func versionFromItem(item matrixItem, platforms, repositories []string) (manifest.ManifestVersion, parsedTag, error) {
 	id := strings.TrimSpace(item.ID)
 	tag, err := parseTag(id)
 	if err != nil {
@@ -239,10 +342,6 @@ func versionFromItem(item matrixItem, defaultPlatforms []string, registry string
 	if revision == "" {
 		return manifest.ManifestVersion{}, tag, fmt.Errorf("matrix id %q: revision is required", id)
 	}
-	platforms := item.Platforms
-	if len(platforms) == 0 {
-		platforms = defaultPlatforms
-	}
 	arch, err := archFromPlatforms(platforms)
 	if err != nil {
 		return manifest.ManifestVersion{}, tag, fmt.Errorf("matrix id %q: %w", id, err)
@@ -251,45 +350,19 @@ func versionFromItem(item matrixItem, defaultPlatforms []string, registry string
 	if !releaseTagPattern.MatchString(immutable) {
 		return manifest.ManifestVersion{}, tag, fmt.Errorf("matrix id %q: revision %q is not r<number>", id, revision)
 	}
-	ref := registry + ":" + immutable
-	sources, err := mirrorSources(ref)
+	refs, err := repositoryRefs(immutable, repositories)
 	if err != nil {
 		return manifest.ManifestVersion{}, tag, fmt.Errorf("matrix id %q: %w", id, err)
 	}
 	return manifest.ManifestVersion{
 		Name:             immutable,
-		ImageRef:         ref,
+		ImageRef:         refs[0],
 		EngineVersion:    tag.EngineVersion,
 		FrameworkVersion: tag.FrameworkVersion,
 		Arch:             arch,
-		RegistrySources:  sources,
+		RegistrySources:  refs[1:],
 		Notes:            versionNotes(item, tag),
 	}, tag, nil
-}
-
-// publishedRegistries are the public registries every runner tag is copied
-// to besides Docker Hub, byte for byte (the release pipeline pushes them with
-// skopeo). registry_sources carries them to every installation as copies a
-// node may pull instead; which it tries first is the node's (it probes them),
-// unless an operator's pull source rule says otherwise. An internal registry
-// the release also pushes to is not public and is not listed: an installation
-// that can reach it says so with a rule of its own.
-var publishedRegistries = []string{
-	"quay.io/gpuworks/gpuworks-runner",
-	"swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner",
-}
-
-// mirrorSources lists the public copies of a runner tag.
-func mirrorSources(ref string) ([]string, error) {
-	repo, tag, ok := strings.Cut(ref, ":")
-	if !ok || repo != DefaultRegistry || tag == "" {
-		return nil, fmt.Errorf("no published copies are known for %s", ref)
-	}
-	out := make([]string, 0, len(publishedRegistries))
-	for _, published := range publishedRegistries {
-		out = append(out, published+":"+tag)
-	}
-	return out, nil
 }
 
 func archFromPlatforms(platforms []string) (string, error) {

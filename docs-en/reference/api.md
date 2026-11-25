@@ -585,8 +585,8 @@ the endpoint returns 409 and does not replace the existing registration. If the 
 | PATCH | `/api/v1/images/{id}` | Update an image series: `enabled`; community/custom series also allow changes to `common_args`/`common_env` (system series return 400 `OFFICIAL_IMAGE_SERIES_MANAGED`) | JWT(admin) |
 | DELETE | `/api/v1/images/{id}` | Delete a community/custom image version; system images return 400 `OFFICIAL_IMAGE_DELETE_FORBIDDEN`. Returns 409 `IMAGE_IN_USE` if still referenced by deployments, unfinished instances, or models (using the same reference criteria as system image deletion/deprecation) | JWT(admin) |
 | DELETE | `/api/v1/image-series/{id}` | Delete a community/custom image series; returns 409 `IMAGE_IN_USE` if any version is still referenced | JWT(admin) |
-| POST | `/api/v1/images/import` | Accepts two request body types: a system catalog manifest with `schema_version` (schema 2/3; other values return 400), or `{"series":[...]}` for community/custom additions (cannot set `source=official`) | JWT(admin) |
-| POST | `/api/v1/images/sync` | Update the system image catalog from the release channel; ignores the request body and returns version counts and series. For errors, see [Catalog Import Results](#目录导入结果) | JWT(admin) |
+| POST | `/api/v1/images/import` | Accepts two request body types: a system catalog manifest with `schema_version` (schema 2/3/4; other values return 400), or `{"series":[...]}` for community/custom additions (cannot set `source=official`) | JWT(admin) |
+| POST | `/api/v1/images/sync` | Update the system image catalog from the release channel; ignores the request body and returns version counts and series. For errors, see [Catalog Import Results](#catalog-import-results) | JWT(admin) |
 | POST | `/api/v1/images/preview-archive-url` | Parse a `docker save` archive URL before downloading: `{"url"}` → `url`, `size_bytes`, `repo_tags`, `previewable`, and optional `metadata_by_tag` with the engine, framework, their versions, and host architecture per reference | JWT(admin) |
 | GET | `/api/v1/images/nodes/{uuid}/runtime-images` | List tagged node images. Optional query parameter `namespace`. Returns references, immutable identities, sizes, and source and deployment namespaces. | JWT(admin) |
 | POST | `/api/v1/images/nodes/{uuid}/runtime-images/inspect` | Inspect the selected image configuration for catalog fields. Submit the same selection plus `node_uuid` as `runtime_image` alongside one custom version to `POST /api/v1/images/import`. | JWT(admin) |
@@ -2478,7 +2478,7 @@ An unknown `target_vendor` on `/api/v1/engines` returns 400. If custom-command f
 <!-- translation-source-sha256: eb0d2ff341e8c1ae82bcc18e67d0720a647009973d4a5c9b9394f4b3c57c737d ## Models -->
 <!-- translation-source-sha256: 2818637fc41db824cf8851d4bd0bc2cb1e90e978da76ce1c2cb5098d8aeece25 ### List Filtering and Presence Summary -->
 <!-- translation-source-sha256: 536c79e56bf4d787dec94eef14773f9e978accf7d42427e195db79e5fa0ac045 ### Register an Existing Node Path -->
-<!-- translation-source-sha256: a8ebc8f569b4695db5d7e80450a6e843689abd8b2724c44a3c54d53df4c178bc ## Images / Storages (Image Catalog and Storage Policies) -->
+<!-- translation-source-sha256: 0fd52dbabdccd5193d0b88b4560518c4834cb3288f883f793f40da2ba9422e79 ## Images / Storages (Image Catalog and Storage Policies) -->
 <!-- translation-source-sha256: 5a937a0329b1aabd619bac36afbe45ff963584a7031b8588b3c6d1c9ebabdbe0 ### Register an image already on a node -->
 <!-- translation-source-sha256: 04f403145369bea2e0886af6fd3a84add59d07299152c9a53cc09ef3d598fdf0 ### Storage Configuration and Cache Status -->
 <!-- translation-source-sha256: 76495aa0a302fbe279f354b4207253de032639c11e8498c2041f1b8a373a248c ### Storage File Operation Scope and Errors -->

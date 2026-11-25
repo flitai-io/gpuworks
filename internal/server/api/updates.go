@@ -186,7 +186,7 @@ func (a *apiHandlers) getUpdates(w http.ResponseWriter, r *http.Request) {
 	// than the embedded ones, which are not updates. They can still be applied
 	// by uploading them.
 	catalogsBehind := index.Server.OlderThan(version.Version, version.BuildDate)
-	if catalog := index.ImageCatalog; catalog != nil {
+	if catalog := index.CurrentImageCatalog(); catalog != nil {
 		status.ImageCatalog.Latest = catalog.Version
 		status.ImageCatalog.UpdateAvailable = catalog.Version != state.ImageCatalogVersion && !catalogsBehind
 	}

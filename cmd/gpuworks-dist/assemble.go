@@ -186,6 +186,23 @@ func assemble(in assembleInput) (distribution.Index, error) {
 		return distribution.Index{}, err
 	}
 	index.ImageCatalog = &distribution.CatalogFile{Version: images.CatalogVersion, File: imageFile}
+	if images.SchemaVersion >= 4 {
+		index.ImageCatalogV4 = index.ImageCatalog
+		legacy, err := manifest.LegacyCatalog(in.ImageCatalog)
+		if err != nil {
+			return distribution.Index{}, err
+		}
+		desc, err := manifest.Parse(legacy)
+		if err != nil {
+			return distribution.Index{}, err
+		}
+		file, err := writeBlob(in.OutDir, "catalog/images/"+sha256Hex(legacy)+".json", legacy)
+		if err != nil {
+			return distribution.Index{}, err
+		}
+		index.ImageCatalog = &distribution.CatalogFile{Version: desc.CatalogVersion, File: file}
+		in.ImageCatalog = legacy
+	}
 	// A fixed name per channel for fetching the image catalog by hand, to
 	// upload it to a server that cannot reach the sources; the same file as
 	// the channel's image catalog.

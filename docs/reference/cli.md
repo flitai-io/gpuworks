@@ -586,7 +586,7 @@ server 在 `/install.sh` 提供的引导脚本，添加节点时界面生成 `cu
 
 | 子命令 | 说明 |
 |---|---|
-| `assemble -channel C -dist DIR -out DIR [-commit SHA] [-built-at TIME] [-release-id ID]` | 读 `DIR` 里的 `gpuworks-<id>-<os>-<arch>.tar.gz`（所有包须是同一个 release id，不读两个构建 job 各自的 `release.json`），连同本次检出内嵌的镜像目录与推理模板目录包写成新目录树，用环境变量 `GPUWORKS_DIST_SIGNING_KEY`（`-key-env` 可改）里的 ed25519 种子签名 `<C>/index.json`，并写 `<C>/latest`、`<C>/manifest.json`（与镜像目录同一文件）与 `releases/<id>/SHA256SUMS`；`-out` 已存在时拒绝 |
+| `assemble -channel C -dist DIR -out DIR [-commit SHA] [-built-at TIME] [-release-id ID]` | 读 `DIR` 里的 `gpuworks-<id>-<os>-<arch>.tar.gz`（所有包须是同一个 release id，不读两个构建 job 各自的 `release.json`），连同本次检出内嵌的镜像目录与推理模板目录包写成新目录树，用环境变量 `GPUWORKS_DIST_SIGNING_KEY`（`-key-env` 可改）里的 ed25519 种子签名 `<C>/index.json`，并写 `<C>/latest`、`<C>/manifest.json`（schema 3 兼容目录）与 `releases/<id>/SHA256SUMS`；`-out` 已存在时拒绝 |
 | `release-id -dist DIR` | 打印 `DIR` 里发布包的 release id（规则同 `assemble`） |
 | `adopt -dir DIR -release-id ID` | 核对从某个源拷回的 `releases/<id>/`：包与 `SHA256SUMS` 逐个一致、都属于 `ID`，打印包内 `INSTALL.txt` 记录的构建时间；不一致时非零退出 |
 | `verify -channel C -source URL … [-release-id ID] [-index FILE] [-full]` | 逐个源读取并验签索引，核对 release id，并对每个文件发 HEAD 核对大小；`-full` 改为下载并核对 sha256；`-index` 改用本地尚未发布的签名索引核对各源上的文件（不读源自己的索引），用于切换通道前。任一源失败即非零退出 |
@@ -596,19 +596,19 @@ server 在 `/install.sh` 提供的引导脚本，添加节点时界面生成 `cu
 ### gpuworks-image-manifest
 
 从 gpuworks-runner 构建矩阵（`build/runner-images/matrix.yaml`）生成系统镜像目录
-manifest（schema 3）。同一份输出既是 server 内嵌的种子 `internal/server/imagecatalog/catalog-seed.json`，也随每次发布进入
+manifest（schema 4）。同一份输出既是 server 内嵌的种子 `internal/server/imagecatalog/catalog-seed.json`，也随每次发布进入
 [发布通道](#gpuworks-dist)。格式与导入规则见[镜像目录](image-families.md#manifest-格式)。
 
 | flag | 默认值 | 说明 |
 |---|---|---|
 | `-in PATH` | 无（必填） | 构建矩阵 `matrix.yaml` |
 | `-out PATH` | `-`（stdout） | 输出 manifest JSON |
-| `-registry REPO` | `gpuworks/gpuworks-runner` | 写进 `image_ref` 的规范仓库 |
+| `-registry REPO` | `defaults.build_repositories` 首项 | 从已声明的构建仓库中选择写进构建镜像 `image_ref` 的仓库 |
 | `-date YYYY-MM-DD` | 当天（UTC） | `catalog_version` 的日期部分；`catalog_version` = `<日期>.<内容 hash 前 8 位>` |
+| `-legacy` | 关闭 | 生成 schema 3 文件供旧服务端导入 |
 | `-verify PATH` | 无 | 不生成，改为检查该 manifest 里每个引用都能完整拉取，见下 |
 
-每个矩阵条目产出一个版本 `<registry>:<id>-<revision>`，`registry_sources` 为 quay.io、
-swr.cn-southwest-2.myhuaweicloud.com、registry.zstack.ai 三个镜像仓下的同名 tag；引擎、引擎版本、framework 与
+每个构建条目产出 `<registry>:<id>-<revision>`。`builder: catalog` 的条目用 revision 表达标准发布版本，用精确 tag 表达历史名称，仓库列表取自条目的 `repositories` 或 `defaults.catalog_repositories`。列表首项生成 `image_ref`，其余已验证的仓库生成同名 tag 的 `registry_sources`。引擎、引擎版本、framework 与
 framework 版本从 id 解析，架构取自条目的 `platforms`（缺省用矩阵默认值）。id 不合文法、矩阵里声明的
 `ENGINE_VERSION`/`FRAMEWORK_VERSION` 与 id 不一致、或出现不支持的平台组合时报错退出。输出按系列名、再按
 `image_ref` 排序，可重复 diff；单测守护内嵌种子与矩阵生成结果逐字节一致。

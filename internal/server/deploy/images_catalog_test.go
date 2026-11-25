@@ -148,3 +148,15 @@ func TestResolveImageCatalogSelectsPreviouslyImportedVendorEngine(t *testing.T) 
 		t.Fatal("SGLang vendor build offered for a vLLM deployment")
 	}
 }
+
+func TestManualReleaseIsOnlySelectedByOverride(t *testing.T) {
+	target := ImageTarget{Engine: "vllm", Vendor: "nvidia", Framework: "cuda", FrameworkVersion: "13.0", PlatformArch: "amd64"}
+	manual := ImageCandidate{Engine: "vllm", EngineVersion: "0.34.0", Framework: "cuda", FrameworkVersion: "13.0", Arch: "amd64", ImageRef: "registry.example/runner:cuda13.0-vllm0.34.0-r1", Source: "official", Enabled: true, ManualOnly: true}
+	if got := ResolveImageCatalog(target, []ImageCandidate{manual}); got.Image == manual.ImageRef {
+		t.Fatal("auto-selected the manual release")
+	}
+	target.Override = manual.ImageRef
+	if got := ResolveImageCatalog(target, []ImageCandidate{manual}); got.Blocking || got.Image != manual.ImageRef {
+		t.Fatalf("override=%+v", got)
+	}
+}

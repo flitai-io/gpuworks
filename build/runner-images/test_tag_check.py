@@ -17,12 +17,13 @@ items:
     revision: r4
     tag: not-a-published-tag
     legacy_reason: items are not the inventory
-legacy_tags:
   - id: cuda13.0-vllm0.34.0
+    builder: catalog
     tag: cuda13.0-vllm0.34.0-amd64-slot3
     legacy_reason: Existing tag.
     platforms: [linux/amd64]
   - id: cuda13.0-vllm0.34.0
+    builder: catalog
     tag: cuda13.0-vllm0.34.0-arm64-slot3
     platforms: [linux/arm64]
 """
@@ -47,14 +48,14 @@ class TagCheckTest(unittest.TestCase):
     def test_everything_else_is_refused_by_name(self):
         for tag in ("cuda13.0-vllm0.34.0-r1-amd64", "cuda13.0-vllm0.34.0-amd64-r1", "latest",
                     "cuda13.0-vllm0.34.0-r", "cuda13.0-vllm0.34.0-r1x", "xcuda13.0-vllm0.34.0-r1",
-                    # listed under published without a declaration
+                    # listed with builder: catalog without a declaration
                     "cuda13.0-vllm0.34.0-arm64-slot3",
-                    # declared, but under items
+                    # declared, but on a recipe
                     "not-a-published-tag"):
             problem = self.refusal(tag)
             self.assertIn(tag + " is outside the runner tag grammar", problem)
 
-    def test_declarations_come_only_from_the_published_section(self):
+    def test_declarations_come_only_from_catalog_items(self):
         self.assertEqual(tag_check.declared_legacy(str(self.matrix)), {"cuda13.0-vllm0.34.0-amd64-slot3"})
 
     def test_missing_matrix_refuses_legacy_tags_instead_of_passing_them(self):

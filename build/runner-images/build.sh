@@ -53,7 +53,7 @@ import sys, json, yaml
 m = yaml.safe_load(open(sys.argv[1]))
 default_platforms = (m.get("defaults") or {}).get("platforms") or ["linux/amd64"]
 for it in m["items"]:
-    if it.get("builder") == "host-env":
+    if it.get("builder") in ("host-env", "catalog"):
         continue  # macOS host environment packages: build/host-envs/build.sh
     if it.get("builder") == "prebuilt":
         print("prebuilt %s: pinned artifact; see %s/README.md" % (it["id"], it["backend"]), file=sys.stderr)

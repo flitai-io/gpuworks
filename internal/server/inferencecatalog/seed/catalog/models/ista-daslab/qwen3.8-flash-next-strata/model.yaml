@@ -14,7 +14,7 @@
 #     避开只读模型挂载。上下文由 setup 推荐,用户 --context 可覆盖。
 #     镜像预置 MTP 层 /opt/strata/preloaded/mtp、strata-vision 编码器和固定
 #     revision 的 /opt/strata/preloaded/mmproj,默认 --vision gpu。
-#   - 新部署使用 quay.io/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5
+#   - 新部署使用 quay.io/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-r5
 #     (= gw6 全部层 + PLE 适配器、entrypoint/link_models.py 兼容修复与镜像元数据)。
 #     /opt/strata/serve/server.py 未改,仍为 Strata 09817da3979abfeb5fbdef7c8f1223d120c1ad39
 #     的固定源码,所以 strata-queue-runtime 资产的 SOURCE_SHA 校验继续适用。
@@ -146,14 +146,12 @@ specs:
       timings.prompt_ms: {to: prefill_seconds, scale: 0.001}
       timings.predicted_ms: {to: decode_seconds, scale: 0.001}
 # r5 publishes the PLE adapter and model-link fixes with the same launch contract.
-# Only the public quay copy has been verified, so no mirror is listed; gw6 is
-# not a fallback.
 - &strata_runner
   <<: *strata_gw6
   name: iq2xs-strata-nvidia
   display_name_zh_cn: Turing 及以上 · IQ2_XS · Strata r5
   display_name_en: Turing+ · IQ2_XS · Strata r5
-  image: quay.io/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5
+  image: quay.io/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-r5
   # Empty on purpose: without it the merge key would inherit the gw6 mirrors.
   image_sources: []
 # The image consumes --model PATH as the platform mount. The equals form

@@ -340,10 +340,12 @@ def matrix_entry(path, tag):
             items.append(cur)
             continue
         if cur is not None:
-            m = re.match(r"^    (revision|base):\s*(\S+)", ln)
+            m = re.match(r"^    (revision|base|builder):\s*(\S+)", ln)
             if m and m.group(1) not in cur:
                 cur[m.group(1)] = m.group(2).strip("\"'")
     for it in items:
+        if it.get("builder") == "catalog":
+            continue
         rev = it.get("revision", "")
         if tag == it["id"] or (rev and tag == "%s-%s" % (it["id"], rev)):
             return it

@@ -18,6 +18,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/distribution"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
+	"gpuworks.ai/gpuworks/internal/server/imagecatalog/manifest"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/seed"
 )
 
@@ -89,8 +90,12 @@ func TestAssembleWritesASignedTree(t *testing.T) {
 
 	// Both catalogs are the embedded ones, byte for byte, and the channel's
 	// manifest.json is the same file as its image catalog.
-	if !bytes.Equal(readTree(t, in.OutDir, index.ImageCatalog.Path), imagecatalog.SeedJSON()) ||
-		!bytes.Equal(readTree(t, in.OutDir, "nightly/manifest.json"), imagecatalog.SeedJSON()) {
+	legacy, err := manifest.LegacyCatalog(imagecatalog.SeedJSON())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.ImageCatalogV4 == nil || !bytes.Equal(readTree(t, in.OutDir, index.ImageCatalogV4.Path), imagecatalog.SeedJSON()) || !bytes.Equal(readTree(t, in.OutDir, index.ImageCatalog.Path), legacy) ||
+		!bytes.Equal(readTree(t, in.OutDir, "nightly/manifest.json"), legacy) {
 		t.Fatal("image catalog differs from the embedded seed")
 	}
 	if _, err := os.Stat(filepath.Join(in.OutDir, "manifest.json")); !os.IsNotExist(err) {

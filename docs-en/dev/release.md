@@ -109,7 +109,7 @@ and `<sha256>` is the content digest of the corresponding catalog file:
 |---|---|
 | `<channel>/index.json` | An ed25519 signature envelope containing the signed release index; the body lists server archives for each platform, the image catalog, and the inference template catalog package, with a path, size, and sha256 for each file |
 | `<channel>/latest` | The release id as plain text, used to locate the version for the initial download |
-| `<channel>/manifest.json` | The same file as the image catalog in the channel's index, at a fixed address for downloading by hand and uploading in offline environments |
+| `<channel>/manifest.json` | Schema 3 compatibility catalog for manual offline import. New servers fetch the complete seed from the signed index’s `image_catalog_v4` entry |
 | `releases/<release_id>/` | Server archives and `SHA256SUMS` |
 | `catalog/images/<sha256>.json` | The image catalog identified by its content digest |
 | `catalog/templates/<sha256>.tar.gz` | The inference template catalog package identified by its content digest |
@@ -242,6 +242,8 @@ The built-in inference catalog is a content-addressed package, meaning it is ide
 embedded seed is generated from the gpuworks-runner build matrix by `make image-manifest` and enters the [distribution channel](#发布通道) with every release; see the
 [CLI Reference](../reference/cli.md#gpuworks-image-manifest). Unit tests fail if the embedded seed differs from the matrix.
 
+In `build/runner-images/matrix.yaml`, register existing releases in `items` with `builder: catalog`. Supply the revision or historical tag, platforms, engine version and verified repositories. Run `make image-manifest` and publish the corresponding channel. Fresh installations enable these entries for manual selection on compatible targets. Later imports preserve operator switches.
+
 ## Upgrade and Rollback
 
 - Server: `gpuworks upgrade` automatically stops the service, creates a backup (database + `master.key` + old binary), performs an atomic replacement,
@@ -256,10 +258,10 @@ embedded seed is generated from the gpuworks-runner build matrix by `make image-
 <!-- translation-source-sha256: 9aadf552a7b17d37e4bb529f3165267cf854b47d6e32bf8cbca5992f5ab761e4 ## Build Artifacts -->
 <!-- translation-source-sha256: 42932b93632fa7546204b34d9107d978394aecabb5dea1d91d77f4aecd28097e ## Release Documentation PDFs -->
 <!-- translation-source-sha256: d7ce5d3d9eeb9df54e385d8877ce972c83455c47a0527194b5eb544befb004a8 ## Version Numbers -->
-<!-- translation-source-sha256: 76a74f767d39dfbee237cef24fd07069619e753a65f6ffffb48339b5416d22b8 ## Distribution Channel -->
+<!-- translation-source-sha256: 95846446cf3f2ec177d8ae3064ce9427c81eb16383dc4b25c2d85b46f9718de7 ## Distribution Channel -->
 <!-- translation-source-sha256: 43e6e82a406f6474f33b1436024c8e7d2e9a8f5167bc8d4a1ed73cfd15fea161 ### GitHub Actions Releases -->
 <!-- translation-source-sha256: 32a0c93ed7537847e5c6869de4228919ff01e969e898cef1f5f3a268150adfcd ### Kubernetes Agent Image -->
 <!-- translation-source-sha256: 28162a8691fe3e14460cdf3b97b977de5713069ca949be433af79bd0c0473b36 ## Embedded Native Assets -->
-<!-- translation-source-sha256: a6733565856202d23003d644b735bd8ce7dce418fb278199d5e2dd49c202561d ## Database and Catalog Packages -->
+<!-- translation-source-sha256: 2e6836b352a799a66061f0c79a2835a9f8c71182e56e68b1b12afeec69131dca ## Database and Catalog Packages -->
 <!-- translation-source-sha256: 3027f836a7754e1a3e7900b93c5102a75164ef89c3a9c1e20e9bcc2541175d09 ## Upgrade and Rollback -->
 <!-- translation-localized-code-block: 957acfe4b88a2bb0b730fab70c725bbbdaf2e1536f84f94d12918def820c5a7c cac397a0dea3afc07b0e87be5f17fd4204658d3b070919f828730dc6f0f4992d Translate release validation command comments -->

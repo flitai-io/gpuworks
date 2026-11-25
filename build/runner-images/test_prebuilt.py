@@ -21,6 +21,7 @@ class PrebuiltMatrixTest(unittest.TestCase):
             (root / "yaml.py").write_text("from json import load as safe_load\n")
             (root / "matrix.yaml").write_text(json.dumps({"items": [
                 {"id": "cuda13.0-sglang0.5.21", "builder": "prebuilt", "revision": "r1"},
+                {"id": "cuda13.0-vllm0.34.0", "builder": "catalog", "revision": "r9"},
                 {"id": "metal15.0-vllm0.31.0", "builder": "host-env", "revision": "r1"},
                 {"id": "cuda13.0-vllm0.30.0", "revision": "r2"},
             ]}))
@@ -54,6 +55,7 @@ class PrebuiltMatrixTest(unittest.TestCase):
             self.assertIn("source.example/runner:cuda13.0-vllm0.30.0-r2", calls.read_text())
             self.assertNotIn("cuda13.0-sglang0.5.21-r1", calls.read_text())
             self.assertNotIn("metal15.0-vllm0.31.0-r1", calls.read_text())
+            self.assertNotIn("cuda13.0-vllm0.34.0-r9", calls.read_text())
 
 
 if __name__ == "__main__":

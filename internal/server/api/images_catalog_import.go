@@ -227,7 +227,7 @@ func (a *apiHandlers) syncImagesManifest(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	catalog := fetched.Index.ImageCatalog
+	catalog := fetched.Index.CurrentImageCatalog()
 	if catalog == nil {
 		writeNotPublished(w, "image_catalog")
 		return

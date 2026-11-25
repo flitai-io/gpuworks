@@ -48,7 +48,7 @@ elif [[ "$TAGS_FROM" == "matrix" ]]; then
 import sys, yaml
 m = yaml.safe_load(open(sys.argv[1]))
 for it in m["items"]:
-    if it.get("builder") == "prebuilt":
+    if it.get("builder") in ("prebuilt", "catalog"):
         print("SKIP %s: %s is not built into SRC" % (it["id"], it["builder"]), file=sys.stderr)
         continue
     print("%s-%s" % (it["id"], it.get("revision", "r1")))

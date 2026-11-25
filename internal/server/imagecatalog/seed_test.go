@@ -260,8 +260,18 @@ func TestSyncSeedSkipsConflicts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Skipped) != 2 || result.Created != len(seedRefs(t))-2 {
-		t.Fatalf("result = %+v", result)
+	m, err := Seed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCreated := len(seedRefs(t)) - 1 // One image reference conflicts with the community row.
+	for _, series := range m.Series {
+		if series.Name == "SGLang · DTK" {
+			wantCreated -= len(series.Versions)
+		}
+	}
+	if len(result.Skipped) != 2 || result.Created != wantCreated {
+		t.Fatalf("result = %+v, want %d created rows", result, wantCreated)
 	}
 	community, err := st.ImageByRef("gpuworks/gpuworks-runner:cuda13.0-sglang0.5.21-r2")
 	if err != nil || community.Source != "community" || community.Deprecated {
@@ -269,11 +279,8 @@ func TestSyncSeedSkipsConflicts(t *testing.T) {
 	}
 }
 
-// The embedded seed is the gpuworks-runner matrix: every version is an
-// immutable runner tag with its two public copies (quay, SWR) and nothing
-// else - an internal registry is an installation's own rule - every accelerator framework the
-// product supports has images, and no launch defaults or vendor labels ride
-// along (the generator itself is tested in cmd/gpuworks-image-manifest).
+// Each catalog version has one identity and its verified public copies.
+// The generator tests check the actual mapping to matrix entries.
 func TestBuiltinSeedIsRunnerMatrix(t *testing.T) {
 	var seed manifest.Manifest
 	if err := json.Unmarshal(seedJSON, &seed); err != nil {
@@ -286,8 +293,12 @@ func TestBuiltinSeedIsRunnerMatrix(t *testing.T) {
 			t.Fatalf("seed series %s carries common args/env", series.Name)
 		}
 		for _, image := range series.Versions {
-			if !strings.HasPrefix(image.ImageRef, "gpuworks/gpuworks-runner:") || len(image.RegistrySources) != 2 || strings.Contains(strings.Join(image.RegistrySources, " "), "registry.zstack.ai") {
-				t.Fatalf("seed %s is not a runner tag with its mirrors: %+v", image.ImageRef, image.RegistrySources)
+			locations := map[string]bool{}
+			for _, ref := range append([]string{image.ImageRef}, image.RegistrySources...) {
+				if !strings.HasSuffix(ref, "/gpuworks-runner:"+image.Name) || strings.HasPrefix(ref, "registry.zstack.ai/") || locations[ref] {
+					t.Fatalf("unexpected location %q for %s", ref, image.ImageRef)
+				}
+				locations[ref] = true
 			}
 		}
 	}
@@ -300,6 +311,35 @@ func TestBuiltinSeedIsRunnerMatrix(t *testing.T) {
 		if !frameworks[framework] {
 			t.Fatalf("seed is missing required framework %q", framework)
 		}
+	}
+}
+
+func TestPublishedSWRSeedKeepsOperatorEnablement(t *testing.T) {
+	st, err := store.Open("file:image_sync_swr_preview?mode=memory&cache=shared", bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	const ref = "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.2-910b-vllm0.32.0rc1-r1-arm64"
+	if _, err := SyncSeed(st); err != nil {
+		t.Fatal(err)
+	}
+	row, err := st.ImageByRef(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.Source != "official" || !row.Enabled || row.Arch != "arm64" {
+		t.Fatalf("unexpected initial SWR image state: %+v", row)
+	}
+	if _, err := st.SetImageEnabled(row.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SyncSeed(st); err != nil {
+		t.Fatal(err)
+	}
+	row, err = st.ImageByRef(ref)
+	if err != nil || row.Enabled {
+		t.Fatalf("reimport re-enabled a disabled version: %+v, %v", row, err)
 	}
 }
 

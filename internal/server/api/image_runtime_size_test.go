@@ -12,8 +12,12 @@ import (
 
 func TestImageRuntimeSizeSummaryWire(t *testing.T) {
 	run := newImageManifestRun(t)
-	var image store.Image
-	if err := run.store.DB().First(&image).Error; err != nil {
+	image, err := run.store.UpsertImage(&store.Image{ImageRef: "test/runner:known", Engine: "vllm", DownloadBytes: 4096})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknown, err := run.store.UpsertImage(&store.Image{ImageRef: "test/runner:unknown", Engine: "vllm"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	known, zero := int64(8192), int64(0)
@@ -24,14 +28,17 @@ func TestImageRuntimeSizeSummaryWire(t *testing.T) {
 		{State: store.ImageStateAbsent, SizeBytes: 1024, RuntimeSizeBytes: &known},
 		{State: store.ImageStateSyncing, SizeBytes: 2048, RuntimeSizeBytes: &known},
 	} {
-		row.ImageVersionID = image.ID
 		node, err := run.store.RegisterNode(fmt.Sprintf("size-node-%d", i), store.HashToken(fmt.Sprintf("size-token-%d", i)), fmt.Sprintf("size-node-%d", i))
 		if err != nil {
 			t.Fatal(err)
 		}
 		row.NodeID = node.ID
-		if _, err := run.store.UpsertImageNode(&row); err != nil {
-			t.Fatal(err)
+		for _, id := range []uint{image.ID, unknown.ID} {
+			sample := row
+			sample.ImageVersionID = id
+			if _, err := run.store.UpsertImageNode(&sample); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	rec := run.do(http.MethodGet, "/api/v1/images/versions", "", "")
@@ -44,24 +51,32 @@ func TestImageRuntimeSizeSummaryWire(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	found := false
+	found, foundUnknown := false, false
 	for _, raw := range body.Items {
 		var item dto.Image
 		encoded, _ := json.Marshal(raw)
 		if err := json.Unmarshal(encoded, &item); err != nil {
 			t.Fatal(err)
 		}
-		if item.ID != image.ID {
+		if item.ID == unknown.ID {
+			foundUnknown = true
+			if _, ok := raw["size_bytes"]; ok {
+				t.Fatal("unknown download size present on wire")
+			}
+		}
+		if item.ID != image.ID && item.ID != unknown.ID {
 			continue
 		}
-		found = true
+		if item.ID == image.ID {
+			found = true
+		}
 		for key, want := range map[string]string{"present_nodes": "3", "local_runtime_size_bytes": "8192", "local_size_known_nodes": "2"} {
 			if string(raw[key]) != want {
 				t.Fatalf("%s=%s want=%s", key, raw[key], want)
 			}
 		}
-		if _, ok := raw["size_bytes"]; ok {
-			t.Fatalf("system catalog invented archive size: %s", raw["size_bytes"])
+		if got := string(raw["size_bytes"]); item.ID == image.ID && got != "4096" {
+			t.Fatalf("catalog download size = %s", got)
 		}
 		if _, ok := raw["nodes"]; ok {
 			t.Fatal("summary leaked node rows")
@@ -73,7 +88,7 @@ func TestImageRuntimeSizeSummaryWire(t *testing.T) {
 			t.Fatalf("roundtrip=%s", roundtrip)
 		}
 	}
-	if !found {
+	if !found || !foundUnknown {
 		t.Fatal("version missing")
 	}
 }

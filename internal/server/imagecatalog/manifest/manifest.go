@@ -48,12 +48,14 @@ type ManifestVersion struct {
 	RegistrySources  []string `json:"registry_sources,omitempty"`
 	BlobSHA256       string   `json:"blob_sha256,omitempty"`
 	SizeBytes        int64    `json:"size_bytes,omitempty"`
-	// BlobSHA256, SizeBytes and Blob are written by older catalogs (the
+	DownloadBytes    int64    `json:"download_size_bytes,omitempty"`
+	// BlobSHA256 and Blob are written by older catalogs (the
 	// retired offline package). They are still parsed so such a manifest's
 	// sha256 verifies; the generator no longer produces them.
 	Blob            string `json:"blob,omitempty"`
 	Deprecated      bool   `json:"deprecated,omitempty"`
 	DeprecatedSince string `json:"deprecated_since,omitempty"`
+	ManualOnly      bool   `json:"manual_only,omitempty"`
 	RollingTag      bool   `json:"rolling_tag,omitempty"`
 	Notes           string `json:"notes,omitempty"`
 }
@@ -70,7 +72,7 @@ type CommonEnv struct {
 }
 
 func (m Manifest) Validate() error {
-	if m.SchemaVersion != 2 && m.SchemaVersion != 3 {
+	if m.SchemaVersion != 2 && m.SchemaVersion != 3 && m.SchemaVersion != 4 {
 		return fmt.Errorf("unsupported manifest schema_version %d", m.SchemaVersion)
 	}
 	if strings.TrimSpace(m.CatalogVersion) == "" {
@@ -88,6 +90,12 @@ func (m Manifest) Validate() error {
 			return fmt.Errorf("series %q must contain at least one version", s.Name)
 		}
 		for _, v := range s.Versions {
+			if v.ManualOnly && m.SchemaVersion < 4 {
+				return fmt.Errorf("manual_only requires schema 4 for %s", v.ImageRef)
+			}
+			if v.DownloadBytes < 0 || (m.SchemaVersion < 4 && v.DownloadBytes != 0) {
+				return fmt.Errorf("invalid download size for %s in schema %d", v.ImageRef, m.SchemaVersion)
+			}
 			if err := ValidateTagged(v.ImageRef); err != nil {
 				return err
 			}

@@ -40,6 +40,7 @@ type Image struct {
 	Deprecated        bool   `gorm:"index"`
 	Enabled           bool   `gorm:"index"`
 	SizeBytes         int64
+	DownloadBytes     int64  // Registry layer bytes for one platform. Separate from the unpacked disk estimate.
 	VerificationState string `gorm:"size:16;index"` // verified | failed | unknown
 	VerificationError string `gorm:"size:512"`
 	Notes             string `gorm:"type:text"` // free text
@@ -53,6 +54,7 @@ type Image struct {
 	// custom row has it when the operator declares it or the tag is one of the
 	// rolling names (community.IsRollingTag). Automatic image selection skips
 	// such rows; a node can re-pull them.
+	ManualOnly   bool // Published for explicit selection outside the automatic resolver.
 	RollingTag   bool `gorm:"index"`
 	UpstreamGone bool `gorm:"index"`
 	CreatedAt    time.Time

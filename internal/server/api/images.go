@@ -266,7 +266,11 @@ func (a *apiHandlers) imageDTOs(images []store.Image, withNodes bool) []dto.Imag
 			framework = series.Framework
 			effectiveEnabled = effectiveEnabled && series.Enabled
 		}
-		item := dto.Image{ID: image.ID, SeriesID: image.SeriesID, Purpose: purpose, Name: image.Name, Engine: image.Engine, EngineVersion: image.EngineVersion, Framework: framework, FrameworkVersion: image.FrameworkVersion, DriverRequirement: accelerator.DriverRequirement(framework, image.FrameworkVersion), Arch: image.Arch, ImageRef: image.ImageRef, Source: image.Source, Deprecated: image.Deprecated, Enabled: image.Enabled, EffectiveEnabled: effectiveEnabled, Notes: image.Notes, SizeBytes: image.SizeBytes, DeprecatedSince: image.DeprecatedSince, RollingTag: image.RollingTag, UpstreamGone: image.UpstreamGone, ReferenceCount: counts[image.ImageRef], TotalNodes: totalNodes}
+		size := image.DownloadBytes
+		if size == 0 {
+			size = image.SizeBytes
+		}
+		item := dto.Image{ID: image.ID, SeriesID: image.SeriesID, Purpose: purpose, Name: image.Name, Engine: image.Engine, EngineVersion: image.EngineVersion, Framework: framework, FrameworkVersion: image.FrameworkVersion, DriverRequirement: accelerator.DriverRequirement(framework, image.FrameworkVersion), Arch: image.Arch, ImageRef: image.ImageRef, Source: image.Source, Deprecated: image.Deprecated, Enabled: image.Enabled, EffectiveEnabled: effectiveEnabled, Notes: image.Notes, SizeBytes: size, DeprecatedSince: image.DeprecatedSince, RollingTag: image.RollingTag, UpstreamGone: image.UpstreamGone, ReferenceCount: counts[image.ImageRef], TotalNodes: totalNodes}
 		_ = json.Unmarshal([]byte(image.RegistrySources), &item.RegistrySources)
 		for _, row := range rowsByImage[image.ID] {
 			if row.State == store.ImageStatePresent {

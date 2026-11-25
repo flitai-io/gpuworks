@@ -1380,6 +1380,8 @@ var migrations = []migration{
 	{Version: 244, Name: "maintenance_resume_open", Apply: migrateMaintenanceResumeOpen},
 	{Version: 245, Name: "catalog_gc_barrier", Apply: migrateCatalogGCBarrier},
 	{Version: 246, Name: "drop_node_placement_policy", Apply: dropNodePlacementPolicy},
+	{Version: 247, Name: "image_registry_download_size", Apply: addImageDownloadBytes},
+	{Version: 248, Name: "image_manual_selection", Apply: addImageManualOnly},
 }
 
 // modelFileNetworkColumns are the columns migrations 76 and 77 added to

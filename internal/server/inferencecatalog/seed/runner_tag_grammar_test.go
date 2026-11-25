@@ -59,17 +59,18 @@ func declaredLegacyRunnerTags(t *testing.T) map[string]bool {
 		t.Fatal(err)
 	}
 	var matrix struct {
-		Published []struct {
+		Items []struct {
+			Builder      string `yaml:"builder"`
 			Tag          string `yaml:"tag"`
 			LegacyReason string `yaml:"legacy_reason"`
-		} `yaml:"legacy_tags"`
+		} `yaml:"items"`
 	}
 	if err := yaml.Unmarshal(raw, &matrix); err != nil {
 		t.Fatal(err)
 	}
 	tags := map[string]bool{}
-	for _, item := range matrix.Published {
-		if strings.TrimSpace(item.LegacyReason) != "" {
+	for _, item := range matrix.Items {
+		if item.Builder == "catalog" && strings.TrimSpace(item.LegacyReason) != "" {
 			tags[item.Tag] = true
 		}
 	}

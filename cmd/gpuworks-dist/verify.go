@@ -98,6 +98,9 @@ func verifySource(ctx context.Context, in verifyInput, source string) error {
 	for _, f := range index.Server.Files {
 		files = append(files, f.File)
 	}
+	if index.ImageCatalogV4 != nil {
+		files = append(files, index.ImageCatalogV4.File)
+	}
 	if index.ImageCatalog != nil {
 		files = append(files, index.ImageCatalog.File)
 	}

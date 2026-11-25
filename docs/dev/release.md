@@ -107,7 +107,7 @@ server 版本、系统镜像目录与内置推理模板目录通过同一个发�
 |---|---|
 | `<channel>/index.json` | ed25519 签名信封，即带签名的发布索引；正文列出 server 各平台压缩包、镜像目录与推理模板目录包，每个文件带路径、大小与 sha256 |
 | `<channel>/latest` | release id 纯文本，供首次下载定位版本 |
-| `<channel>/manifest.json` | 与该渠道索引里的镜像目录是同一文件，固定地址，供离线环境手工下载后上传 |
+| `<channel>/manifest.json` | schema 3 兼容目录，供离线手工导入。新版从签名索引的 `image_catalog_v4` 获取完整种子 |
 | `releases/<release_id>/` | server 压缩包与 `SHA256SUMS` |
 | `catalog/images/<sha256>.json` | 按内容摘要标识的镜像目录 |
 | `catalog/templates/<sha256>.tar.gz` | 按内容摘要标识的推理模板目录包 |
@@ -233,6 +233,8 @@ server 启动会执行版本化迁移；发布前必须验证 migration marker�
 内置推理目录是内容寻址包，即以内容摘要标识包；发布构建应对包做同一套 schema、路径和摘要校验。系统镜像目录
 由 `make image-manifest` 从 gpuworks-runner 构建矩阵生成内嵌种子，随每次发布进入[发布通道](#发布通道)，见
 [CLI 参考](../reference/cli.md#gpuworks-image-manifest)；内嵌种子与矩阵不一致时单测失败。
+
+在 `build/runner-images/matrix.yaml` 的 `items` 中用 `builder: catalog` 登记已发布成品，填写修订号或历史标签、平台、引擎版本及验证过的仓库。运行 `make image-manifest` 并发布到对应通道。新安装默认启用这些条目，部署时可按目标平台手动选择。再次导入目录会保留管理员设置的开关。
 
 ## 升级与回滚
 

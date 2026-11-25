@@ -44,9 +44,11 @@ type ImageInput struct {
 	Arch             string
 	ImageRef         string
 	RegistrySources  []string
+	ManualOnly       bool
 	RollingTag       bool
 	BlobSHA256       string
 	SizeBytes        int64
+	DownloadBytes    int64
 	Deprecated       bool
 	DeprecatedSince  string
 	Notes            string
@@ -174,8 +176,8 @@ func ImportOfficial(m Manifest, sink Sink, opt ImportOptions) (Result, error) {
 				Engine: series.Engine, EngineVersion: version.EngineVersion,
 				Framework: series.Framework, FrameworkVersion: version.FrameworkVersion,
 				Arch: version.Arch, ImageRef: version.ImageRef,
-				RegistrySources: version.RegistrySources, BlobSHA256: version.BlobSHA256, RollingTag: version.RollingTag,
-				SizeBytes:  version.SizeBytes,
+				RegistrySources: version.RegistrySources, BlobSHA256: version.BlobSHA256, RollingTag: version.RollingTag, ManualOnly: version.ManualOnly,
+				SizeBytes: version.SizeBytes, DownloadBytes: version.DownloadBytes,
 				Deprecated: version.Deprecated, DeprecatedSince: deprecatedSince,
 				Notes: version.Notes,
 			}); err != nil {

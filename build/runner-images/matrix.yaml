@@ -20,6 +20,7 @@
 #               prebuilt = an existing, digest-pinned published artifact; its
 #               release recipe and gates live in the backend README. build.sh
 #               does not rebuild it from a company image as a vendor base.
+#               catalog = list an existing release for manual selection only.
 #   artifact    prebuilt source, pinned by digest; never a mutable base
 #   engine      vllm | sglang | callable（目录引擎；仅作说明，generate() 按 id 解析）。
 #               build.sh 用它选 Dockerfile（<backend>/Dockerfile.<engine>）：非常规的
@@ -89,6 +90,11 @@
 #   note        这一档干什么用、硬件与驱动前提、有什么没什么、已知限制
 
 defaults:
+  build_repositories:
+    - &hub gpuworks/gpuworks-runner
+    - &quay quay.io/gpuworks/gpuworks-runner
+    - &swr swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner
+  catalog_repositories: [*swr]
   platforms: [linux/amd64, linux/arm64]
 
 items:
@@ -910,248 +916,804 @@ items:
       （#32704）；Inkling 2 Mini 的 Mac 模板用这档。
       构建：build/host-envs/build.sh llama.cpp b12631 r1。
 
-# Existing nonstandard names accepted by the publishing and template checks.
-# These declarations grant no system catalog entry.
-legacy_tags:
-  - tag: cann8.5-910b-sglang0.5.12.post1
+  # Existing releases available for manual selection. The batch build, verify
+  # and push commands skip these items. Use revision for standard names and
+  # the exact tag with its legacy_reason for historical exceptions.
+  - id: cann8.5-910b-sglang0.5.12.post1
+    builder: catalog
+    tag: cann8.5-910b-sglang0.5.12.post1
     legacy_reason: No recipe revision in the name.
-  - tag: cann8.5-910b-vllm0.18.0
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann8.5-910b-vllm0.18.0
+    builder: catalog
+    tag: cann8.5-910b-vllm0.18.0
     legacy_reason: No recipe revision in the name.
-  - tag: cann8.5-a3-sglang0.5.12.post1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann8.5-a3-sglang0.5.12.post1
+    builder: catalog
+    tag: cann8.5-a3-sglang0.5.12.post1
     legacy_reason: No recipe revision in the name.
-  - tag: cann8.5-vllm0.18.0-amd64-omni-slot14
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cann8.5-vllm0.18.0-amd64-slot14
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cann8.5-vllm0.18.0-arm64-omni-slot14
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cann8.5-vllm0.18.0-arm64-slot14
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cann9.0-910b-sglang0.5.18
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann8.5-vllm0.18.0
+    builder: catalog
+    tag: cann8.5-vllm0.18.0-omni-r1
+    legacy_reason: Published Omni tag names the base vLLM version and appends the workload.
+    repositories: [*swr, *quay, *hub]
+    engine_version: 0.18.1.dev0
+    platforms: [linux/amd64, linux/arm64]
+    note: Legacy Omni tag. The label records the base vLLM version.
+  - id: cann8.5-vllm0.18.0
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.0-910b-sglang0.5.18
+    builder: catalog
+    tag: cann9.0-910b-sglang0.5.18
     legacy_reason: No recipe revision in the name.
-  - tag: cann9.0-910b-vllm-omni0.23.0rc1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.0-910b-vllm-omni0.23.0rc1
+    builder: catalog
+    tag: cann9.0-910b-vllm-omni0.23.0rc1
     legacy_reason: No recipe revision in the name.
-  - tag: cann9.0-a3-sglang0.5.18
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.0-a3-sglang0.5.18
+    builder: catalog
+    tag: cann9.0-a3-sglang0.5.18
     legacy_reason: No recipe revision in the name.
-  - tag: cann9.0-a3-vllm-omni0.23.0rc1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.0-a3-vllm-omni0.23.0rc1
+    builder: catalog
+    tag: cann9.0-a3-vllm-omni0.23.0rc1
     legacy_reason: No recipe revision in the name.
-  - tag: cann9.0-sglang0.5.15.post1-amd64-diffusion-slot16
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cann9.0-sglang0.5.15.post1-arm64-diffusion-slot16
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cann9.0-sglang0.5.18-amd64-diffusion-slot15
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cann9.0-sglang0.5.18-arm64-diffusion-slot15
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cann9.1-310p-vllm0.27.1rc1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.0-sglang0.5.15.post1
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.0-sglang0.5.18
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.1-310p-vllm0.27.1rc1
+    builder: catalog
+    tag: cann9.1-310p-vllm0.27.1rc1
     legacy_reason: No recipe revision in the name.
-  - tag: cann9.1-910b-vllm-omni0.30.0
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.1-910b-vllm-omni0.30.0
+    builder: catalog
+    tag: cann9.1-910b-vllm-omni0.30.0
     legacy_reason: No recipe revision in the name.
-  - tag: cann9.1-910b-vllm-omni0.32.0-r2-linux-amd64
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.1-910b-vllm-omni0.32.0
+    builder: catalog
+    tag: cann9.1-910b-vllm-omni0.32.0-r2-linux-amd64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cann9.1-910b-vllm0.26.0rc1
+    repositories: [*swr, *hub]
+    platforms: [linux/amd64]
+    note: Check hardware and workload compatibility before deployment.
+  - id: cann9.1-910b-vllm0.26.0rc1
+    builder: catalog
+    tag: cann9.1-910b-vllm0.26.0rc1
     legacy_reason: No recipe revision in the name.
-  - tag: cann9.1-910b-vllm0.27.1rc1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.1-910b-vllm0.27.1rc1
+    builder: catalog
+    tag: cann9.1-910b-vllm0.27.1rc1
     legacy_reason: No recipe revision in the name.
-  - tag: cann9.1-950-vllm-omni0.30.0
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.1-950-vllm-omni0.30.0
+    builder: catalog
+    tag: cann9.1-950-vllm-omni0.30.0
     legacy_reason: No recipe revision in the name.
-  - tag: cann9.1-950-vllm0.27.1rc1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.1-950-vllm0.27.1rc1
+    builder: catalog
+    tag: cann9.1-950-vllm0.27.1rc1
     legacy_reason: No recipe revision in the name.
-  - tag: cann9.1-a3-sglang0.5.23-r1-amd64
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.1-a3-sglang0.5.23
+    builder: catalog
+    tag: cann9.1-a3-sglang0.5.23-r1-amd64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cann9.1-a3-sglang0.5.23-r1-arm64
+    platforms: [linux/amd64]
+    note: Check hardware and workload compatibility before deployment.
+  - id: cann9.1-a3-sglang0.5.23
+    builder: catalog
+    tag: cann9.1-a3-sglang0.5.23-r1-arm64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cann9.1-a3-vllm-omni0.30.0
+    repositories: [*swr, *quay]
+    platforms: [linux/arm64]
+    note: Check hardware and workload compatibility before deployment.
+  - id: cann9.1-a3-vllm-omni0.30.0
+    builder: catalog
+    tag: cann9.1-a3-vllm-omni0.30.0
     legacy_reason: No recipe revision in the name.
-  - tag: cann9.1-a3-vllm-omni0.32.0-r2-linux-amd64
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.1-a3-vllm-omni0.32.0
+    builder: catalog
+    tag: cann9.1-a3-vllm-omni0.32.0-r2-linux-amd64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cann9.1-a3-vllm0.26.0rc1
+    platforms: [linux/amd64]
+    note: Check hardware and workload compatibility before deployment.
+  - id: cann9.1-a3-vllm0.26.0rc1
+    builder: catalog
+    tag: cann9.1-a3-vllm0.26.0rc1
     legacy_reason: No recipe revision in the name.
-  - tag: cann9.1-a3-vllm0.27.1rc1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.1-a3-vllm0.27.1rc1
+    builder: catalog
+    tag: cann9.1-a3-vllm0.27.1rc1
     legacy_reason: No recipe revision in the name.
-  - tag: cann9.1-vllm0.23.0-amd64-omni-slot13
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cann9.1-vllm0.23.0-amd64-slot13
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cann9.1-vllm0.23.0-arm64-omni-slot13
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cann9.1-vllm0.23.0-arm64-slot13
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cann9.2-910b-vllm0.30.0-r1-amd64
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.1-vllm0.23.0
+    builder: catalog
+    tag: cann9.1-vllm0.23.0-omni-r1
+    legacy_reason: Published Omni tag names the base vLLM version and appends the workload.
+    repositories: [*swr, *quay, *hub]
+    engine_version: 0.23.0rc1
+    platforms: [linux/amd64, linux/arm64]
+    note: "Omni 0.23.0rc1. Package versions: linux/amd64 0.23.0rc1+npu, linux/arm64 0.23.0rc1. The tag records base vLLM."
+  - id: cann9.1-vllm0.23.0
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cann9.2-910b-vllm0.30.0
+    builder: catalog
+    tag: cann9.2-910b-vllm0.30.0-r1-amd64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cann9.2-910b-vllm0.30.0-r1-arm64
+    platforms: [linux/amd64]
+    note: Check hardware and workload compatibility before deployment.
+  - id: cann9.2-910b-vllm0.30.0
+    builder: catalog
+    tag: cann9.2-910b-vllm0.30.0-r1-arm64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cann9.2-910b-vllm0.32.0rc1-r1-amd64
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/arm64]
+    note: Check hardware and workload compatibility before deployment.
+  - id: cann9.2-910b-vllm0.32.0rc1
+    builder: catalog
+    tag: cann9.2-910b-vllm0.32.0rc1-r1-amd64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cann9.2-910b-vllm0.32.0rc1-r1-arm64
+    repositories: [*swr, *quay]
+    platforms: [linux/amd64]
+    engine_version: 0.32.0
+    note: vLLM 0.32.0 with vLLM-Ascend 0.32.0rc1 and CANN 9.2.1. NPU inference pending.
+  - id: cann9.2-910b-vllm0.32.0rc1
+    builder: catalog
+    tag: cann9.2-910b-vllm0.32.0rc1-r1-arm64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cann9.2-a3-vllm0.30.0-r1-amd64
+    repositories: [*swr, *quay]
+    platforms: [linux/arm64]
+    engine_version: 0.32.0
+    note: vLLM 0.32.0 with vLLM-Ascend 0.32.0rc1 and CANN 9.2.1. NPU inference pending.
+  - id: cann9.2-a3-vllm0.30.0
+    builder: catalog
+    tag: cann9.2-a3-vllm0.30.0-r1-amd64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cann9.2-a3-vllm0.30.0-r1-arm64
+    repositories: [*swr, *quay]
+    platforms: [linux/amd64]
+    note: Check hardware and workload compatibility before deployment.
+  - id: cann9.2-a3-vllm0.30.0
+    builder: catalog
+    tag: cann9.2-a3-vllm0.30.0-r1-arm64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cann9.2-a3-vllm0.32.0rc1-r1-amd64
+    platforms: [linux/arm64]
+    note: Check hardware and workload compatibility before deployment.
+  - id: cann9.2-a3-vllm0.32.0rc1
+    builder: catalog
+    tag: cann9.2-a3-vllm0.32.0rc1-r1-amd64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cann9.2-a3-vllm0.32.0rc1-r1-arm64
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+    engine_version: 0.32.0
+    note: vLLM 0.32.0 with vLLM-Ascend 0.32.0rc1 and CANN 9.2.1. NPU inference pending.
+  - id: cann9.2-a3-vllm0.32.0rc1
+    builder: catalog
+    tag: cann9.2-a3-vllm0.32.0rc1-r1-arm64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cuda12.8-sglang0.5.8.post1-amd64-diffusion-slot12
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.8-sglang0.5.8.post1-arm64-diffusion-slot12
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.8-sglang0.5.9-amd64-diffusion-slot11
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.8-sglang0.5.9-arm64-diffusion-slot11
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.8-v100-vllm1cat1.5.3-r1-linux-amd64
+    repositories: [*swr, *quay]
+    platforms: [linux/arm64]
+    engine_version: 0.32.0
+    note: vLLM 0.32.0 with vLLM-Ascend 0.32.0rc1 and CANN 9.2.1. NPU inference pending.
+  - id: cuda12.8-sglang0.5.8.post1
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda12.8-sglang0.5.9
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda12.8-systemone1.0
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: cuda12.8-v100-vllm1cat1.5.1
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: cuda12.8-v100-vllm1cat1.5.3
+    builder: catalog
+    tag: cuda12.8-v100-vllm1cat1.5.3-r1-linux-amd64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cuda12.8-vllm0.16.0-amd64-omni-slot10
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.8-vllm0.16.0-amd64-slot10
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.8-vllm0.16.0-arm64-omni-slot10
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.8-vllm0.16.0-arm64-slot10
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.8-vllm0.17.1-amd64-omni-slot09
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.8-vllm0.17.1-amd64-slot09
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.8-vllm0.17.1-arm64-omni-slot09
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.8-vllm0.17.1-arm64-slot09
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.9-sglang0.5.18
+    repositories: [*swr, *hub]
+    platforms: [linux/amd64]
+    note: NVIDIA Volta SM70 only. Select through a V100-specific template.
+  - id: cuda12.8-vllm0.16.0
+    builder: catalog
+    tag: cuda12.8-vllm0.16.0-omni-r1
+    legacy_reason: Published Omni tag names the base vLLM version and appends the workload.
+    repositories: [*swr, *quay, *hub]
+    engine_version: 0.16.0
+    platforms: [linux/amd64, linux/arm64]
+    note: Legacy Omni tag. The label records the base vLLM version.
+  - id: cuda12.8-vllm0.16.0
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda12.8-vllm0.17.1
+    builder: catalog
+    tag: cuda12.8-vllm0.17.1-omni-r1
+    legacy_reason: Published Omni tag names the base vLLM version and appends the workload.
+    repositories: [*swr, *hub]
+    engine_version: 0.16.1.dev197+g5511bc14c
+    platforms: [linux/amd64, linux/arm64]
+    note: Legacy Omni tag. The label records the base vLLM version.
+  - id: cuda12.8-vllm0.17.1
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda12.9-sglang0.5.18
+    builder: catalog
+    tag: cuda12.9-sglang0.5.18
     legacy_reason: No recipe revision in the name.
-  - tag: cuda12.9-sglang0.5.18-amd64-diffusion-slot08
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.9-sglang0.5.18-arm64-diffusion-slot08
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.9-sglang0.5.19-amd64-diffusion-slot07
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.9-sglang0.5.19-arm64-diffusion-slot07
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.9-vllm0.28.0-amd64-omni-slot06
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.9-vllm0.28.0-amd64-slot06
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.9-vllm0.28.0-arm64-omni-slot06
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.9-vllm0.28.0-arm64-slot06
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.9-vllm0.29.0-amd64-omni-slot05
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.9-vllm0.29.0-amd64-slot05
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.9-vllm0.29.0-arm64-omni-slot05
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.9-vllm0.29.0-arm64-slot05
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda12.9-vllm0.31.0
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda12.9-sglang0.5.18
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda12.9-sglang0.5.19
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda12.9-vllm0.28.0
+    builder: catalog
+    tag: cuda12.9-vllm0.28.0-omni-r1
+    legacy_reason: Published Omni tag names the base vLLM version and appends the workload.
+    repositories: [*swr, *hub]
+    engine_version: 0.28.0
+    platforms: [linux/amd64, linux/arm64]
+    note: Legacy Omni tag. The label records the base vLLM version.
+  - id: cuda12.9-vllm0.28.0
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda12.9-vllm0.29.0
+    builder: catalog
+    tag: cuda12.9-vllm0.29.0-omni-r1
+    legacy_reason: Published Omni tag names the base vLLM version and appends the workload.
+    repositories: [*swr, *hub]
+    engine_version: 0.29.0rc1
+    platforms: [linux/amd64, linux/arm64]
+    note: Legacy Omni tag. The label records the base vLLM version.
+  - id: cuda12.9-vllm0.29.0
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda12.9-vllm0.31.0
+    builder: catalog
+    tag: cuda12.9-vllm0.31.0
     legacy_reason: No recipe revision in the name.
-  - tag: cuda13.0-sglang0.5.18-amd64-diffusion-slot04
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda13.0-sglang0.5.18-arm64-diffusion-slot04
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda13.0-sglang0.5.19-amd64-diffusion-slot03
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda13.0-sglang0.5.19-arm64-diffusion-slot03
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda13.0-sglang0.5.21
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-sglang0.5.18
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-sglang0.5.19
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-sglang0.5.21
+    builder: catalog
+    tag: cuda13.0-sglang0.5.21
     legacy_reason: No recipe revision in the name.
-  - tag: cuda13.0-sglang0.5.23-r2-amd64
-    legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cuda13.0-sglang0.5.23-r2-arm64
-    legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cuda13.0-strata0.1.38-amd64-slot31-r5
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-sglang0.5.21
+    builder: catalog
+    revision: r3
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-sglang0.5.23
+    builder: catalog
+    revision: r2
+    repositories: [*swr, *quay]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-strata0.1.38
+    builder: catalog
+    revision: r5
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: cuda13.0-strata0.1.59
+    builder: catalog
+    tag: cuda13.0-strata0.1.59-deepseek41-r4
+    legacy_reason: Published Strata tag includes the model variant.
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: cuda13.0-strata0.1.59
+    builder: catalog
+    tag: cuda13.0-strata0.1.59-deepseek41-amd64-r5
     legacy_reason: Carries a variant, architecture or slot segment the grammar has no place for.
-  - tag: cuda13.0-strata0.1.59-deepseek41-amd64-r4
-    legacy_reason: Carries a variant, architecture or slot segment the grammar has no place for.
-  - tag: cuda13.0-strata0.1.59-deepseek41-amd64-r5
-    legacy_reason: Carries a variant, architecture or slot segment the grammar has no place for.
-  - tag: cuda13.0-strata0.1.59-deepseek41-amd64-slot32-r4
-    legacy_reason: Carries a variant, architecture or slot segment the grammar has no place for.
-  - tag: cuda13.0-vllm-omni0.30.0
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+    note: DeepSeek 4.1 GGUF. Select through a Strata Serve Adapter template.
+  - id: cuda13.0-vllm-omni0.30.0
+    builder: catalog
+    tag: cuda13.0-vllm-omni0.30.0
     legacy_reason: No recipe revision in the name.
-  - tag: cuda13.0-vllm-omni0.32.0-r2-linux-amd64
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-vllm-omni0.30.0
+    builder: catalog
+    revision: r2
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-vllm-omni0.30.0
+    builder: catalog
+    revision: r3
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-vllm-omni0.32.0
+    builder: catalog
+    revision: r2
+    repositories: [*swr, *quay]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-vllm0.28.0
+    builder: catalog
+    tag: cuda13.0-vllm0.28.0-omni-r1
+    legacy_reason: Published Omni tag names the base vLLM version and appends the workload.
+    repositories: [*swr, *quay, *hub]
+    engine_version: 0.28.0
+    platforms: [linux/amd64, linux/arm64]
+    note: Legacy Omni tag. The label records the base vLLM version.
+  - id: cuda13.0-vllm0.28.0
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-vllm0.29.0
+    builder: catalog
+    tag: cuda13.0-vllm0.29.0-omni-r1
+    legacy_reason: Published Omni tag names the base vLLM version and appends the workload.
+    repositories: [*swr, *quay, *hub]
+    engine_version: 0.29.0rc1
+    platforms: [linux/amd64, linux/arm64]
+    note: Legacy Omni tag. The label records the base vLLM version.
+  - id: cuda13.0-vllm0.29.0
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-vllm0.30.0
+    builder: catalog
+    revision: r0
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-vllm0.30.0
+    builder: catalog
+    revision: r2
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-vllm0.30.0
+    builder: catalog
+    revision: r3
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64, linux/arm64]
+  - id: cuda13.0-vllm0.33.0
+    builder: catalog
+    tag: cuda13.0-vllm0.33.0-r1-amd64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cuda13.0-vllm-omni0.32.0-r2-linux-arm64
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: cuda13.0-vllm0.34.0
+    builder: catalog
+    tag: cuda13.0-vllm0.34.0-r1-amd64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cuda13.0-vllm0.28.0-amd64-omni-slot02
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda13.0-vllm0.28.0-amd64-slot02
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda13.0-vllm0.28.0-arm64-omni-slot02
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda13.0-vllm0.28.0-arm64-slot02
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda13.0-vllm0.29.0-amd64-omni-slot01
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda13.0-vllm0.29.0-amd64-slot01
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda13.0-vllm0.29.0-arm64-omni-slot01
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda13.0-vllm0.29.0-arm64-slot01
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: cuda13.0-vllm0.30.0
-    legacy_reason: No recipe revision in the name.
-  - tag: cuda13.0-vllm0.33.0-r1-amd64
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+    note: Check hardware and workload compatibility before deployment.
+  - id: cuda13.0-vllm0.34.0
+    builder: catalog
+    tag: cuda13.0-vllm0.34.0-r1-arm64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cuda13.0-vllm0.34.0-r1-amd64
-    legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: cuda13.0-vllm0.34.0-r1-arm64
-    legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: dtk26.04-sglang0.5.12
+    platforms: [linux/arm64]
+    note: Check hardware and workload compatibility before deployment.
+  - id: dtk26.04-sglang0.5.12
+    builder: catalog
+    tag: dtk26.04-sglang0.5.12
     legacy_reason: No recipe revision in the name.
-  - tag: dtk26.04-sglang0.5.12-amd64-diffusion-slot20
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: dtk26.04-vllm0.18.1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: dtk26.04-sglang0.5.12
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: dtk26.04-vllm0.18.1
+    builder: catalog
+    tag: dtk26.04-vllm0.18.1
     legacy_reason: No recipe revision in the name.
-  - tag: dtk26.04-vllm0.18.1-amd64-slot18
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: dtk26.04-vllm0.21.0
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: dtk26.04-vllm0.18.1
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: dtk26.04-vllm0.21.0
+    builder: catalog
+    tag: dtk26.04-vllm0.21.0
     legacy_reason: No recipe revision in the name.
-  - tag: hggc13.0-sglang0.5.10-amd64-diffusion-slot24
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: hggc13.0-sglang0.5.12-amd64-diffusion-slot23
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: hggc13.0-sglang0.5.13
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: dtk26.04-vllm0.21.0
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: dtk26.04-vllm0.21.0
+    builder: catalog
+    revision: r2
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: dtk26.04-vllm0.21.0
+    builder: catalog
+    revision: r3
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: hggc13.0-sglang0.5.10
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: hggc13.0-sglang0.5.12
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: hggc13.0-sglang0.5.13
+    builder: catalog
+    tag: hggc13.0-sglang0.5.13
     legacy_reason: No recipe revision in the name.
-  - tag: hggc13.0-vllm0.20.1-amd64-omni-slot22
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: hggc13.0-vllm0.20.1-amd64-slot22
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: hggc13.0-vllm0.23.0
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: hggc13.0-sglang0.5.13
+    builder: catalog
+    revision: r2
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: hggc13.0-sglang0.5.23
+    builder: catalog
+    revision: r1
+    platforms: [linux/amd64]
+  - id: hggc13.0-vllm0.20.1
+    builder: catalog
+    tag: hggc13.0-vllm0.20.1-omni-r1
+    legacy_reason: Published Omni tag names the base vLLM version and appends the workload.
+    repositories: [*swr, *quay, *hub]
+    engine_version: 0.20.0
+    platforms: [linux/amd64]
+    note: Legacy Omni tag. The label records the base vLLM version.
+  - id: hggc13.0-vllm0.20.1
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: hggc13.0-vllm0.23.0
+    builder: catalog
+    tag: hggc13.0-vllm0.23.0
     legacy_reason: No recipe revision in the name.
-  - tag: hggc13.0-vllm0.23.0-amd64-omni-slot21
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: hggc13.0-vllm0.23.0-legacy-clean-r1-linux-amd64
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: hggc13.0-vllm0.23.0
+    builder: catalog
+    tag: hggc13.0-vllm0.23.0-omni-r1
+    legacy_reason: Published Omni tag names the base vLLM version and appends the workload.
+    repositories: [*swr, *quay, *hub]
+    engine_version: 0.23.0rc2.dev24
+    platforms: [linux/amd64]
+    note: Legacy Omni tag. The label records the base vLLM version.
+  - id: hggc13.0-vllm0.23.0
+    builder: catalog
+    tag: hggc13.0-vllm0.23.0-legacy-clean-r1-linux-amd64
     legacy_reason: Carries a variant, architecture or slot segment the grammar has no place for.
-  - tag: rocm10.0-sglang0.5.23-mi30x-r3-linux-amd64
+    platforms: [linux/amd64]
+    note: Check hardware and workload compatibility before deployment.
+  - id: hggc13.0-vllm0.34.0
+    builder: catalog
+    revision: r1
+    platforms: [linux/amd64]
+  - id: metal15.0-mlx-vlm0.7.8
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [darwin/arm64]
+  - id: metal15.0-vllm0.31.0
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [darwin/arm64]
+  - id: rocm10.0-sglang0.5.23
+    builder: catalog
+    tag: rocm10.0-sglang0.5.23-mi30x-r3-linux-amd64
     legacy_reason: Carries a variant, architecture or slot segment the grammar has no place for.
-  - tag: rocm10.0-sglang0.5.23-mi35x-r3-linux-amd64
+    platforms: [linux/amd64]
+    note: AMD MI30x (gfx942) only. Includes SGLang Diffusion.
+  - id: rocm10.0-sglang0.5.23
+    builder: catalog
+    tag: rocm10.0-sglang0.5.23-mi35x-r3-linux-amd64
     legacy_reason: Carries a variant, architecture or slot segment the grammar has no place for.
-  - tag: rocm10.0-vllm0.33.0-r2-linux-amd64
+    platforms: [linux/amd64]
+    note: AMD MI35x (gfx950) only. Includes SGLang Diffusion.
+  - id: rocm10.0-vllm0.33.0
+    builder: catalog
+    tag: rocm10.0-vllm0.33.0-r2-linux-amd64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: rocm7.2-vllm0.33.0-r2-linux-amd64
+    repositories: [*swr, *hub]
+    platforms: [linux/amd64]
+    note: Check hardware and workload compatibility before deployment.
+  - id: rocm7.2-vllm0.33.0
+    builder: catalog
+    tag: rocm7.2-vllm0.33.0-r2-linux-amd64
     legacy_reason: Per-architecture tag, with the architecture after the revision.
-  - tag: rocm7.2.3-vllm0.29.0-amd64-slot29
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: rocm7.2.3-vllm0.30.0
+    repositories: [*swr, *hub]
+    platforms: [linux/amd64]
+    note: Check hardware and workload compatibility before deployment.
+  - id: rocm7.2.3-vllm0.29.0
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: rocm7.2.3-vllm0.30.0
+    builder: catalog
+    tag: rocm7.2.3-vllm0.30.0
     legacy_reason: No recipe revision in the name.
-  - tag: rocm7.2.4-sglang0.5.21.dev550-g4142235c2-amd64-slot30
-    legacy_reason: Carries a variant, architecture or slot segment the grammar has no place for.
-  - tag: xre-sglang0.5.5.post3-amd64-diffusion-slot27
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: xre-vllm0.1.dev3-amd64-omni-slot25
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: xre-vllm0.1.dev3-amd64-slot25
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: xre-vllm0.25.1-amd64-omni-slot26
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: xre-vllm0.25.1-amd64-slot26
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: rocm7.2.4-sglang0.5.21.dev550
+    builder: catalog
+    tag: rocm7.2.4-sglang0.5.21.dev550-g4142235c2-r1
+    legacy_reason: Published development build includes a separate commit suffix.
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: xre-sglang0.5.5.post3
+    builder: catalog
+    tag: xre-sglang0.5.5.post3-r1
+    legacy_reason: Published Kunlun tag omits the XRE version.
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: xre-vllm0.1.dev3
+    builder: catalog
+    tag: xre-vllm0.1.dev3-omni-r1
+    legacy_reason: Published Kunlun tag omits the XRE version.
+    repositories: [*swr, *quay, *hub]
+    engine_version: 0.20.0+kunlun
+    platforms: [linux/amd64]
+    note: Legacy Omni tag. The label records the base vLLM version.
+  - id: xre-vllm0.1.dev3
+    builder: catalog
+    tag: xre-vllm0.1.dev3-r1
+    legacy_reason: Published Kunlun tag omits the XRE version.
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: xre-vllm0.25.1
+    builder: catalog
+    tag: xre-vllm0.25.1-omni-r1
+    legacy_reason: Published Kunlun tag omits the XRE version.
+    repositories: [*swr, *quay, *hub]
+    # Installed vllm-omni METADATA in the SWR manifest sha256:014741b6f7e937ee90cdd3c290b7adf89ba8c87446c98a4cdf8d0fe122db94d4.
+    engine_version: 0.22.1.dev145+gdae5023bb.kunlun
+    platforms: [linux/amd64]
+    note: Legacy Omni tag. The label records the base vLLM version.
+  - id: xre5.37.1.0-sglang0.5.18
+    builder: catalog
+    revision: r1
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: xre5.37.1.0-sglang0.5.18
+    builder: catalog
+    revision: r2
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+  - id: cuda12.8-v100-vllm1cat1.5.1
+    builder: catalog
+    tag: zz-pilot-v100-1cat-r1
     legacy_reason: Name does not spell out the image identity; the id supplies it.
-  - tag: xre5.37.1.0-sglang0.5.18-amd64-diffusion-slot27
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: xre5.37.1.0-sglang0.5.18-amd64-diffusion-slot28
-    legacy_reason: Names an architecture and a build slot in place of a recipe revision.
-  - tag: zz-pilot-v100-1cat-r1
-    legacy_reason: Name does not spell out the image identity; the id supplies it.
+    repositories: [*swr, *quay, *hub]
+    platforms: [linux/amd64]
+    alias: true
+    note: Historical Volta pilot alias. NVIDIA SM70 only.
+
+# Compressed layer bytes by release tag and platform. Sum the sizes in each
+# runnable platform manifest; exclude the image config and build attestations.
+# The catalog uses the largest platform for its single download estimate.
+download_sizes:
+  cann8.5-910b-sglang0.5.12.post1: {linux/amd64: 5977820703, linux/arm64: 5600822178}
+  cann8.5-910b-sglang0.5.12.post1-r2: {linux/amd64: 5977820703, linux/arm64: 5600822178}
+  cann8.5-910b-vllm0.18.0: {linux/amd64: 6326834696, linux/arm64: 6093599678}
+  cann8.5-910b-vllm0.18.0-r2: {linux/amd64: 6326834696, linux/arm64: 6093599678}
+  cann8.5-a3-sglang0.5.12.post1: {linux/amd64: 5951392388, linux/arm64: 5572974289}
+  cann8.5-a3-sglang0.5.12.post1-r2: {linux/amd64: 5951392388, linux/arm64: 5572974289}
+  cann8.5-vllm0.18.0-omni-r1: {linux/amd64: 7086957398, linux/arm64: 6392239559}
+  cann8.5-vllm0.18.0-r1: {linux/amd64: 6148147145, linux/arm64: 6094520694}
+  cann9.0-910b-sglang0.5.18: {linux/amd64: 6560264423, linux/arm64: 6406074737}
+  cann9.0-910b-sglang0.5.18-r2: {linux/amd64: 6560264423, linux/arm64: 6406074737}
+  cann9.0-910b-vllm-omni0.23.0rc1: {linux/amd64: 7399401369, linux/arm64: 7157380463}
+  cann9.0-910b-vllm-omni0.23.0rc1-r1: {linux/amd64: 7399401369, linux/arm64: 7157380463}
+  cann9.0-a3-sglang0.5.18: {linux/amd64: 6538042779, linux/arm64: 6379730563}
+  cann9.0-a3-sglang0.5.18-r2: {linux/amd64: 6538042779, linux/arm64: 6379730563}
+  cann9.0-a3-vllm-omni0.23.0rc1: {linux/amd64: 7449968538, linux/arm64: 7207820904}
+  cann9.0-a3-vllm-omni0.23.0rc1-r1: {linux/amd64: 7449968538, linux/arm64: 7207820904}
+  cann9.0-sglang0.5.15.post1-r1: {linux/amd64: 6173853868, linux/arm64: 6080775444}
+  cann9.0-sglang0.5.18-r1: {linux/amd64: 6321627734, linux/arm64: 16553326080}
+  cann9.1-310p-vllm0.27.1rc1: {linux/amd64: 7128288860, linux/arm64: 6925732175}
+  cann9.1-310p-vllm0.27.1rc1-r3: {linux/amd64: 7128288860, linux/arm64: 6925732175}
+  cann9.1-910b-vllm-omni0.30.0: {linux/amd64: 9112566365, linux/arm64: 8803199094}
+  cann9.1-910b-vllm-omni0.30.0-r3: {linux/amd64: 9112566365, linux/arm64: 8803199094}
+  cann9.1-910b-vllm-omni0.32.0-r2-linux-amd64: {linux/amd64: 9029913350}
+  cann9.1-910b-vllm0.26.0rc1: {linux/amd64: 7156574980, linux/arm64: 6937231576}
+  cann9.1-910b-vllm0.26.0rc1-r2: {linux/amd64: 7156574980, linux/arm64: 6937231576}
+  cann9.1-910b-vllm0.27.1rc1: {linux/amd64: 8795234978, linux/arm64: 8519261843}
+  cann9.1-910b-vllm0.27.1rc1-r2: {linux/amd64: 8795234978, linux/arm64: 8519261843}
+  cann9.1-950-vllm-omni0.30.0: {linux/amd64: 9195391224, linux/arm64: 9232946138}
+  cann9.1-950-vllm-omni0.30.0-r3: {linux/amd64: 9195391224, linux/arm64: 9232946138}
+  cann9.1-950-vllm0.27.1rc1: {linux/amd64: 9687605733, linux/arm64: 9415158075}
+  cann9.1-950-vllm0.27.1rc1-r2: {linux/amd64: 9687605733, linux/arm64: 9415158075}
+  cann9.1-a3-sglang0.5.23-r1-amd64: {linux/amd64: 7153848941}
+  cann9.1-a3-sglang0.5.23-r1-arm64: {linux/arm64: 6894015644}
+  cann9.1-a3-vllm-omni0.30.0: {linux/amd64: 9100301855, linux/arm64: 8791302868}
+  cann9.1-a3-vllm-omni0.30.0-r3: {linux/amd64: 9100301855, linux/arm64: 8791302868}
+  cann9.1-a3-vllm-omni0.32.0-r2-linux-amd64: {linux/amd64: 9023205222}
+  cann9.1-a3-vllm0.26.0rc1: {linux/amd64: 7144431576, linux/arm64: 6925359359}
+  cann9.1-a3-vllm0.26.0rc1-r2: {linux/amd64: 7144431576, linux/arm64: 6925359359}
+  cann9.1-a3-vllm0.27.1rc1: {linux/amd64: 8757458371, linux/arm64: 8481477637}
+  cann9.1-a3-vllm0.27.1rc1-r2: {linux/amd64: 8757458371, linux/arm64: 8481477637}
+  cann9.1-vllm0.23.0-omni-r1: {linux/amd64: 7155964554, linux/arm64: 7086399586}
+  cann9.1-vllm0.23.0-r1: {linux/amd64: 6879922196, linux/arm64: 6723695582}
+  cann9.2-310p-vllm0.30.0rc2-r1: {linux/amd64: 7362711649, linux/arm64: 7154734766}
+  cann9.2-910b-vllm0.30.0-r1-amd64: {linux/amd64: 9218164606}
+  cann9.2-910b-vllm0.30.0-r1-arm64: {linux/arm64: 8965148002}
+  cann9.2-910b-vllm0.30.0rc2-r1: {linux/amd64: 9411505830, linux/arm64: 9093260742}
+  cann9.2-910b-vllm0.32.0rc1-r1-amd64: {linux/amd64: 9980152277}
+  cann9.2-910b-vllm0.32.0rc1-r1-arm64: {linux/arm64: 9722496746}
+  cann9.2-950-vllm0.30.0rc2-r1: {linux/amd64: 9796185489, linux/arm64: 9822421024}
+  cann9.2-a3-vllm0.30.0-r1-amd64: {linux/amd64: 9210786089}
+  cann9.2-a3-vllm0.30.0-r1-arm64: {linux/arm64: 8957558920}
+  cann9.2-a3-vllm0.30.0rc2-r1: {linux/amd64: 9404443297, linux/arm64: 9086206042}
+  cann9.2-a3-vllm0.32.0rc1-r1-amd64: {linux/amd64: 9945283436}
+  cann9.2-a3-vllm0.32.0rc1-r1-arm64: {linux/arm64: 9687743124}
+  cuda12.8-sglang0.5.8.post1-r1: {linux/amd64: 11853703554, linux/arm64: 10592822340}
+  cuda12.8-sglang0.5.9-r1: {linux/amd64: 16982404208, linux/arm64: 10600956192}
+  cuda12.8-systemone1.0-r1: {linux/amd64: 4282994433}
+  cuda12.8-v100-vllm1cat1.5.1-r1: {linux/amd64: 10577130578}
+  cuda12.8-v100-vllm1cat1.5.3-r1-linux-amd64: {linux/amd64: 10691347288}
+  cuda12.8-vllm0.16.0-omni-r1: {linux/amd64: 13884206886, linux/arm64: 12962515479}
+  cuda12.8-vllm0.16.0-r1: {linux/amd64: 13365004176, linux/arm64: 12848046290}
+  cuda12.8-vllm0.17.1-omni-r1: {linux/amd64: 24257682928, linux/arm64: 11276870489}
+  cuda12.8-vllm0.17.1-r1: {linux/amd64: 28609406976, linux/arm64: 11183997090}
+  cuda12.9-sglang0.5.18: {linux/amd64: 18382693457, linux/arm64: 16905175984}
+  cuda12.9-sglang0.5.18-r1: {linux/amd64: 35083368989, linux/arm64: 16815344373}
+  cuda12.9-sglang0.5.18-r2: {linux/amd64: 18382693457, linux/arm64: 16905175984}
+  cuda12.9-sglang0.5.19-r1: {linux/amd64: 18749021468, linux/arm64: 17068968256}
+  cuda12.9-vllm0.28.0-omni-r1: {linux/amd64: 12068477969, linux/arm64: 7080240433}
+  cuda12.9-vllm0.28.0-r1: {linux/amd64: 11506956419, linux/arm64: 6758565620}
+  cuda12.9-vllm0.29.0-omni-r1: {linux/amd64: 11683636822, linux/arm64: 7581569606}
+  cuda12.9-vllm0.29.0-r1: {linux/amd64: 11117344204, linux/arm64: 7256139744}
+  cuda12.9-vllm0.31.0: {linux/amd64: 11282706719, linux/arm64: 12097598549}
+  cuda12.9-vllm0.31.0-r2: {linux/amd64: 11282706719, linux/arm64: 12097598549}
+  cuda13.0-sglang0.5.18-r1: {linux/amd64: 14352648383, linux/arm64: 16156419324}
+  cuda13.0-sglang0.5.19-r1: {linux/amd64: 39727986688, linux/arm64: 14775630038}
+  cuda13.0-sglang0.5.21: {linux/amd64: 15237583061, linux/arm64: 14886492168}
+  cuda13.0-sglang0.5.21-r2: {linux/amd64: 15237583061, linux/arm64: 14886492168}
+  cuda13.0-sglang0.5.21-r3: {linux/amd64: 15271547111, linux/arm64: 14920652724}
+  cuda13.0-sglang0.5.23-r2: {linux/amd64: 16236673467, linux/arm64: 16161620396}
+  cuda13.0-strata0.1.38-r5: {linux/amd64: 6626092795}
+  cuda13.0-strata0.1.59-deepseek41-amd64-r5: {linux/amd64: 7545207301}
+  cuda13.0-strata0.1.59-deepseek41-r4: {linux/amd64: 7545198281}
+  cuda13.0-vllm-omni0.30.0: {linux/amd64: 9720356675, linux/arm64: 10652684823}
+  cuda13.0-vllm-omni0.30.0-r2: {linux/amd64: 9720356675, linux/arm64: 10652684823}
+  cuda13.0-vllm-omni0.30.0-r3: {linux/amd64: 9944925772, linux/arm64: 10702902669}
+  cuda13.0-vllm-omni0.30.0-r4: {linux/amd64: 9991604307, linux/arm64: 10747294292}
+  cuda13.0-vllm-omni0.32.0-r2: {linux/amd64: 10009153888, linux/arm64: 11118550773}
+  cuda13.0-vllm-omni0.34.0-r1: {linux/amd64: 11262042169}
+  cuda13.0-vllm0.28.0-omni-r1: {linux/amd64: 9706107892, linux/arm64: 10022960036}
+  cuda13.0-vllm0.28.0-r1: {linux/amd64: 19924259730, linux/arm64: 9701431218}
+  cuda13.0-vllm0.29.0-omni-r1: {linux/amd64: 9480846242, linux/arm64: 9962646573}
+  cuda13.0-vllm0.29.0-r1: {linux/amd64: 8880368255, linux/arm64: 9633840354}
+  cuda13.0-vllm0.30.0-r0: {linux/amd64: 8977596506, linux/arm64: 9940176571}
+  cuda13.0-vllm0.30.0-r2: {linux/amd64: 8977596506, linux/arm64: 9940176571}
+  cuda13.0-vllm0.30.0-r3: {linux/amd64: 9022069172, linux/arm64: 9983369482}
+  cuda13.0-vllm0.30.0-r4: {linux/amd64: 9100237522, linux/arm64: 10055140754}
+  cuda13.0-vllm0.33.0-r1-amd64: {linux/amd64: 10059978449}
+  cuda13.0-vllm0.34.0-r1-amd64: {linux/amd64: 10358123871}
+  cuda13.0-vllm0.34.0-r1-arm64: {linux/arm64: 11613387593}
+  dtk26.04-sglang0.5.12: {linux/amd64: 9129075661}
+  dtk26.04-sglang0.5.12-r1: {linux/amd64: 34331972608}
+  dtk26.04-sglang0.5.12-r2: {linux/amd64: 9129075661}
+  dtk26.04-vllm0.18.1: {linux/amd64: 8678647524}
+  dtk26.04-vllm0.18.1-r1: {linux/amd64: 32362668324}
+  dtk26.04-vllm0.18.1-r2: {linux/amd64: 32486666812}
+  dtk26.04-vllm0.21.0: {linux/amd64: 8474247684}
+  dtk26.04-vllm0.21.0-r1: {linux/amd64: 8474280076}
+  dtk26.04-vllm0.21.0-r2: {linux/amd64: 8474359095}
+  dtk26.04-vllm0.21.0-r3: {linux/amd64: 8474210909}
+  dtk26.04-vllm0.21.0-r4: {linux/amd64: 8474247684}
+  hggc13.0-sglang0.5.10-r1: {linux/amd64: 36199896064}
+  hggc13.0-sglang0.5.12-r1: {linux/amd64: 38516157440}
+  hggc13.0-sglang0.5.13: {linux/amd64: 11969510167}
+  hggc13.0-sglang0.5.13-r2: {linux/amd64: 11969510167}
+  hggc13.0-sglang0.5.13-r3: {linux/amd64: 11969554510}
+  hggc13.0-sglang0.5.23-r1: {linux/amd64: 11929411617}
+  hggc13.0-vllm0.20.1-omni-r1: {linux/amd64: 39594914304}
+  hggc13.0-vllm0.20.1-r1: {linux/amd64: 38231359488}
+  hggc13.0-vllm0.23.0: {linux/amd64: 11969510327}
+  hggc13.0-vllm0.23.0-legacy-clean-r1-linux-amd64: {linux/amd64: 17831191254}
+  hggc13.0-vllm0.23.0-omni-r1: {linux/amd64: 45475022848}
+  hggc13.0-vllm0.23.0-r2: {linux/amd64: 11969510327}
+  hggc13.0-vllm0.34.0-r1: {linux/amd64: 12542705623}
+  metal15.0-llama.cpp-b11617-r1: {darwin/arm64: 12158302}
+  metal15.0-llama.cpp-b12631-r1: {darwin/arm64: 16601621}
+  metal15.0-mlx-audio0.5.9-r1: {darwin/arm64: 299757988}
+  metal15.0-mlx-vlm0.7.8-r1: {darwin/arm64: 231147445}
+  metal15.0-mlx-vlm0.7.8-r2: {darwin/arm64: 231149761}
+  metal15.0-mlx-vlm0.8.1.dev20261121-r1: {darwin/arm64: 215014159}
+  metal15.0-vllm0.31.0-r1: {darwin/arm64: 425316280}
+  metal15.0-vllm0.31.0-r2: {darwin/arm64: 425340908}
+  rocm10.0-sglang0.5.23-mi30x-r3-linux-amd64: {linux/amd64: 15913381359}
+  rocm10.0-sglang0.5.23-mi35x-r3-linux-amd64: {linux/amd64: 14178869046}
+  rocm10.0-vllm0.33.0-r2-linux-amd64: {linux/amd64: 18038728426}
+  rocm7.2-vllm0.33.0-r2-linux-amd64: {linux/amd64: 11758492419}
+  rocm7.2.3-vllm0.29.0-r1: {linux/amd64: 11846054040}
+  rocm7.2.3-vllm0.30.0: {linux/amd64: 11663055302}
+  rocm7.2.3-vllm0.30.0-r1: {linux/amd64: 11663055302}
+  rocm7.2.4-sglang0.5.21.dev550-g4142235c2-r1: {linux/amd64: 14369545688}
+  xre-sglang0.5.5.post3-r1: {linux/amd64: 19284311200}
+  xre-vllm0.1.dev3-omni-r1: {linux/amd64: 20855462867}
+  xre-vllm0.1.dev3-r1: {linux/amd64: 20522002611}
+  xre-vllm0.25.1-omni-r1: {linux/amd64: 42027032085}
+  xre5.0.21.46-vllm0.25.1-r1: {linux/amd64: 18544375312}
+  xre5.37.1.0-sglang0.5.18-r1: {linux/amd64: 36694854290}
+  xre5.37.1.0-sglang0.5.18-r2: {linux/amd64: 36694850499}
+  zz-pilot-v100-1cat-r1: {linux/amd64: 10577130578}

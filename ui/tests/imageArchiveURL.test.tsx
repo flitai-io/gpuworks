@@ -506,7 +506,7 @@ for (const state of ["present", "absent", "failed"]) {
 for (const state of ["pulling", "syncing"]) {
   for (const total of [undefined, 0, 1_048_576]) {
     test(`a ${state} row retains live progress with ${total === undefined ? "missing" : total ? "known" : "zero"} total`, async () => {
-      const version = catalogVersion({ nodes: [{ node_uuid: "node-1", node_name: "gpu-1", node_state: "online", state,
+      const version = catalogVersion({ size_bytes: 39_727_986_688, nodes: [{ node_uuid: "node-1", node_name: "gpu-1", node_state: "online", state,
         size_bytes: total, transferred_bytes: 524_288, rate_bps: 1_048_576 }] });
       render(wrap(React.createElement(ImageNodeTable, {
         selectedVersion: version, inspecting: null, availablePeer: () => false,
@@ -523,18 +523,6 @@ for (const state of ["pulling", "syncing"]) {
     });
   }
 }
-
-test("a transfer uses the catalog total when its node has not reported a total", () => {
-  const version = catalogVersion({ size_bytes: 1_048_576, nodes: [{ node_uuid: "node-1", node_name: "gpu-1", node_state: "online", state: "syncing",
-    transferred_bytes: 524_288, rate_bps: 1_048_576 }] });
-  render(wrap(React.createElement(ImageNodeTable, {
-    selectedVersion: version, inspecting: null, availablePeer: () => false,
-    modeFor: () => "auto", setMode: () => {}, pullVersion: () => {},
-    pullFromURL: async () => {}, inspectVersion: () => {}, cancelTransfer: () => {}, removeFromNode: () => {},
-  })));
-  assert.equal(screen.getByRole("progressbar").getAttribute("aria-valuenow"), "50");
-  assert.ok(screen.getByText("512 KiB / 1.0 MiB · 1.0 MiB/s"));
-});
 
 test("polling speeds up only while something is moving", () => {
   const idle = catalogVersion({ nodes: [{ node_uuid: "node-1", node_name: "gpu-1", node_state: "online", state: "present" }] }) as never;

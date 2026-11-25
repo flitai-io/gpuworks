@@ -54,6 +54,7 @@ type ImageCandidate struct {
 	// may be chosen by hand but is never picked automatically: two replicas
 	// of one deployment could otherwise run different builds.
 	RollingTag bool
+	ManualOnly bool
 	CreatedAt  time.Time
 }
 
@@ -154,7 +155,7 @@ func ResolveImageCatalog(t ImageTarget, candidates []ImageCandidate) ImageResolu
 	var best *ImageCandidate
 	for i := range candidates {
 		candidate := &candidates[i]
-		if candidate.RollingTag || !imageCandidateEligible(t, *candidate) {
+		if candidate.ManualOnly || candidate.RollingTag || !imageCandidateEligible(t, *candidate) {
 			continue
 		}
 		compatible, score := catalogCompatibility(t, targetVendor, *candidate)

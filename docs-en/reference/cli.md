@@ -586,7 +586,7 @@ and the CI `release-publish` job. rclone handles uploads; this tool does not hol
 
 | Subcommand | Description |
 |---|---|
-| `assemble -channel C -dist DIR -out DIR [-commit SHA] [-built-at TIME] [-release-id ID]` | Read `gpuworks-<id>-<os>-<arch>.tar.gz` from `DIR` (all packages must have the same release ID; do not read the separate `release.json` files from the two build jobs), and write a new directory tree containing these packages and the image catalog and inference template catalog packages embedded in the current checkout. Sign `<C>/index.json` with the ed25519 seed in the `GPUWORKS_DIST_SIGNING_KEY` environment variable (change the variable name with `-key-env`), and write `<C>/latest`, `<C>/manifest.json` (the same file as the image catalog), and `releases/<id>/SHA256SUMS`. Refuse to proceed if `-out` already exists |
+| `assemble -channel C -dist DIR -out DIR [-commit SHA] [-built-at TIME] [-release-id ID]` | Read `gpuworks-<id>-<os>-<arch>.tar.gz` from `DIR` (all packages must have the same release ID; do not read the separate `release.json` files from the two build jobs), and write a new directory tree containing these packages and the image catalog and inference template catalog packages embedded in the current checkout. Sign `<C>/index.json` with the ed25519 seed in the `GPUWORKS_DIST_SIGNING_KEY` environment variable (change the variable name with `-key-env`), and write `<C>/latest`, `<C>/manifest.json` (the schema 3 compatibility catalog), and `releases/<id>/SHA256SUMS`. Refuse to proceed if `-out` already exists |
 | `release-id -dist DIR` | Print the release ID of the release packages in `DIR` (the same rules as `assemble` apply) |
 | `adopt -dir DIR -release-id ID` | Verify `releases/<id>/` copied back from a source: each package must match `SHA256SUMS` and belong to `ID`. Print the build time recorded in the package's `INSTALL.txt`; exit with a nonzero status on a mismatch |
 | `verify -channel C -source URL … [-release-id ID] [-index FILE] [-full]` | Read the index from each source and verify its signature, check the release ID, and send a HEAD request for each file to check its size. With `-full`, download the files and check their sha256 instead. With `-index`, use a local, unpublished signed index to verify files on each source (without reading the source's own index), for checks before switching channels. Exit with a nonzero status if any source fails |
@@ -596,19 +596,19 @@ and the CI `release-publish` job. rclone handles uploads; this tool does not hol
 ### gpuworks-image-manifest
 
 Generate the system image catalog
-manifest (schema 3) from the gpuworks-runner build matrix (`build/runner-images/matrix.yaml`). The same output serves as the server's embedded seed, `internal/server/imagecatalog/catalog-seed.json`, and is included in every release through the
+manifest (schema 4) from the gpuworks-runner build matrix (`build/runner-images/matrix.yaml`). The same output serves as the server's embedded seed, `internal/server/imagecatalog/catalog-seed.json`, and is included in every release through the
 [release channel](#gpuworks-dist). For the format and import rules, see [Image Catalog](image-families.md#manifest-格式).
 
 | Flag | Default | Description |
 |---|---|---|
 | `-in PATH` | None (required) | Build matrix `matrix.yaml` |
 | `-out PATH` | `-` (stdout) | Output manifest JSON |
-| `-registry REPO` | `gpuworks/gpuworks-runner` | Canonical repository written to `image_ref` |
+| `-registry REPO` | First entry in `defaults.build_repositories` | Select one of the declared build repositories for a built image’s `image_ref` |
 | `-date YYYY-MM-DD` | Current date (UTC) | Date portion of `catalog_version`; `catalog_version` = `<date>.<first-8-characters-of-content-hash>` |
+| `-legacy` | Off | Generate schema 3 for import on older servers |
 | `-verify PATH` | None | Instead of generating a manifest, check that every reference in this manifest can be pulled in full; see below |
 
-Each matrix entry produces one version, `<registry>:<id>-<revision>`. Its `registry_sources` are the same tag in the three registries:
-quay.io, swr.cn-southwest-2.myhuaweicloud.com, and registry.zstack.ai. The engine, engine version, framework, and
+Each build entry produces `<registry>:<id>-<revision>`. Items with `builder: catalog` use a revision for standard releases and an explicit tag for historical names. The first repository in the configured list supplies `image_ref`, and the other verified copies supply `registry_sources`. A published entry can override `defaults.catalog_repositories` with its own `repositories`. The engine, engine version, framework and
 framework version are parsed from the ID. Architectures come from the entry's `platforms` (or the matrix defaults if omitted). The tool exits with an error if an ID does not match the grammar,
 if `ENGINE_VERSION`/`FRAMEWORK_VERSION` declared in the matrix do not match the ID, or if a platform combination is unsupported. Output is sorted by family name and then by
 `image_ref` for reproducible diffs. Unit tests ensure that the embedded seed and the output generated from the matrix are byte-for-byte identical.
@@ -691,8 +691,8 @@ Maintain each model's `model_config` in the inference catalog package (the subse
 <!-- translation-source-sha256: aa89e7ece65dcf45b5f9ce4f83bb37d845cef29a98bd1654d77df1cb861fc91f ## gpuworks-agent uninstall -->
 <!-- translation-source-sha256: 1e41be4970bd2d73ce3f79aab2fd5cfe961379c19d28f17b30f480c49798ee94 ## Node Installation Script install.sh -->
 <!-- translation-source-sha256: a9d985c3ad4b30c8ba55f100bd0c05aed9ffe6938bcf955647daec83001aabf6 ## Other CLIs -->
-<!-- translation-source-sha256: 1aef641cd1b21706e2407379a8c7a698a092304e66f3b046047608156466ce3c ### gpuworks-dist -->
-<!-- translation-source-sha256: d7ac91dc2d516e46436bfc8c681d71ffda1fc25f77efaf669b999ef6604e6643 ### gpuworks-image-manifest -->
+<!-- translation-source-sha256: c0fe9b27a48aeb54220aab3584a8256ffad03dbd191e0d982876972121f91c07 ### gpuworks-dist -->
+<!-- translation-source-sha256: 3c1999f4c252a1aaffc3cfd968a0a41170de096b7568f702fcf73bbe364ae80e ### gpuworks-image-manifest -->
 <!-- translation-source-sha256: 08e8efd3ebc6584b3186f57ac2f417e31199000da630e50f46ae83751d306a8f ### template-probe -->
 <!-- translation-source-sha256: 5097e5778748599ee45f714e05adb57fd7c82829cc8b950352f5c2e642a8065e ### gpuworks-catalog-model-config -->
 <!-- translation-localized-code-block: 97428c61d0b0a154e15b86cb32f62698fe47be9a13f5d8d97870a67b551d77de ad2a948283214a4b9cf06c0fbf9e90995a5b4e623c49d1e33386cb49050b110a Translate uninstall command comments. -->

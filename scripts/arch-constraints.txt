@@ -81,4 +81,4 @@ console_unlinked_code_packages	0	max
 edition_branches	0	max
 kv_backend_id_literals	0	max
 feature_key_literals_in_core	0	max
-published_tags_outside_grammar	121	max
+published_tags_outside_grammar	65	max

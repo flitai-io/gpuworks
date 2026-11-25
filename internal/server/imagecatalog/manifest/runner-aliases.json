@@ -1,0 +1,380 @@
+{
+  "gpuworks/gpuworks-runner:xre5.0.21.46-vllm0.25.1-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-vllm0.25.1-amd64-slot26"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-vllm0.18.0-omni-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-vllm0.18.0-amd64-omni-slot14"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-vllm0.18.0-arm64-omni-slot14"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-vllm0.18.0-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-vllm0.18.0-amd64-slot14"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-vllm0.18.0-arm64-slot14"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-sglang0.5.15.post1-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-sglang0.5.15.post1-amd64-diffusion-slot16"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-sglang0.5.15.post1-arm64-diffusion-slot16"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-sglang0.5.18-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-sglang0.5.18-amd64-diffusion-slot15"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-sglang0.5.18-arm64-diffusion-slot15"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-vllm0.23.0-omni-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-vllm0.23.0-amd64-omni-slot13"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-vllm0.23.0-arm64-omni-slot13"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-vllm0.23.0-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-vllm0.23.0-amd64-slot13"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-vllm0.23.0-arm64-slot13"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-sglang0.5.8.post1-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-sglang0.5.8.post1-amd64-diffusion-slot12"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-sglang0.5.8.post1-arm64-diffusion-slot12"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-sglang0.5.9-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-sglang0.5.9-amd64-diffusion-slot11"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-sglang0.5.9-arm64-diffusion-slot11"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.16.0-omni-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.16.0-amd64-omni-slot10"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.16.0-arm64-omni-slot10"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.16.0-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.16.0-amd64-slot10"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.16.0-arm64-slot10"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.17.1-omni-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.17.1-amd64-omni-slot09"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.17.1-arm64-omni-slot09"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.17.1-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.17.1-amd64-slot09"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.17.1-arm64-slot09"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.18-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.18-amd64-diffusion-slot08"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.18-arm64-diffusion-slot08"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.19-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.19-amd64-diffusion-slot07"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.19-arm64-diffusion-slot07"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.28.0-omni-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.28.0-amd64-omni-slot06"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.28.0-arm64-omni-slot06"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.28.0-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.28.0-amd64-slot06"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.28.0-arm64-slot06"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.29.0-omni-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.29.0-amd64-omni-slot05"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.29.0-arm64-omni-slot05"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.29.0-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.29.0-amd64-slot05"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.29.0-arm64-slot05"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.18-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.18-amd64-diffusion-slot04"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.18-arm64-diffusion-slot04"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.19-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.19-amd64-diffusion-slot03"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.19-arm64-diffusion-slot03"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.23-r2": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.23-r2-amd64"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.23-r2-arm64"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-r5": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.59-deepseek41-r4": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.59-deepseek41-amd64-r4"
+    },
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.59-deepseek41-amd64-slot32-r4"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.32.0-r2": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.32.0-r2-linux-amd64"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.32.0-r2-linux-arm64"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.28.0-omni-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.28.0-amd64-omni-slot02"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.28.0-arm64-omni-slot02"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.28.0-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.28.0-amd64-slot02"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.28.0-arm64-slot02"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.29.0-omni-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.29.0-amd64-omni-slot01"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.29.0-arm64-omni-slot01"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.29.0-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.29.0-amd64-slot01"
+    },
+    {
+      "arch": "arm64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.29.0-arm64-slot01"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r0": [
+    {
+      "arch": "multi",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-sglang0.5.12-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-sglang0.5.12-amd64-diffusion-slot20"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-vllm0.18.1-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-vllm0.18.1-amd64-slot18"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-sglang0.5.10-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-sglang0.5.10-amd64-diffusion-slot24"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-sglang0.5.12-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-sglang0.5.12-amd64-diffusion-slot23"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-vllm0.20.1-omni-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-vllm0.20.1-amd64-omni-slot22"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-vllm0.20.1-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-vllm0.20.1-amd64-slot22"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-vllm0.23.0-omni-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-vllm0.23.0-amd64-omni-slot21"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:rocm7.2.3-vllm0.29.0-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:rocm7.2.3-vllm0.29.0-amd64-slot29"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:rocm7.2.4-sglang0.5.21.dev550-g4142235c2-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:rocm7.2.4-sglang0.5.21.dev550-g4142235c2-amd64-slot30"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-sglang0.5.5.post3-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-sglang0.5.5.post3-amd64-diffusion-slot27"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-vllm0.1.dev3-omni-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-vllm0.1.dev3-amd64-omni-slot25"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-vllm0.1.dev3-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-vllm0.1.dev3-amd64-slot25"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-vllm0.25.1-omni-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-vllm0.25.1-amd64-omni-slot26"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre5.37.1.0-sglang0.5.18-r1": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre5.37.1.0-sglang0.5.18-amd64-diffusion-slot27"
+    }
+  ],
+  "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre5.37.1.0-sglang0.5.18-r2": [
+    {
+      "arch": "amd64",
+      "image_ref": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre5.37.1.0-sglang0.5.18-amd64-diffusion-slot28"
+    }
+  ]
+}

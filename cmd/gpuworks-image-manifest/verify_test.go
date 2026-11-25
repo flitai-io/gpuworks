@@ -23,6 +23,7 @@ const (
 var verifyHosts = []string{"docker.io", "quay.io", "swr.cn-southwest-2.myhuaweicloud.com"}
 
 const verifyMatrix = `defaults:
+  build_repositories: [gpuworks/gpuworks-runner, quay.io/gpuworks/gpuworks-runner, swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner]
   platforms: [linux/amd64, linux/arm64]
 items:
   - id: cuda13.0-vllm0.30.0

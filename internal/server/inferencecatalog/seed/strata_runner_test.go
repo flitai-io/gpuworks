@@ -11,7 +11,7 @@ import (
 )
 
 const strataRunnerSpecName = "iq2xs-strata-nvidia"
-const strataRunnerImage = "quay.io/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5"
+const strataRunnerImage = "quay.io/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-r5"
 
 func TestStrataRunnerBuiltInContract(t *testing.T) {
 	_, original := catalogSpec(t, strataModelID, "iq2xs-strata-nvidia-single-gpu")

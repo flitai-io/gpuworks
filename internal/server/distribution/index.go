@@ -57,6 +57,7 @@ type Index struct {
 	PreviousServers []ServerRelease `json:"previous_servers,omitempty"`
 	// ImageCatalog and TemplateCatalog are absent when a channel publishes no
 	// catalog of that kind.
+	ImageCatalogV4  *CatalogFile     `json:"image_catalog_v4,omitempty"`
 	ImageCatalog    *CatalogFile     `json:"image_catalog,omitempty"`
 	TemplateCatalog *TemplateCatalog `json:"template_catalog,omitempty"`
 }
@@ -137,6 +138,14 @@ func ParseIndexFor(payload []byte, channel, edition string) (Index, error) {
 	return index, nil
 }
 
+// CurrentImageCatalog prefers the catalog with distinct registry download sizes.
+func (x Index) CurrentImageCatalog() *CatalogFile {
+	if x.ImageCatalogV4 != nil {
+		return x.ImageCatalogV4
+	}
+	return x.ImageCatalog
+}
+
 // Servers returns the signed choices in publication order, newest first.
 func (x Index) Servers() []ServerRelease {
 	return append([]ServerRelease{x.Server}, x.PreviousServers...)
@@ -173,6 +182,11 @@ func (x Index) Validate() error {
 		}
 		seen[release.ReleaseID] = true
 		if err := release.validate(); err != nil {
+			return err
+		}
+	}
+	if x.ImageCatalogV4 != nil {
+		if err := x.ImageCatalogV4.validate("image catalog v4"); err != nil {
 			return err
 		}
 	}
