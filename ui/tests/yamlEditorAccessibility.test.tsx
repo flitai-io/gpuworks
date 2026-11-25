@@ -38,10 +38,10 @@ for (const [source, value] of [
     const editor = screen.getByRole("textbox", { name: "Edit weight sources YAML" });
     editor.focus();
     fireEvent.keyDown(editor, { key: "M", code: "KeyM", keyCode: 77, ctrlKey: true, shiftKey: true });
-    const diagnostics = await screen.findByRole("listbox", { name: "Diagnostics" }, { timeout: 5000 });
-    await waitFor(() => assert.notEqual(within(diagnostics).getByRole("option").textContent, "No diagnostics"), { timeout: 5000 });
+    const diagnostics = await screen.findByRole("listbox", { name: "Diagnostics" });
+    await waitFor(() => assert.notEqual(within(diagnostics).getByRole("option").textContent, "No diagnostics"));
     rerender(<YamlEditor value={value} onChange={() => {}} schema={schema} ariaLabel="Edit weight sources YAML" />);
-    await within(diagnostics).findByRole("option", { name: "No diagnostics" }, { timeout: 5000 });
+    await within(diagnostics).findByRole("option", { name: "No diagnostics" });
   });
 }
 
@@ -55,15 +55,15 @@ for (const [source, value] of [
     const editor = screen.getByRole("textbox", { name: "Edit weight sources YAML" });
     editor.focus();
     fireEvent.keyDown(editor, { key: "M", code: "KeyM", keyCode: 77, ctrlKey: true, shiftKey: true });
-    const diagnostics = await screen.findByRole("listbox", { name: "Diagnostics" }, { timeout: 5000 });
-    await waitFor(() => assert.notEqual(within(diagnostics).getByRole("option").textContent, "No diagnostics"), { timeout: 5000 });
+    const diagnostics = await screen.findByRole("listbox", { name: "Diagnostics" });
+    await waitFor(() => assert.notEqual(within(diagnostics).getByRole("option").textContent, "No diagnostics"));
     const rootError = within(diagnostics).getByRole("option").textContent;
     rerender(<YamlEditor value={value} onChange={() => {}} schema={schema} ariaLabel="Edit weight sources YAML" />);
     await waitFor(() => {
       const sourceError = within(diagnostics).getByRole("option").textContent;
       assert.notEqual(sourceError, rootError, "the diagnostics must describe the current source rather than the previous root value");
       assert.notEqual(sourceError, "No diagnostics", "an invalid local source must have a visible diagnostic");
-    }, { timeout: 5000 });
+    });
   });
 }
 

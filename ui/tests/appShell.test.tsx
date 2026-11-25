@@ -437,7 +437,7 @@ test("a successful password change keeps its notice visible after the shell sign
   await screen.findByRole("textbox", { name: locale.auth.username });
   assert.equal(screen.queryByRole("banner"), null, "the authenticated shell unmounted");
   assert.deepEqual(sent, ["password", "logout"]);
-  assert.ok(await screen.findByText(auth.done, {}, { timeout: 3000 }), "password success notice survives logout");
+  assert.ok(await screen.findByText(auth.done), "password success notice survives logout");
   const { message } = await import("../src/ui-kit/feedback/index.tsx");
   message.destroy();
 });

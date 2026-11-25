@@ -252,7 +252,7 @@ test("download the sample hands the browser a .jsonl file", async () => {
     urlApi.createObjectURL = before.create;
     urlApi.revokeObjectURL = before.revoke;
     Object.defineProperty(globalThis, "URL", { value: currentURL, configurable: true });
-    await waitFor(() => assert.deepEqual(revoked, [href]), { timeout: 2000 });
+    await waitFor(() => assert.deepEqual(revoked, [href]));
   }
   await assert.rejects(fetch(href), /fetch failed/);
 });

@@ -447,7 +447,7 @@ test("the quick form offers no data-parallel card, and a degree the GPUs cannot 
   await openDeployPage();
 
   const text = errorText("DATA_PARALLEL_GPU_COUNT", params);
-  await waitFor(() => assert.ok(screen.getByText(text)), { timeout: 5000 });
+  await waitFor(() => assert.ok(screen.getByText(text)));
   assert.ok(
     text.includes("needs 2 GPUs") && text.includes("assigned 1"),
     "the message tells the user how many GPUs the degree needs and how many they have",

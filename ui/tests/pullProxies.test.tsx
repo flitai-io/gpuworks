@@ -239,7 +239,7 @@ test("the node selector in the drawer narrows an entry and clears the default ma
   const combo = within(drawer).getByRole("combobox", { name: rules.nodes });
   await user.type(combo, "site=idc-a");
   fireEvent.keyDown(combo, { key: "Enter", keyCode: 13, which: 13 });
-  await waitFor(() => assert.equal(checkbox(drawer, text.controlPlaneLabel).checked, false), { timeout: 2000 });
+  await waitFor(() => assert.equal(checkbox(drawer, text.controlPlaneLabel).checked, false));
   await user.type(within(drawer).getByLabelText(text.httpsProxy), "http://p:1");
   await user.click(within(drawer).getByRole("button", { name: saveName }));
   await waitFor(() => assert.equal(rows().length, 1));

@@ -143,7 +143,7 @@ test("Enter in a field submits; only what was typed is sent, trimmed, and the en
   for (const key of ["script", "distribute", "conf", "reconfigure"] as const) assert.ok(done.getByText(locale.slurm.setup.step[key]));
   assert.ok(await done.findByText("Every GPU node then joins by itself within one to one and a half health-check intervals (an interval is 5 min)."));
   assert.deepEqual(buttonsIn(screen.getByRole("dialog")), [f.close]);
-  await waitFor(() => assert.equal(document.activeElement?.textContent, f.close), { timeout: 2000 });
+  await waitFor(() => assert.equal(document.activeElement?.textContent, f.close));
   await user.click(done.getByRole("button", { name: locale.slurm.command.copy.replace("{{title}}", locale.slurm.setup.command) }));
   assert.equal(await navigator.clipboard.readText(), SETUP_COMMAND);
 });

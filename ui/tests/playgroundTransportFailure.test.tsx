@@ -76,7 +76,7 @@ for (const terminal of ["socket-reset", "done", "premature-eof", "error-frame", 
         } else {
           const expected = terminal === "cancel" ? translations.pane.generationStopped
             : ["error-frame", "http-refusal"].includes(terminal) ? REFUSAL : translations.pane.streamInterrupted;
-          await waitFor(() => assert.equal(screen.getByRole("alert").textContent, expected), { timeout: 3000 });
+          await waitFor(() => assert.equal(screen.getByRole("alert").textContent, expected));
           if (terminal !== "http-refusal") assert.ok(screen.getByText(PARTIAL));
           assert.equal(document.body.textContent?.includes("terminated"), false);
           assert.equal(document.body.textContent?.includes("network error"), false);

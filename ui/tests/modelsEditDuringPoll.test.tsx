@@ -156,7 +156,7 @@ test("download progress updates visible percentages without reloading; terminal 
     const progressBefore = presenceRequests;
     Events.emit("modelfile");
     Events.emit("modelfile");
-    await waitFor(() => assert.ok(presenceRequests > progressBefore), { timeout: 2000 });
+    await waitFor(() => assert.ok(presenceRequests > progressBefore));
     await screen.findByText(i18n.t("models:presenceSummary.inFlight", { count: 1, percent: value / 4 * 100 }));
     assert.equal(modelListRequests, before, "progress keeps the original list response");
   }
@@ -182,7 +182,7 @@ test("a late progress response cannot restore a transfer after its terminal stat
   await screen.findByText("Qwen3-8B");
   holdPresence = true;
   Events.emit("modelfile");
-  await waitFor(() => assert.ok(heldPresence), { timeout: 2000 });
+  await waitFor(() => assert.ok(heldPresence));
   downloading = false;
   Events.emit("modelfile", "present");
   await screen.findByRole("button", { name: i18n.t("models:presenceSummary.nodes", { count: 1 }) });

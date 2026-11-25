@@ -91,7 +91,7 @@ test("the custom image form can select Kunlun XRE without losing existing framew
 
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "Framework", exact: true }));
   for (const framework of ["CUDA", "CANN", "ROCm", "HGGC", "DTK", "Metal", "XRE"]) {
-    assert.equal((await screen.findByText(framework, { exact: true }, { timeout: 1000 })) !== null, true);
+    assert.equal((await screen.findByText(framework, { exact: true })) !== null, true);
   }
   fireEvent.click(screen.getByText("XRE", { exact: true }));
   const selected = document.querySelector(".ant-select-selection-item[title='XRE']");

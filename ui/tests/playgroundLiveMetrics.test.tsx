@@ -34,11 +34,11 @@ test("metrics appear and update while the reply streams, from continuous usage",
   stream.frame(delta(" two", 2));
   stream.frame(delta(" three", 3));
   // Before the reply ends the row already shows exact running counts.
-  await waitFor(() => assert.equal(metric("Token"), "3"), { timeout: 2000 });
+  await waitFor(() => assert.equal(metric("Token"), "3"));
   assert.notEqual(metric("TTFT"), "—");
   assert.notEqual(metric("Prefill"), "—");
   stream.frame(delta(" four", 4));
-  await waitFor(() => assert.equal(metric("Token"), "4"), { timeout: 2000 });
+  await waitFor(() => assert.equal(metric("Token"), "4"));
   stream.frame({ choices: [], usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 } });
   stream.end();
   await screen.findByRole("button", { name: pane.copyReply });
@@ -52,7 +52,7 @@ test("without usage on every chunk the running count is marked as an estimate", 
   await sendPrompt(user, "count");
   stream.push("one");
   stream.push(" two");
-  await waitFor(() => assert.equal(metric("Token"), "≈2"), { timeout: 2000 });
+  await waitFor(() => assert.equal(metric("Token"), "≈2"));
   // The final usage replaces the estimate.
   stream.frame({ choices: [], usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 } });
   stream.end();

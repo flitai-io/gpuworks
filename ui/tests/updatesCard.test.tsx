@@ -788,7 +788,7 @@ test("a restart which returns the old release never opens the follow-up", async 
     reloadAttempt(Date.now() + 650, "restarting");
     renderCard();
     await waitFor(() => assert.ok(s.probes() > 0));
-    await waitFor(() => assert.ok(screen.getByRole("button", { name: picker.recheckRunning })), { timeout: 2500 });
+    await waitFor(() => assert.ok(screen.getByRole("button", { name: picker.recheckRunning })));
     assert.equal(calls, 0);
     assert.ok(!screen.queryByRole("link", { name: u.viewNodes }), "the upgrade notice is hidden");
   } finally { s.restore(); }

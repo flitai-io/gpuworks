@@ -386,7 +386,7 @@ test("the yield policy is chosen only for a sleepable single-node deployment, ta
   await user.click(select);
   await user.click(await screen.findByText(policyOptionText("timeslice")));
   const timeslice = { policy: "timeslice", idle_sec: 30, sleep_level: "auto", max_serve_sec: 120, unfinished: "wait", unfinished_wait_sec: 30, hold_max_sec: 600 };
-  await waitFor(() => assert.deepEqual((calls.evaluate.at(-1) as Record<string, unknown>).yield_policy, timeslice), { timeout: 4000 });
+  await waitFor(() => assert.deepEqual((calls.evaluate.at(-1) as Record<string, unknown>).yield_policy, timeslice));
 
   await user.click(screen.getByRole("button", { name: deployLocale.action.deploy || "Deploy" }));
   await waitFor(() => assert.ok(calls.create.length > 0));
@@ -436,19 +436,19 @@ test("turning sleep off keeps the chosen policy with the server's reason, until 
   await user.click(await screen.findByRole("combobox", { name: label }));
   await user.click(await screen.findByText(policyOptionText("anytime")));
   const anytime = { policy: "anytime", idle_sec: 30, sleep_level: "auto", unfinished: "abort", unfinished_wait_sec: 30, hold_max_sec: 3600 };
-  await waitFor(() => assert.deepEqual((calls.evaluate.at(-1) as Record<string, unknown>).yield_policy, anytime), { timeout: 4000 });
+  await waitFor(() => assert.deepEqual((calls.evaluate.at(-1) as Record<string, unknown>).yield_policy, anytime));
 
   // Sleep off: the form sends what was chosen and shows why the server will
   // not take it; only never is left to choose.
   await user.click(card);
-  await screen.findByText(commonLocale.apiError.SLEEP_NOT_ENABLED, {}, { timeout: 4000 });
+  await screen.findByText(commonLocale.apiError.SLEEP_NOT_ENABLED);
   assert.deepEqual((calls.evaluate.at(-1) as Record<string, unknown>).yield_policy, anytime);
   await user.click(screen.getByRole("combobox", { name: label }));
   const option = (policy: "never" | "idle") => screen.getByText(policyOptionText(policy)).closest(".ant-select-item") as HTMLElement;
   assert.ok(option("idle").className.includes("ant-select-item-option-disabled"));
   await user.click(option("never"));
   await waitFor(() => assert.ok(screen.queryByRole("combobox", { name: label }) === null));
-  await waitFor(() => assert.equal("yield_policy" in (calls.evaluate.at(-1) as Record<string, unknown>), false), { timeout: 4000 });
+  await waitFor(() => assert.equal("yield_policy" in (calls.evaluate.at(-1) as Record<string, unknown>), false));
   await user.click(screen.getByRole("button", { name: deployLocale.action.deploy || "Deploy" }));
   await waitFor(() => assert.ok(calls.create.length > 0));
   assert.equal("yield_policy" in (calls.create[0] as Record<string, unknown>), false);

@@ -163,7 +163,7 @@ test("the default 72-hour retention warns for a week while still querying the se
 
   await chooseRange("1 week");
 
-  assert.ok(await screen.findByText(/exceeds the 72-hour retention/, {}, { timeout: 1500 }), "retention warning missing");
+  assert.ok(await screen.findByText(/exceeds the 72-hour retention/), "retention warning missing");
   await waitFor(() => assert.ok(calls.length >= 1, "1 week must still query the selected window"));
   for (const call of calls) {
     assert.equal(call.end - call.start, 604_800_000, "retention must not truncate the requested window");

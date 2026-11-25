@@ -95,14 +95,14 @@ test("the screen follows the states, survives unreadable progress, and reloads o
   assert.ok(await screen.findByText(zh.states.waiting));
   assert.ok(screen.getByText("2 / 3"));
   // Unreadable progress keeps the last counts and says so; nothing reloads.
-  await waitFor(() => assert.ok(screen.getByText(zh.states.unobserved)), { timeout: 8000 });
+  await waitFor(() => assert.ok(screen.getByText(zh.states.unobserved)));
   assert.ok(screen.getByText("2 / 3"));
   assert.equal(reloads, 0);
-  await waitFor(() => assert.ok(screen.getByText(zh.states.migrating)), { timeout: 12000 });
+  await waitFor(() => assert.ok(screen.getByText(zh.states.migrating)));
   // Idle while this member's business is still closed is not the end.
-  await waitFor(() => assert.ok(screen.getByText(zh.states.idle)), { timeout: 8000 });
+  await waitFor(() => assert.ok(screen.getByText(zh.states.idle)));
   assert.equal(reloads, 0);
-  await waitFor(() => assert.equal(reloads, 1), { timeout: 8000 });
+  await waitFor(() => assert.equal(reloads, 1));
   const after = calls.length;
   await new Promise((resolve) => setTimeout(resolve, 2500));
   assert.equal(calls.length, after, "polling continued after the reload");
@@ -115,5 +115,5 @@ test("an unknown state code is shown as the code, and a server without the docum
   await mount("en", () => { reloads++; });
   assert.ok(await screen.findByText("draining"));
   assert.equal(reloads, 0);
-  await waitFor(() => assert.equal(reloads, 1), { timeout: 12000 });
+  await waitFor(() => assert.equal(reloads, 1));
 });

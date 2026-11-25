@@ -633,7 +633,7 @@ for (const state of ["connecting", "offline", "other-node", "error"] as const) {
       assert.equal(closes, 0);
       assert.deepEqual(requests, ["new-node"]);
       ready = true;
-      await waitFor(() => assert.equal(closes, 1), { timeout: 5000 });
+      await waitFor(() => assert.equal(closes, 1));
       assert.ok(requests.length >= 2);
       assert.ok(requests.every((uuid) => uuid === "new-node"));
     } finally { api.node = original; create.restore(); }

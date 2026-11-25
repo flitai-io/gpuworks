@@ -175,7 +175,7 @@ test("restart now asks the server to restart and reloads once it answers again",
     button.focus();
     await userEvent.keyboard("{Enter}");
     await waitFor(() => assert.equal(s.restarts(), 1));
-    await waitFor(() => assert.ok(probes >= 1), { timeout: 5000 });
+    await waitFor(() => assert.ok(probes >= 1));
   } finally {
     globalThis.fetch = originalFetch;
     s.restore();

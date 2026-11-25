@@ -157,7 +157,7 @@ test("Uninstall of an entry the platform can reach runs the agents step, counts 
   assert.ok(await d.findByText(s.uninstall.waiting.replace("{{seconds}}", "1")));
   const next = d.getByRole("button", { name: s.uninstall.run.remove_check }) as HTMLButtonElement;
   assert.equal(next.disabled, true, "the server's wait has not run out");
-  await waitFor(() => assert.equal((d.getByRole("button", { name: s.uninstall.run.remove_check }) as HTMLButtonElement).disabled, false), { timeout: 4000 });
+  await waitFor(() => assert.equal((d.getByRole("button", { name: s.uninstall.run.remove_check }) as HTMLButtonElement).disabled, false));
   await user.click(d.getByRole("button", { name: s.uninstall.run.remove_check }));
   assert.deepEqual(calls.remove.at(-1), ["s-7", "remove_check"]);
   assert.ok(await d.findByText(s.uninstall.removed));

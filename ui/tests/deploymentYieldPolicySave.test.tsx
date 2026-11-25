@@ -65,7 +65,7 @@ test("what is saved is the policy with the parameters that apply, as literal JSO
     // idle_sec 45 is above the cap of the 30 s max_serve case: the form would refuse it.
     if (name === "timeslice with edited values") fireEvent.change(spin(editor, f.idle_sec) as HTMLInputElement, { target: { value: "30" } });
     await user.click(saveButton(editor));
-    await waitFor(() => assert.equal(state.sent.length, 1), { timeout: 3000 });
+    await waitFor(() => assert.equal(state.sent.length, 1));
     assert.deepEqual(state.sent[0][1], want, name);
     assert.equal(state.sent[0][0], 1);
     for (const gone of ["preset", "auto_sleep", "min_serve_sec"]) assert.equal(gone in state.sent[0][1], false, `${name}: ${gone}`);

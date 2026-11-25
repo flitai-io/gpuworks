@@ -101,7 +101,7 @@ test("indeterminate sync switches to measured progress when the node reports rea
   show(imageDeployment());
   const bar = await screen.findByRole("progressbar");
   assert.equal(bar.getAttribute("aria-valuenow"), null);
-  await waitFor(() => assert.equal(screen.getByRole("progressbar").getAttribute("aria-valuenow"), "25"), { timeout: 3500 });
+  await waitFor(() => assert.equal(screen.getByRole("progressbar").getAttribute("aria-valuenow"), "25"));
   assert.ok(screen.getByText("256 B / 1.0 KiB · 128 B/s"));
 });
 
@@ -166,7 +166,7 @@ test("image progress refreshes while waiting and disappears when placement compl
   api.image = async () => ({ id: 4, versions: [{ id: 23, nodes: [{ ...imageNode, transferred_bytes: ++reads === 1 ? 256 : 512 }] }] }) as never;
   const view = show(imageDeployment());
   await screen.findByRole("progressbar");
-  await waitFor(() => assert.equal(screen.getByRole("progressbar").getAttribute("aria-valuenow"), "50"), { timeout: 3500 });
+  await waitFor(() => assert.equal(screen.getByRole("progressbar").getAttribute("aria-valuenow"), "50"));
   view.rerender(<I18nextProvider i18n={i18n}><DeploymentImagePreparation dep={deployment({ placement_status: undefined })} /></I18nextProvider>);
   assert.equal(screen.queryByRole("progressbar"), null);
 });

@@ -170,17 +170,17 @@ test("manual multi-node deployment can submit fixed degrees after a failed recom
   }
   try {
     render(<I18nextProvider i18n={i18n}><Harness /></I18nextProvider>);
-    const shown = await screen.findByText(refusal, {}, { timeout: 5000 });
+    const shown = await screen.findByText(refusal);
     assert.ok(shown.closest(".ant-form-item")?.querySelector("#tp"), "Expected the refusal beside the TP control");
     assert.equal(screen.getByTestId("page-error").textContent, "", "the refusal belongs beside TP, not on the page");
-    await waitFor(() => assert.equal((screen.getByRole("button") as HTMLButtonElement).disabled, false), { timeout: 5000 });
+    await waitFor(() => assert.equal((screen.getByRole("button") as HTMLButtonElement).disabled, false));
     // Nothing to confirm: the unavailable recommendation cannot be submitted.
     await act(async () => screen.getByRole("button").click());
     assert.deepEqual(created, []);
     await act(async () => form!.setFieldsValue({ tp: 1, pp: 2 }));
     // The fixed layout's answer clears the TP refusal.
     await waitFor(() => assert.ok(screen.queryByText(refusal) === null, "Expected the TP refusal to clear"), { timeout: 5000 });
-    await waitFor(() => assert.equal((screen.getByRole("button") as HTMLButtonElement).disabled, false), { timeout: 5000 });
+    await waitFor(() => assert.equal((screen.getByRole("button") as HTMLButtonElement).disabled, false));
     await act(async () => screen.getByRole("button").click());
     await waitFor(() => assert.deepEqual(created[0]?.placement, { tp: 1, pp: 2 }));
   } finally {

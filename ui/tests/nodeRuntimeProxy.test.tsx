@@ -418,9 +418,9 @@ test("the manual steps follow the node and disappear once dockerd reports the pr
     show(30);
     await loaded();
     assert.ok(screen.getByText(rt.noPrivilege));
-    await waitFor(() => assert.ok(stub.fetches >= 3), { timeout: 3000 });
+    await waitFor(() => assert.ok(stub.fetches >= 3));
     stub.current.network = dockerNetwork({ privilege: "none", applied: true, http_proxy: PROXY, written_http_proxy: PROXY });
-    await waitFor(() => assert.ok(screen.getByText(rt.applied)), { timeout: 3000 });
+    await waitFor(() => assert.ok(screen.getByText(rt.applied)));
     assert.ok(!screen.queryByText(rt.noPrivilege));
     assert.equal(dom.window.document.querySelectorAll("pre").length, 0);
     const settled = stub.fetches;

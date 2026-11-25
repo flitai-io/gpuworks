@@ -452,10 +452,10 @@ test("switching target to AMD requests ROCm capability and clears sleep selectio
   await pickVendorAndName(user, "vendor-switch");
   const card = screen.getByText(deployLocale.workbench.resource.sleepable).closest("button")!;
   await waitFor(() => assert.equal(card.hasAttribute("disabled"), false));
-  await waitFor(() => assert.ok(calls.evaluate.some((v) => (v as Record<string, unknown>).target_vendor === "nvidia")), { timeout: 10000 });
+  await waitFor(() => assert.ok(calls.evaluate.some((v) => (v as Record<string, unknown>).target_vendor === "nvidia")));
   await user.click(card);
   await waitFor(() => assert.equal(card.className.includes("is-active"), true));
-  await waitFor(() => assert.ok(calls.evaluate.some((v) => (v as Record<string, unknown>).sleepable === true)), { timeout: 10000 });
+  await waitFor(() => assert.ok(calls.evaluate.some((v) => (v as Record<string, unknown>).sleepable === true)));
 
   const vendorInput = document.querySelector('.ant-select-selection-item[title="NVIDIA"]')!
     .closest(".ant-select")!.querySelector("input")!;

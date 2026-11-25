@@ -323,7 +323,7 @@ test("nothing to place a PD draft on is the server's explanation beside the swit
   await openDeployPage();
   await chooseTopology("pd");
   const text = errorText("UNIT_PLACEMENT_NONE", placementNone.params);
-  await waitFor(() => assert.ok(pool().getByText(text)), { timeout: 4000 });
+  await waitFor(() => assert.ok(pool().getByText(text)));
   assert.ok(pool().getByText(text).closest(".ant-form-item-explain-error"), "rendered as the field's error beside the control");
   // A request automatic placement cannot take reads the same way.
   assert.ok(screen.getByText(deployLocale.pd.addUnit.replace("{{role}}", deployLocale.pd.role.decode)));
@@ -404,7 +404,7 @@ test("a multi-node draft that cannot be placed shows the server's reason, in the
   recordEvaluate(() => ({ ...baseAnswer, ok: false, auto_placed: true, errors: [placementNone] }));
   await openDeployPage();
   await chooseTopology("multi");
-  await waitFor(() => assert.ok(pool().getByText(errorText("UNIT_PLACEMENT_NONE", placementNone.params))), { timeout: 4000 });
+  await waitFor(() => assert.ok(pool().getByText(errorText("UNIT_PLACEMENT_NONE", placementNone.params))));
   await screen.findByText(node.autoGroupNoPreview);
 });
 
@@ -415,7 +415,7 @@ test("a missing TP is the server's AUTO_PLACEMENT_TP_REQUIRED beside the switch"
   }));
   await openDeployPage();
   await chooseTopology("multi");
-  await waitFor(() => assert.ok(pool().getByText(errorText("AUTO_PLACEMENT_TP_REQUIRED"))), { timeout: 4000 });
+  await waitFor(() => assert.ok(pool().getByText(errorText("AUTO_PLACEMENT_TP_REQUIRED"))));
 });
 
 test("switching a multi-node draft to manual shows the node picker and states the nodes", async () => {
@@ -442,7 +442,7 @@ test("the strategy follows the topology's default unless the deployer picked one
   const payloads = recordEvaluate();
   await openDeployPage();
   const strategy = () => (lastOf(payloads).placement_strategy);
-  await waitFor(() => assert.equal(strategy(), "spread"), { timeout: 4000 });
+  await waitFor(() => assert.equal(strategy(), "spread"));
   await chooseTopology("multi");
   await waitFor(() => assert.equal(strategy(), "binpack"));
   await chooseTopology("single");
@@ -491,7 +491,7 @@ async function openFrom(draft: Record<string, unknown>, deployment: Record<strin
       </I18nextProvider>
     </MemoryRouter>,
   );
-  await waitFor(() => assert.ok(document.querySelector(".deploy-node-pool")), { timeout: 4000 });
+  await waitFor(() => assert.ok(document.querySelector(".deploy-node-pool")));
 }
 
 const storedMulti = {

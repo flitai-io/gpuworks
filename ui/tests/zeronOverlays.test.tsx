@@ -439,14 +439,14 @@ test("tooltips under a provider share its delay and render into a portal contain
     await user.hover(screen.getByRole("button", { name: "L" }));
     await new Promise((resolve) => setTimeout(resolve, 350));
     assert.equal(shown("Left tip"), false, "the provider's longer delay applies, not the default");
-    await waitFor(() => assert.ok(shown("Left tip")), { timeout: 1500 });
+    await waitFor(() => assert.ok(shown("Left tip")));
     assert.ok(host.contains(screen.getByRole("tooltip")), "the tooltip renders into the portal container");
     await user.unhover(screen.getByRole("button", { name: "L" }));
     await waitFor(() => assert.equal(shown("Left tip"), false), { timeout: 1500 });
     await user.hover(screen.getByRole("button", { name: "R" }));
     await new Promise((resolve) => setTimeout(resolve, 350));
     assert.equal(shown("Right tip"), false, "the second tooltip shares the same delay");
-    await waitFor(() => assert.ok(shown("Right tip")), { timeout: 1500 });
+    await waitFor(() => assert.ok(shown("Right tip")));
   } finally {
     host.remove();
   }
