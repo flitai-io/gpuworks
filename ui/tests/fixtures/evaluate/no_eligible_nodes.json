@@ -192,22 +192,7 @@
           "compatible": true
         },
         {
-          "image": "gpuworks/gpuworks-runner:cann9.0-910b-vllm-omni0.23.0rc1-r1",
-          "reason": "catalog_match",
-          "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cann9.0-a3-vllm-omni0.23.0rc1-r1",
-          "reason": "catalog_match",
-          "compatible": true
-        },
-        {
           "image": "gpuworks/gpuworks-runner:cann9.1-310p-vllm0.27.1rc1-r3",
-          "reason": "catalog_match",
-          "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cann9.1-910b-vllm-omni0.30.0-r3",
           "reason": "catalog_match",
           "compatible": true
         },
@@ -222,17 +207,7 @@
           "compatible": true
         },
         {
-          "image": "gpuworks/gpuworks-runner:cann9.1-950-vllm-omni0.30.0-r3",
-          "reason": "catalog_match",
-          "compatible": true
-        },
-        {
           "image": "gpuworks/gpuworks-runner:cann9.1-950-vllm0.27.1rc1-r2",
-          "reason": "catalog_match",
-          "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cann9.1-a3-vllm-omni0.30.0-r3",
           "reason": "catalog_match",
           "compatible": true
         },
@@ -268,16 +243,6 @@
         },
         {
           "image": "gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2",
-          "reason": "catalog_match",
-          "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.30.0-r4",
-          "reason": "catalog_match",
-          "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.34.0-r1",
           "reason": "catalog_match",
           "compatible": true
         },

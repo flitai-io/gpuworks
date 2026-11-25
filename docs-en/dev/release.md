@@ -242,10 +242,6 @@ The built-in inference catalog is a content-addressed package, meaning it is ide
 embedded seed is generated from the gpuworks-runner build matrix by `make image-manifest` and enters the [distribution channel](#发布通道) with every release; see the
 [CLI Reference](../reference/cli.md#gpuworks-image-manifest). Unit tests fail if the embedded seed differs from the matrix.
 
-Register new SWR tags under `published` in `build/runner-images/matrix.yaml` with their exact tag, platforms and engine version. Run `make image-manifest` and publish the corresponding channel. Inventory tags without an immutability guarantee are manual selections, including names containing r1 or r2. New servers initially disable these entries. Older schema 3 servers can read the same catalog. Their initial switch is on, but their automatic resolver skips these tags.
-
-On new servers, Check for updates keeps conflicting custom or community entries, lists the skipped names and applies the rest. An uploaded manifest still fails as a whole on a conflict. An older installation with a custom entry at the same full image reference can upgrade its server before checking for updates to keep its deployment references.
-
 ## Upgrade and Rollback
 
 - Server: `gpuworks upgrade` automatically stops the service, creates a backup (database + `master.key` + old binary), performs an atomic replacement,
@@ -264,6 +260,6 @@ On new servers, Check for updates keeps conflicting custom or community entries,
 <!-- translation-source-sha256: 43e6e82a406f6474f33b1436024c8e7d2e9a8f5167bc8d4a1ed73cfd15fea161 ### GitHub Actions Releases -->
 <!-- translation-source-sha256: 32a0c93ed7537847e5c6869de4228919ff01e969e898cef1f5f3a268150adfcd ### Kubernetes Agent Image -->
 <!-- translation-source-sha256: 28162a8691fe3e14460cdf3b97b977de5713069ca949be433af79bd0c0473b36 ## Embedded Native Assets -->
-<!-- translation-source-sha256: 43e4e84082a7030fe745bc9c458cfaf7ebd04d9387b5e8ee7362a6e096ca4534 ## Database and Catalog Packages -->
+<!-- translation-source-sha256: a6733565856202d23003d644b735bd8ce7dce418fb278199d5e2dd49c202561d ## Database and Catalog Packages -->
 <!-- translation-source-sha256: 3027f836a7754e1a3e7900b93c5102a75164ef89c3a9c1e20e9bcc2541175d09 ## Upgrade and Rollback -->
 <!-- translation-localized-code-block: 957acfe4b88a2bb0b730fab70c725bbbdaf2e1536f84f94d12918def820c5a7c cac397a0dea3afc07b0e87be5f17fd4204658d3b070919f828730dc6f0f4992d Translate release validation command comments -->

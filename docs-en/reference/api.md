@@ -586,7 +586,7 @@ the endpoint returns 409 and does not replace the existing registration. If the 
 | DELETE | `/api/v1/images/{id}` | Delete a community/custom image version; system images return 400 `OFFICIAL_IMAGE_DELETE_FORBIDDEN`. Returns 409 `IMAGE_IN_USE` if still referenced by deployments, unfinished instances, or models (using the same reference criteria as system image deletion/deprecation) | JWT(admin) |
 | DELETE | `/api/v1/image-series/{id}` | Delete a community/custom image series; returns 409 `IMAGE_IN_USE` if any version is still referenced | JWT(admin) |
 | POST | `/api/v1/images/import` | Accepts two request body types: a system catalog manifest with `schema_version` (schema 2/3; other values return 400), or `{"series":[...]}` for community/custom additions (cannot set `source=official`) | JWT(admin) |
-| POST | `/api/v1/images/sync` | Update the system image catalog from the release channel; ignores the request body and returns version counts and series. For errors, see [Catalog Import Results](#catalog-import-results) | JWT(admin) |
+| POST | `/api/v1/images/sync` | Update the system image catalog from the release channel; ignores the request body and returns version counts and series. For errors, see [Catalog Import Results](#目录导入结果) | JWT(admin) |
 | POST | `/api/v1/images/preview-archive-url` | Parse a `docker save` archive URL before downloading: `{"url"}` → `url`, `size_bytes`, `repo_tags`, `previewable`, and optional `metadata_by_tag` with the engine, framework, their versions, and host architecture per reference | JWT(admin) |
 | GET | `/api/v1/images/nodes/{uuid}/runtime-images` | List tagged node images. Optional query parameter `namespace`. Returns references, immutable identities, sizes, and source and deployment namespaces. | JWT(admin) |
 | POST | `/api/v1/images/nodes/{uuid}/runtime-images/inspect` | Inspect the selected image configuration for catalog fields. Submit the same selection plus `node_uuid` as `runtime_image` alongside one custom version to `POST /api/v1/images/import`. | JWT(admin) |
@@ -673,14 +673,14 @@ May also return 409 `STORAGE_DISABLED` (write operations), `STORAGE_NOT_WRITABLE
 
 `POST /images/sync` and `POST /images/import` with `schema_version` import the system catalog and return
 `{catalog_version, created, updated, deleted, deprecated, skipped:[], series:[...]}`.
-Counts are per version row; `series` contains the system series after import. System versions absent from the manifest are deprecated if referenced or present on a node, and otherwise deleted.
+Counts are per version row; `series` contains the system series after import. System versions absent from the manifest are deleted if unreferenced, or deprecated if referenced.
 Community/custom imports return the affected series as `{items:[...], total}`.
 
-Channel sync returns 200 on a community/custom name or reference conflict. It preserves the local entry, lists the skipped entry in `skipped`, and imports the rest. Uploading a manifest with the same conflict returns 400 `IMAGE_IMPORT_CONFLICT` and rolls back the import.
+Failures leave the catalog unchanged. Handle the following errors:
 
-Invalid manifest content returns 400 `IMAGE_MANIFEST_INVALID` before import. Channel sync also returns 502 `UPDATE_SOURCES_UNAVAILABLE` when no source is reachable, 404 `UPDATE_NOT_PUBLISHED` when the index has no catalog, or 502 `UPDATE_DOWNLOAD_FAILED` when no matching file can be downloaded.
-
-Both paths record the catalog version and skipped names after committing the rows. If recording fails, the API returns 500 and the imported rows are already in place. After resolving the storage error, retry the same manifest to refresh the recorded status.
+- All release sources are unreachable: 502 `UPDATE_SOURCES_UNAVAILABLE`; an index exists but no catalog file matches it: 502 `UPDATE_DOWNLOAD_FAILED`.
+- The channel has not published a catalog: 404 `UPDATE_NOT_PUBLISHED`.
+- Invalid content: 400 `IMAGE_MANIFEST_INVALID`; a name or ref conflicts with a community/custom row: 400 `IMAGE_IMPORT_CONFLICT`.
 
 The version row's `rolling_tag`, `deprecated`, and `deprecated_since` describe rolling tags and deprecation status;
 `reference_count` counts deployments, unfinished instances, and models that reference the ref.
@@ -705,7 +705,7 @@ For the format and import rules, see [Image Catalog and Inference Image Families
 | POST | `/api/v1/inference-templates/clone` | Clone a template into an editable user spec | JWT(admin) |
 | POST | `/api/v1/inference-templates/evaluate` | Check flat YAML or a catalog package without writing data; accepts the same request as `import` and supports `?overwrite=true`. Returns 200 `{valid, errors, warnings}`; for check scope and results, see [Pre-Import Checks](#导入前检查) | JWT(admin) |
 | POST | `/api/v1/inference-templates/import` | Import a template/catalog package; returns `{models, package_digest}` on success, with an additional `warnings` field when warnings exist (same as `evaluate`; the field is absent when there are no warnings) | JWT(admin) |
-| POST | `/api/v1/inference-templates/sync` | “Check for updates”: fetch the official inference catalog package from the release channel and reconcile upstream sources (leaving user specs unchanged); ignores the request body. Returns `{models, package_digest, version}`; models or specs this server cannot read are skipped and stay as they are, and the response then also carries `skipped: [{model_id, spec?, reason}]` (`spec` is omitted when a whole model is skipped; see [What an Official Package Carries That This Server Cannot Read](inference-catalog-package.md)). Returns 409 `UPDATE_CATALOG_INCOMPATIBLE` if the catalog package schema is newer than this server supports; returns 400 `OFFICIAL_CATALOG_NEEDS_NEWER_SERVER` if the package cannot be read at all: damaged, inconsistent with its manifest, or without a single model this server can read (`params.error` contains the original error, and the UI indicates that this version of the inference templates requires the latest server version). For other errors, see [Catalog Import Results](#catalog-import-results) | JWT(admin) |
+| POST | `/api/v1/inference-templates/sync` | “Check for updates”: fetch the official inference catalog package from the release channel and reconcile upstream sources (leaving user specs unchanged); ignores the request body. Returns `{models, package_digest, version}`; models or specs this server cannot read are skipped and stay as they are, and the response then also carries `skipped: [{model_id, spec?, reason}]` (`spec` is omitted when a whole model is skipped; see [What an Official Package Carries That This Server Cannot Read](inference-catalog-package.md)). Returns 409 `UPDATE_CATALOG_INCOMPATIBLE` if the catalog package schema is newer than this server supports; returns 400 `OFFICIAL_CATALOG_NEEDS_NEWER_SERVER` if the package cannot be read at all: damaged, inconsistent with its manifest, or without a single model this server can read (`params.error` contains the original error, and the UI indicates that this version of the inference templates requires the latest server version). For other errors, see [Catalog Import Results](#目录导入结果) | JWT(admin) |
 | POST | `/api/v1/inference-templates/official` | Upload an official inference catalog package (request body is a `.tar.gz` catalog package, up to 32 MiB), using the same upstream reconciliation as “Check for updates,” with the same response and skip rules. Returns 400 `OFFICIAL_CATALOG_PACKAGE_REQUIRED` if the input is not a catalog package, or 400 `OFFICIAL_CATALOG_NEEDS_NEWER_SERVER` if the package cannot be read at all | JWT(admin) |
 
 For template package structure and import rules, see [Executable Inference Catalog Package](inference-catalog-package.md).
@@ -1978,7 +1978,7 @@ Sync-group create and rename require an exact case-sensitive unique name after t
 - Source information: the winning source and `{url,ok,latency_ms,error}` for sources that have responded. Slow sources that have not responded are omitted; the UI does not display source details.
 - `server`, `image_catalog`, `template_catalog`: each includes `current`, `latest`, and `update_available`. Templates also include `compatible`; the server also includes `installable`, `self_upgrade`, `self_upgrade_blocker`, and `install_dir` (the installation directory containing `server.yaml`; omitted when there is no such directory).
 
-The server marks `update_available` only when the channel version is newer. Catalogs are eligible when their contents differ and the channel release is at least as recent as the current build. A partial system image import lists the conflicting names in `image_catalog.skipped`. A matching channel version leaves `update_available` false even when some entries were skipped. After resolving conflicts, administrators can retry the import. A complete import omits this field.
+The server marks `update_available` only when the channel version is newer. The two catalogs must also differ from the current content and have a release date no earlier than the current build, to avoid marking old catalogs as updates.
 When no source is available, the response is still 200 with `available=false`; `unavailable_reason` distinguishes the cases:
 
 - `unpublished`: a source is reachable, but the channel has no index.
@@ -2482,7 +2482,7 @@ An unknown `target_vendor` on `/api/v1/engines` returns 400. If custom-command f
 <!-- translation-source-sha256: 5a937a0329b1aabd619bac36afbe45ff963584a7031b8588b3c6d1c9ebabdbe0 ### Register an image already on a node -->
 <!-- translation-source-sha256: 04f403145369bea2e0886af6fd3a84add59d07299152c9a53cc09ef3d598fdf0 ### Storage Configuration and Cache Status -->
 <!-- translation-source-sha256: 76495aa0a302fbe279f354b4207253de032639c11e8498c2041f1b8a373a248c ### Storage File Operation Scope and Errors -->
-<!-- translation-source-sha256: 2e8b029ef267edf7e8285f89bd608cbd7b780e3ce712a3d03d74bd82949a57ac ### Catalog Import Results -->
+<!-- translation-source-sha256: 28ab68c5e446f16a186a6ea1ad5e2fe940b67e51a2098b9d556108ede3a22d09 ### Catalog Import Results -->
 <!-- translation-source-sha256: c162aaa85f62dfb49b9c18ed8540144b49d74ede563ca77a776b437d0b8a1125 ## Inference Templates (Inference Catalog/Templates) -->
 <!-- translation-source-sha256: 4b7e28c06adfbce76189556587fc94653baf4749acae30f34cec3772bf431f37 ### Pre-Import Checks -->
 <!-- translation-source-sha256: f3c254df3774c7c48ee5ebf7cc4861e55fd88aed33f8cc457ecb4190f5c41377 ## Deployments / Instances (Deployments and Instances) -->
@@ -2524,7 +2524,7 @@ An unknown `target_vendor` on `/api/v1/engines` returns 400. If custom-command f
 <!-- translation-source-sha256: dff84f5e2e143ca7701c66cd40683e1ca6428f5d803325e20c3a4e6b759a19ae ## Web Terminal -->
 <!-- translation-source-sha256: 7858bdfd14670c6316f95db08d7f9198accf3451a7e655c9513ff13cf428941c ## Networks -->
 <!-- translation-source-sha256: 996230365d7f304ba6d5b55ec19068b5aae5e436538dd5f988dba762660e75c0 ## Settings / Network Presets -->
-<!-- translation-source-sha256: 9c68a3ef8832d48a18b1bf3b16c41d49212ebc4b6c3644330e95dc1fadeef401 ### Update Check Results -->
+<!-- translation-source-sha256: 0d6096536d010c9fb3e99a7c9823f000f224ee23f15072817338937928739331 ### Update Check Results -->
 <!-- translation-source-sha256: 0e96eaf91ec4ceaa489e42f4bc76c90f1ae38793c3dc6f511af1e5a915929772 ### Server Upgrade Restrictions -->
 <!-- translation-source-sha256: 407e22173bef80c6affe537b15efce4491e1e75938bc45fc92a2c73d4679d528 ### Trace Export Settings and Status -->
 <!-- translation-source-sha256: 63ec2229bea726b68dd009f914f6f8e306163df675d1f05e3c10b6615073a778 ### Source Rule Connectivity Test -->

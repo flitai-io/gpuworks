@@ -35,8 +35,6 @@
       "updateFailed": "Catalog update failed",
       "upload": "Upload manifest",
       "version": "Catalog {{version}} imported",
-      "conflicts": "Preserved {{n}} conflicting local entries",
-      "conflictNames": "Show conflicting names",
       "result": {
         "created": "Added {{n}}",
         "updated": "Updated {{n}}",

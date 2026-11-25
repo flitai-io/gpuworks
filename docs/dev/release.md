@@ -234,10 +234,6 @@ server 启动会执行版本化迁移；发布前必须验证 migration marker�
 由 `make image-manifest` 从 gpuworks-runner 构建矩阵生成内嵌种子，随每次发布进入[发布通道](#发布通道)，见
 [CLI 参考](../reference/cli.md#gpuworks-image-manifest)；内嵌种子与矩阵不一致时单测失败。
 
-SWR 新标签进入系统目录时，在 `build/runner-images/matrix.yaml` 的 `published` 中登记准确 tag、平台和引擎版本，运行 `make image-manifest`，再按对应通道的流程发布。已登记但尚未保证不可变的标签仅供手选，含有 r1、r2 等字样的库存标签也遵循此规则。新版服务端首次导入时默认关闭这些条目；旧版 schema 3 服务端可读取同一份目录，开关初始为开启，自动选镜像仍会跳过这些标签。
-
-新版「检查更新」会保留冲突的本地自定义或社区条目，并列出跳过的名称，其余条目照常更新。手工上传目录时仍会在遇到冲突后整批拒绝。旧版如果曾以自定义镜像添加同一完整地址，先升级服务端再检查更新，即可保留已有部署引用。
-
 ## 升级与回滚
 
 - server：`gpuworks upgrade` 自动完成停服、备份（数据库 + `master.key` + 旧二进制）、原子替换、

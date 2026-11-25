@@ -19,7 +19,6 @@ import { OptionSelect } from "../../ui-kit/OptionSelect";
 import type { ServerBuildInfo } from "../../serverBuildInfo";
 import { useConsoleUpgrade } from "./useConsoleUpgrade";
 import ServerAgentNotice from "./ServerAgentNotice";
-import ImageCatalogConflicts from "../images/ImageCatalogConflicts";
 import TemplatesSkippedNotice from "./TemplatesSkippedNotice";
 import UsageReportSwitch from "./UsageReportSwitch";
 
@@ -146,7 +145,7 @@ export default function UpdatesCard() {
 
   const updateImages = () => apply("images", async () => {
     const result = await api.syncImages();
-    return t(result.skipped?.length ? "updates.imagesPartiallyApplied" : "updates.imagesApplied", { version: result.catalog_version });
+    return t("updates.imagesApplied", { version: result.catalog_version });
   });
   const uploadImages = (file: File) => apply("imagesUpload", async () => {
     const result = await api.importImageCatalogFile(file);
@@ -206,11 +205,8 @@ export default function UpdatesCard() {
   };
 
   const serverState = status && serverUpdateState(status);
-  const imageCatalog = status?.image_catalog;
-  const canRetryImages = Boolean(status?.available && imageCatalog?.latest && imageCatalog.latest === imageCatalog.current);
 
   const stateOf = (row: Row) => {
-    if (row.key === "images" && !row.updateAvailable && imageCatalog?.skipped?.length) return <Badge size="sm" status="warning">{t("updates.imagesPartiallyApplied", { version: row.current })}</Badge>;
     if (!status?.available) return <Text type="secondary">{t("updates.unknown")}</Text>;
     if (row.checkError) return <Text type="danger">{productMessageText(tCommon, row.checkError)}</Text>;
     if (!row.latest) return <Text type="secondary">{t("updates.notPublished")}</Text>;
@@ -372,12 +368,6 @@ export default function UpdatesCard() {
                   expandedRowRender: () => serverNotice,
                 }} />
             </div>}
-            <ImageCatalogConflicts skipped={imageCatalog?.skipped ?? []} action={canRetryImages && (
-              <Button variant="secondary" size="sm" disabled={loading || busy !== ""} loading={busy === "images"}
-                onClick={() => void updateImages()}>{t("updates.retryImageCatalog")}</Button>
-            )}>
-              {!canRetryImages && <p>{t(status?.available ? "updates.imageConflictsOtherVersion" : "updates.imageConflictsSourceUnavailable")}</p>}
-            </ImageCatalogConflicts>
             <TemplatesSkippedNotice skipped={skippedTemplates} />
           </div>
         </section>

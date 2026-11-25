@@ -438,16 +438,6 @@
           "image": "gpuworks/gpuworks-runner:cuda13.0-sglang0.5.21-r2",
           "reason": "catalog_match",
           "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.30.0-r4",
-          "reason": "catalog_match",
-          "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.34.0-r1",
-          "reason": "catalog_match",
-          "compatible": true
         }
       ]
     },

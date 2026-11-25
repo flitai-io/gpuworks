@@ -46,7 +46,7 @@ var (
 // callableServers are the runner tags whose engine is a server the inference
 // templates start through the callable engine (with the gpuworks adapter in
 // the package), named the way their projects write them.
-var callableServers = map[string]string{"mlx-vlm": "MLX-VLM", "mlx-audio": "MLX Audio", "llama.cpp": "llama.cpp", "systemone": "System One", "strata": "Strata"}
+var callableServers = map[string]string{"mlx-vlm": "MLX-VLM", "mlx-audio": "MLX Audio", "llama.cpp": "llama.cpp", "systemone": "System One"}
 
 // catalogEngine is the image catalog's engine for a tag's engine.
 func catalogEngine(tagEngine string) string {
@@ -110,8 +110,11 @@ type matrixFile struct {
 	Defaults struct {
 		Platforms []string `yaml:"platforms"`
 	} `yaml:"defaults"`
-	Items     []matrixItem    `yaml:"items"`
-	Published []publishedItem `yaml:"published"`
+	Items      []matrixItem `yaml:"items"`
+	LegacyTags []struct {
+		Tag    string `yaml:"tag"`
+		Reason string `yaml:"legacy_reason"`
+	} `yaml:"legacy_tags"`
 }
 
 type matrixItem struct {
@@ -156,13 +159,27 @@ func generate(data []byte, opt options) ([]byte, error) {
 	if err := yaml.Unmarshal(data, &matrix); err != nil {
 		return nil, fmt.Errorf("parse matrix: %w", err)
 	}
+	for _, entry := range matrix.LegacyTags {
+		if entry.Tag == "" || strings.TrimSpace(entry.Reason) == "" || releaseTagPattern.MatchString(entry.Tag) {
+			return nil, fmt.Errorf("invalid legacy tag declaration for %q", entry.Tag)
+		}
+	}
+	if len(matrix.Items) == 0 {
+		return nil, fmt.Errorf("matrix has no items")
+	}
 	registry := strings.TrimSuffix(strings.TrimSpace(opt.Registry), "/")
 	if registry == "" {
 		registry = DefaultRegistry
 	}
 	seriesByName := map[string]*manifest.ManifestSeries{}
-	listedTags := map[string]bool{}
-	addVersion := func(version manifest.ManifestVersion, tag parsedTag) {
+	for _, item := range matrix.Items {
+		version, tag, err := versionFromItem(item, matrix.Defaults.Platforms, registry)
+		if err != nil {
+			return nil, err
+		}
+		if item.Catalog != nil && !*item.Catalog {
+			continue
+		}
 		name := seriesName(tag.Engine, tag.Backend)
 		series := seriesByName[name]
 		if series == nil {
@@ -170,31 +187,6 @@ func generate(data []byte, opt options) ([]byte, error) {
 			seriesByName[name] = series
 		}
 		series.Versions = append(series.Versions, version)
-	}
-	for _, item := range matrix.Items {
-		version, tag, err := versionFromItem(item, matrix.Defaults.Platforms, registry)
-		if err != nil {
-			return nil, err
-		}
-		if item.Catalog == nil || *item.Catalog {
-			addVersion(version, tag)
-			listedTags[version.Name] = true
-		}
-	}
-	// The inventory supplements a complete build catalog. Import reconciles missing rows.
-	if len(listedTags) == 0 {
-		return nil, fmt.Errorf("matrix has no catalogued build items")
-	}
-	for _, item := range matrix.Published {
-		if listedTags[item.Tag] {
-			return nil, fmt.Errorf("published tag %q is already listed", item.Tag)
-		}
-		listedTags[item.Tag] = true
-		version, tag, err := item.version()
-		if err != nil {
-			return nil, err
-		}
-		addVersion(version, tag)
 	}
 	series := make([]manifest.ManifestSeries, 0, len(seriesByName))
 	for _, value := range seriesByName {
@@ -284,7 +276,7 @@ func versionFromItem(item matrixItem, defaultPlatforms []string, registry string
 // that can reach it says so with a rule of its own.
 var publishedRegistries = []string{
 	"quay.io/gpuworks/gpuworks-runner",
-	swrRunner,
+	"swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner",
 }
 
 // mirrorSources lists the public copies of a runner tag.

@@ -76,12 +76,12 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 			seriesOf[version.Name] = series
 		}
 	}
-	wantSeries := "MLX Audio · Metal,MLX-VLM · Metal,SGLang · CANN,SGLang · CUDA,SGLang · DTK,SGLang · HGGC,SGLang · ROCm,SGLang · XRE,Strata · CUDA,System One · CUDA,llama.cpp · Metal,vLLM Omni · CANN,vLLM Omni · CUDA,vLLM Omni · HGGC,vLLM Omni · XRE,vLLM · CANN,vLLM · CUDA,vLLM · DTK,vLLM · HGGC,vLLM · Metal,vLLM · ROCm,vLLM · XRE"
+	wantSeries := "MLX Audio · Metal,MLX-VLM · Metal,SGLang · CANN,SGLang · CUDA,SGLang · DTK,SGLang · HGGC,llama.cpp · Metal,vLLM Omni · CANN,vLLM Omni · CUDA,vLLM · CANN,vLLM · CUDA,vLLM · DTK,vLLM · HGGC,vLLM · Metal,vLLM · ROCm,vLLM · XRE"
 	if strings.Join(names, ",") != wantSeries {
 		t.Fatalf("series = %v", names)
 	}
-	if len(versions) != 174 {
-		t.Fatalf("versions = %d, want 174", len(versions))
+	if len(versions) != 39 {
+		t.Fatalf("versions = %d, want 39", len(versions))
 	}
 	// The Apple silicon environment package: framework metal, its version the
 	// minimum macOS, its arch the CPU's.
@@ -99,10 +99,6 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 	xre := versions["xre5.0.21.46-vllm0.25.1-r1"]
 	if xre.FrameworkVersion != "5.0.21.46" || xre.EngineVersion != "0.25.1" || xre.Arch != "amd64" || seriesOf[xre.Name].Framework != "xre" || len(xre.RegistrySources) != 2 {
 		t.Fatalf("Kunlun release = %+v in %+v", xre, seriesOf[xre.Name])
-	}
-
-	if alias := versions["xre-vllm0.25.1-amd64-slot26"]; alias.FrameworkVersion != xre.FrameworkVersion || alias.EngineVersion != xre.EngineVersion || alias.Arch != xre.Arch {
-		t.Fatalf("Kunlun slot26 alias differs from its release: %+v, %+v", alias, xre)
 	}
 
 	omni := versions["cann9.1-910b-vllm-omni0.30.0-r3"]
@@ -135,7 +131,7 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 		t.Fatalf("post-release engine version = %+v", sglang)
 	}
 	for name, version := range versions {
-		if (version.RollingTag && !strings.HasPrefix(version.ImageRef, swrRunner+":")) || version.Deprecated || version.BlobSHA256 != "" || version.SizeBytes != 0 {
+		if version.RollingTag || version.Deprecated || version.BlobSHA256 != "" || version.SizeBytes != 0 {
 			t.Fatalf("version %s carries a field the generator must not produce: %+v", name, version)
 		}
 	}
@@ -409,20 +405,30 @@ func TestMatrixDeclaresTheVoltaImageUnlisted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(seed, []byte(`"image_ref": "gpuworks/gpuworks-runner:cuda12.8-v100-vllm1cat1.5.1-r1"`)) {
-		t.Fatal("the seed lists the unlisted V100 build tier under the canonical reference")
+	if bytes.Contains(seed, []byte("v100")) {
+		t.Fatal("the seed lists the V100 image")
 	}
 }
 
-func TestGenerateRejectsInventoryWithoutBuildItems(t *testing.T) {
-	const data = `published:
-  - id: cuda13.0-vllm0.34.0
-    tag: cuda13.0-vllm0.34.0-r1-amd64
-    platforms: [linux/amd64]
-`
-	for _, prefix := range []string{"", "items: []\n", "items:\n  - id: cuda13.0-vllm0.34.0\n    revision: r1\n    platforms: [linux/amd64]\n    catalog: false\n"} {
-		if out, err := generate([]byte(prefix+data), options{}); err == nil || len(out) != 0 {
-			t.Fatalf("inventory alone generated a replacement catalog (%d bytes): %v", len(out), err)
+// A built item's tag is its id and revision, so the revision has to be the
+// grammar's r<number> too.
+func TestGenerateRejectsRevisionOutsideTheGrammar(t *testing.T) {
+	for _, revision := range []string{"r4-amd64", "v4", "r"} {
+		input := "defaults:\n  platforms: [linux/amd64]\nitems:\n  - id: cuda13.0-vllm0.30.0\n    revision: " + revision + "\n"
+		if _, err := generate([]byte(input), options{Date: "2026-11-24"}); err == nil || !strings.Contains(err.Error(), "is not r<number>") {
+			t.Errorf("revision %q: generate = %v", revision, err)
 		}
+	}
+}
+
+// The publishing scripts read the grammar from this file; it is the
+// generator's own expression, never a second copy.
+func TestExportedGrammarIsTheGenerators(t *testing.T) {
+	got, err := os.ReadFile("../../build/runner-images/tag-grammar.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(grammarFile()) {
+		t.Fatal("build/runner-images/tag-grammar.txt is stale; run `make image-manifest`")
 	}
 }

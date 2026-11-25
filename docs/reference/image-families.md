@@ -43,7 +43,7 @@ Agent 的周期 `status.node` 消息在 `images[]` 中上报以下字段（仅�
 ## 系统镜像
 
 内置目录 `internal/server/imagecatalog/catalog-seed.json` 由 [`gpuworks-image-manifest`](cli.md#gpuworks-image-manifest)
-从 gpuworks-runner 构建矩阵生成，当前 38 个版本，全部是 `gpuworks/gpuworks-runner:<id>-<revision>`，
+从 gpuworks-runner 构建矩阵生成，当前 39 个版本，全部是 `gpuworks/gpuworks-runner:<id>-<revision>`，
 按引擎 × 框架分 16 个系列：
 
 | 系列 | 厂商 / framework | 引擎 | 示例 image_ref | 架构 |
@@ -92,7 +92,7 @@ framework 版本都从 tag 解析；昇腾型号段（`910b`、`a3`、`310p`、`
 image catalog synced catalog_version=2026-10-09.f085e40b created=0 updated=25 deleted=0 deprecated=0 skipped=0
 ```
 
-同步规则见下节。种子条目与社区/自定义行同名系列或同一 ref 冲突时，
+同步规则与手动更新目录相同（见下节），只是冲突处理不同：种子条目与社区/自定义行同名系列或同一 ref 冲突时，
 启动同步只记一条 `image catalog entry skipped` warn 日志并跳过该条，不阻止启动。
 
 ### 更新目录
@@ -119,7 +119,8 @@ image catalog synced catalog_version=2026-10-09.f085e40b created=0 updated=25 de
    「引用」指 `deployments.image`、未结束的 `instances.image`（`stopped`、`failed`、`pending_removal` 不算）
    或 `models.image_id` 任一命中。删除社区/自定义镜像时用的是同一口径：仍被引用的版本或系列拒绝删除（409 `IMAGE_IN_USE`），
    只在节点上存在不算引用、不会阻止删除。
-3. 检查更新会跳过与社区或自定义条目冲突的系列名或镜像引用，继续导入其余条目。设置页保留冲突名称并显示「部分导入」。解决冲突后可以重新应用同一版本。上传 manifest 遇到冲突仍返回 400 `IMAGE_IMPORT_CONFLICT`，整次导入取消。
+3. 手动更新时 manifest 条目与社区/自定义行同名系列或同一 ref 冲突，整次导入返回 400 `IMAGE_IMPORT_CONFLICT`，
+   不写入任何内容。
 4. 同一份 manifest 导入两次结果相同。没有版本比较、防降级、签名或来源校验：导入什么就是什么。
 
 响应（启动同步日志里的计数也是这几项）：

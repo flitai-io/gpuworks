@@ -12,7 +12,7 @@ A destination tag passes when it
   * is the bare <id> of a grammar tag: build.sh --alias publishes it as a
     moving, human-friendly alias (README.md, key convention 1). The catalog
     never lists a bare alias as a build; or
-  * is an existing tag declared with a legacy_reason under `published:` in
+  * is an existing tag declared with a legacy_reason under `legacy_tags:` in
     matrix.yaml (copying a tag that already exists creates no new name), or
   * starts with zz-pilot-, the scratch prefix of the publishing rehearsals in
     README.md. Scratch tags are for trying a registry out and are deleted
@@ -42,15 +42,15 @@ def load_grammar(path=None):
 
 
 def declared_legacy(path=None):
-    """Tags under `published:` that carry a legacy_reason."""
+    """Tags under `legacy_tags:` that carry a legacy_reason."""
     path = path or os.path.join(HERE, "matrix.yaml")
-    tags, tag, published = set(), None, False
+    tags, tag, in_legacy_tags = set(), None, False
     with open(path, encoding="utf-8") as f:
         for ln in f:
             if re.match(r"^\S", ln) and not ln.startswith("#"):
-                published = ln.startswith("published:")
+                in_legacy_tags = ln.startswith("legacy_tags:")
                 continue
-            if not published:
+            if not in_legacy_tags:
                 continue
             if re.match(r"^  - ", ln):
                 tag = None

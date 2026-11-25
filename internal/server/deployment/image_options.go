@@ -83,8 +83,8 @@ func (s *Service) deploymentImageOptions(target deploy.ImageTarget, selection te
 				// Without an inference template there is no engine contract to
 				// preserve. Offer every runtime image compatible with the target
 				// accelerator; choosing one also chooses its catalog engine.
-				candidateTarget.Engine = catalogCandidate.ManualEngine()
-				if _, err := deploy.ProfileForEngine(candidateTarget.Engine); err != nil {
+				candidateTarget.Engine = catalogCandidate.Engine
+				if _, err := deploy.ProfileForEngine(catalogCandidate.Engine); err != nil {
 					continue
 				}
 			}

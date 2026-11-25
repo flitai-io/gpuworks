@@ -82,7 +82,7 @@ func SyncImageCatalog(st *store.Store, log *slog.Logger) error {
 	for _, conflict := range result.Skipped {
 		log.Warn("image catalog entry skipped", "kind", conflict.Kind, "name", conflict.Name, "reason", conflict.Reason)
 	}
-	return st.RecordImageCatalogImport(result.CatalogVersion, result.SkippedNames())
+	return st.RecordImageCatalogImport(result.CatalogVersion)
 }
 
 // outsideSources builds what the API reads from outside: one community

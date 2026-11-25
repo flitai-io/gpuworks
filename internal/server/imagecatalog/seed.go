@@ -47,12 +47,12 @@ func SyncSeed(st *store.Store) (manifest.Result, error) {
 }
 
 // ImportManifest parses a system catalog manifest and applies it. This is the
-// operator path. Channel updates skip and report conflicting local entries;
-// an uploaded file is checked for conflicts before writing any rows.
-func ImportManifest(st *store.Store, body []byte, skipConflicts bool) (manifest.Result, error) {
+// operator path ("check for updates", an uploaded manifest): a conflict with a
+// community or custom row fails the whole import before anything is written.
+func ImportManifest(st *store.Store, body []byte) (manifest.Result, error) {
 	m, err := manifest.Parse(body)
 	if err != nil {
 		return manifest.Result{}, fmt.Errorf("%w: %v", ErrManifestInvalid, err)
 	}
-	return manifest.ImportOfficial(m, manifestSink{store: st}, manifest.ImportOptions{SkipConflicts: skipConflicts})
+	return manifest.ImportOfficial(m, manifestSink{store: st}, manifest.ImportOptions{})
 }
