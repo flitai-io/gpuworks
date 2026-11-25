@@ -25,15 +25,22 @@ const original = {
 const off: Status = { enabled: false, ready: false, port: 8810, user: "admin" };
 const ready: Status = { enabled: true, ready: true, port: 8810, user: "admin", password: "5d706bcd0e1b2eaa" };
 
+// The stub behaves like the console: `load` is what it reports until an action
+// succeeds, and from then on every status read (the card re-polls on a timer
+// and on focus) returns what that action left behind. A stub that always
+// answered with the original status would overwrite the result of a reset or
+// password change with a stale one whenever a poll landed after it.
 function stub(load: () => Promise<Status>) {
   const calls: string[] = [];
   let fail: Error | null = null;
+  let current: Status | null = null;
   const answer = (name: string, s: Status) => async () => {
     calls.push(name);
     if (fail) throw fail;
+    current = s;
     return s;
   };
-  apiModule.api.experience = load;
+  apiModule.api.experience = async () => current ?? load();
   apiModule.api.setExperienceEnabled = async (on: boolean) => answer(on ? "on" : "off", on ? ready : off)();
   apiModule.api.resetExperience = answer("reset", ready);
   apiModule.api.rotateExperiencePassword = answer("password", { ...ready, password: "rotated00000000" });
