@@ -57,7 +57,7 @@ func newPeerRelayRigWithTarget(t *testing.T, h *Hub, sourceDriver runtime.Driver
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server := httptest.NewServer(http.HandlerFunc(h.ServeWS))
 	t.Cleanup(server.Close)
-	r := &peerRelayRig{h: h, sourceRoot: filepath.Join(t.TempDir(), "models"), targetRoot: filepath.Join(t.TempDir(), "models")}
+	r := &peerRelayRig{h: h, sourceRoot: filepath.Join(settledTempDir(t), "models"), targetRoot: filepath.Join(settledTempDir(t), "models")}
 	if sourceDriver == nil {
 		sourceDriver = recording.New(filepath.Join(t.TempDir(), "source.json"))
 	}
@@ -112,6 +112,42 @@ func newPeerRelayRigWithTarget(t *testing.T, h *Hub, sourceDriver runtime.Driver
 	return r
 }
 
+// settledTempDir is a t.TempDir for an agent's model root. A receiver's
+// background task (waitModelSync, an image load) can still be writing there
+// after the RPC that started it has returned and the test's assertions have
+// passed, and t.TempDir's single RemoveAll then fails with "directory not
+// empty" (every CI failure of the peer relay integration test). The removal
+// is retried until those tasks finish; one still writing after 10s is
+// reported with what it left.
+func settledTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "peer-relay-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Registered before the agents' cleanups, so it runs after they stop.
+	t.Cleanup(func() {
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			err := os.RemoveAll(dir)
+			if err == nil {
+				return
+			}
+			if time.Now().After(deadline) {
+				var left []string
+				filepath.WalkDir(dir, func(path string, _ os.DirEntry, _ error) error {
+					left = append(left, path)
+					return nil
+				})
+				t.Errorf("agent root still written after 10s: %v; left: %v", err, left)
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	})
+	return dir
+}
+
 // unreachableEndpoint is a loopback address nothing listens on: a port that was
 // bound and released. It is taken only after the target's receiver has bound
 // its own port, because a port released earlier can be handed to that receiver
@@ -130,7 +166,8 @@ func unreachableEndpoint(t *testing.T) string {
 
 func (r *peerRelayRig) prepare(t *testing.T, kind, id string) (string, any) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// The listen RPC is quick when idle; 5s ran out on a loaded runner.
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if kind == "model" {
 		dir := filepath.Join(r.sourceRoot, "source")
