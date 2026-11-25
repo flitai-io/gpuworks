@@ -1991,7 +1991,7 @@ RunPod 需要开放端口或补平台公钥时，先返回 409 `INSTANCE_RESTART
 - `channel`、`channel_editable`：当前渠道及是否允许切换。
 - `auto_check`：自动检测开关。为 `false` 时仅返回上次手动检查的结果；从未检查则为空答复，没有 `sources` 或 `unavailable_reason`。强制刷新仍会检查。
 - 来源信息：胜出源，以及已答复来源的 `{url,ok,latency_ms,error}`；尚未答复的慢源不列出，界面不展示来源详情。
-- `server`、`image_catalog`、`template_catalog`：各含 `current`、`latest`、`update_available`。`image_catalog` 在当前目录是手工上传的时另有 `uploaded: true`，此时 `update_available` 恒为 `false`。模板另有 `compatible`；server 另有 `installable`、`self_upgrade`、`self_upgrade_blocker`、`install_dir`（`server.yaml` 所在安装目录，无目录时省略）。
+- `server`、`image_catalog`、`template_catalog`：各含 `current`、`latest`、`update_available`。`image_catalog` 在当前目录是手工上传的时另有 `uploaded: true`，此时 `update_available` 恒为 `false`；渠道目录与它不同时还有 `replaces_upload: true`，表示应用渠道目录会替换上传的目录。模板另有 `compatible`；server 另有 `installable`、`self_upgrade`、`self_upgrade_blocker`、`install_dir`（`server.yaml` 所在安装目录，无目录时省略）。
 
 server 只有渠道版本更新时才标记 `update_available`。两份目录还须与当前内容不同，且发布不早于当前构建，避免把旧目录标成更新。
 无可用源仍返回 200、`available=false`，由 `unavailable_reason` 区分：

@@ -1978,7 +1978,7 @@ Sync-group create and rename require an exact case-sensitive unique name after t
 - `channel`, `channel_editable`: the current channel and whether switching is allowed.
 - `auto_check`: the automatic check switch. When `false`, returns only the result of the last manual check; if no check has ever run, returns an empty response without `sources` or `unavailable_reason`. A forced refresh still performs a check.
 - Source information: the winning source and `{url,ok,latency_ms,error}` for sources that have responded. Slow sources that have not responded are omitted; the UI does not display source details.
-- `server`, `image_catalog`, `template_catalog`: each includes `current`, `latest`, and `update_available`. `image_catalog` also has `uploaded: true` when the catalog in force was uploaded by hand, and `update_available` is then always `false`. Templates also include `compatible`; the server also includes `installable`, `self_upgrade`, `self_upgrade_blocker`, and `install_dir` (the installation directory containing `server.yaml`; omitted when there is no such directory).
+- `server`, `image_catalog`, `template_catalog`: each includes `current`, `latest`, and `update_available`. `image_catalog` also has `uploaded: true` when the catalog in force was uploaded by hand, and `update_available` is then always `false`; when the channel's catalog differs from it there is also `replaces_upload: true`, meaning that applying the channel's catalog replaces the upload. Templates also include `compatible`; the server also includes `installable`, `self_upgrade`, `self_upgrade_blocker`, and `install_dir` (the installation directory containing `server.yaml`; omitted when there is no such directory).
 
 The server marks `update_available` only when the channel version is newer. The two catalogs must also differ from the current content and have a release date no earlier than the current build, to avoid marking old catalogs as updates.
 When no source is available, the response is still 200 with `available=false`; `unavailable_reason` distinguishes the cases:
@@ -2526,7 +2526,7 @@ An unknown `target_vendor` on `/api/v1/engines` returns 400. If custom-command f
 <!-- translation-source-sha256: dff84f5e2e143ca7701c66cd40683e1ca6428f5d803325e20c3a4e6b759a19ae ## Web Terminal -->
 <!-- translation-source-sha256: 7858bdfd14670c6316f95db08d7f9198accf3451a7e655c9513ff13cf428941c ## Networks -->
 <!-- translation-source-sha256: 996230365d7f304ba6d5b55ec19068b5aae5e436538dd5f988dba762660e75c0 ## Settings / Network Presets -->
-<!-- translation-source-sha256: a20867e2be7379bb4faebdc5b27ec67250f6f147bb9daab99cd4b941accdc4db ### Update Check Results -->
+<!-- translation-source-sha256: d32060c0c14d65322e06f8967faa8acc5f582b0c93bc966466ed3d2a79e1cc57 ### Update Check Results -->
 <!-- translation-source-sha256: 0e96eaf91ec4ceaa489e42f4bc76c90f1ae38793c3dc6f511af1e5a915929772 ### Server Upgrade Restrictions -->
 <!-- translation-source-sha256: 407e22173bef80c6affe537b15efce4491e1e75938bc45fc92a2c73d4679d528 ### Trace Export Settings and Status -->
 <!-- translation-source-sha256: 63ec2229bea726b68dd009f914f6f8e306163df675d1f05e3c10b6615073a778 ### Source Rule Connectivity Test -->

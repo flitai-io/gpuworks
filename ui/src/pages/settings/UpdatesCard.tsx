@@ -45,7 +45,7 @@ function rowsOf(status: UpdateStatus, names: Record<Row["key"], string>): Row[] 
   const catalog = (key: "images" | "templates", value: CatalogUpdate): Row => ({
     key, name: names[key], current: value.current, latest: status.available ? value.latest : undefined,
     updateAvailable: value.update_available, compatible: value.compatible,
-    replacesUpload: Boolean(value.uploaded && status.available && value.latest && value.latest !== value.current),
+    replacesUpload: Boolean(status.available && value.replaces_upload),
     checkError: value.check_error,
   });
   return [

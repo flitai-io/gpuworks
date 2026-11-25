@@ -191,7 +191,9 @@ func (a *apiHandlers) getUpdates(w http.ResponseWriter, r *http.Request) {
 		// An uploaded catalog differs from the channel's because someone chose
 		// it: the channel's is not offered as its update, and applying it is a
 		// replacement the sync refuses unless asked for (syncImagesManifest).
-		status.ImageCatalog.UpdateAvailable = catalog.Version != state.ImageCatalogVersion && !catalogsBehind && !state.ImageCatalogUploaded
+		differs := catalog.Version != state.ImageCatalogVersion
+		status.ImageCatalog.UpdateAvailable = differs && !catalogsBehind && !state.ImageCatalogUploaded
+		status.ImageCatalog.ReplacesUpload = differs && state.ImageCatalogUploaded
 	}
 	if catalog := index.TemplateCatalog; catalog != nil {
 		status.TemplateCatalog.Latest = catalog.Version

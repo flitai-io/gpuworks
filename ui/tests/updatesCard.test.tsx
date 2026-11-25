@@ -159,7 +159,7 @@ test("updating a catalog applies it and checks again", async () => {
 // the row says so instead of offering an update, and the channel's catalog replaces it only after
 // the administrator is told what that deletes.
 test("an uploaded image catalog is not shown as out of date, and the channel's replaces it only after a confirmation", async () => {
-  const uploaded = { current: "2026-11-23.swr-p1-p2-demo", latest: "2026-11-22.80600a3e", update_available: false, uploaded: true, compatible: true };
+  const uploaded = { current: "2026-11-23.swr-p1-p2-demo", latest: "2026-11-22.80600a3e", update_available: false, uploaded: true, replaces_upload: true, compatible: true };
   const s = stub([statusFixture({ image_catalog: uploaded }), statusFixture({ image_catalog: { current: "2026-11-22.80600a3e", latest: "2026-11-22.80600a3e", update_available: false, compatible: true } })]);
   try {
     renderCard();

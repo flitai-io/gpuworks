@@ -16,6 +16,8 @@ export interface CatalogUpdate {
   update_available: boolean;
   /** The catalog in force was uploaded by hand (image catalog only): the channel's is then not its update. */
   uploaded?: boolean;
+  /** Applying the channel's catalog would replace an uploaded one: the server does it only when asked to. */
+  replaces_upload?: boolean;
   /** True when this server can read the catalog; check_error explains a failed check. */
   compatible: boolean;
   /** Present when the catalog could not be checked; other updates remain usable. */

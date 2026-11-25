@@ -132,9 +132,13 @@ func (a *apiHandlers) applyOfficialManifest(w http.ResponseWriter, body []byte, 
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	// The import is committed; the version is only what the update view shows
-	// as current, so failing to note it does not fail the import.
-	_ = a.d.Store.RecordImageCatalogImport(result.CatalogVersion, uploaded)
+	// The import is committed. The record is what keeps an uploaded catalog
+	// from being replaced by the channel's, so failing to write it is an
+	// error; importing the same manifest again writes it.
+	if err := a.d.Store.RecordImageCatalogImport(result.CatalogVersion, uploaded); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
 	series := make([]dto.ImageSeries, 0)
 	if rows, listErr := a.d.Store.ListImageSeries(); listErr == nil {
 		for i := range rows {

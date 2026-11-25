@@ -272,7 +272,7 @@ func TestAnUploadedImageCatalogIsNotOfferedTheChannelsAsAnUpdate(t *testing.T) {
 	}
 
 	rec := run.do(http.MethodGet, "/api/v1/updates", "", "")
-	if !strings.Contains(rec.Body.String(), `"image_catalog":{"current":"2026-10-10.offline-site","latest":"2026-10-09.abcdef12","update_available":false,"uploaded":true,"compatible":true}`) {
+	if !strings.Contains(rec.Body.String(), `"image_catalog":{"current":"2026-10-10.offline-site","latest":"2026-10-09.abcdef12","update_available":false,"uploaded":true,"replaces_upload":true,"compatible":true}`) {
 		t.Fatalf("image catalog after an upload = %s", rec.Body.String())
 	}
 	if _, err := run.store.ImageByRef("gpuworks/gpuworks-runner:cuda13.0-vllm0.31.0-site"); err != nil {
@@ -297,7 +297,11 @@ func TestAnUploadedImageCatalogIsNotOfferedTheChannelsAsAnUpdate(t *testing.T) {
 	if _, err := run.store.ImageByRef("gpuworks/gpuworks-runner:cuda13.0-vllm0.31.0-site"); err == nil {
 		t.Fatal("the version only the upload had is still listed after the channel's catalog replaced it")
 	}
+	// A channel catalog is not an upload: nothing would be replaced.
 	rec = run.do(http.MethodGet, "/api/v1/updates", "", "")
+	if strings.Contains(rec.Body.String(), `"replaces_upload":true`) || strings.Contains(rec.Body.String(), `"uploaded":true`) {
+		t.Fatalf("the channel's catalog is reported as an upload: %s", rec.Body.String())
+	}
 	if !strings.Contains(rec.Body.String(), `"image_catalog":{"current":"2026-10-09.abcdef12","latest":"2026-10-09.abcdef12","update_available":false,"compatible":true}`) {
 		t.Fatalf("image catalog after the channel's = %s", rec.Body.String())
 	}
