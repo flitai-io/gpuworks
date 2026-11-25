@@ -23,6 +23,9 @@ workflow:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+    # A release line's branch head gets the core gates and the release
+    # packages (see .release-build), never a publish.
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^release\/[0-9]+\.[0-9]+$/'
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "api"'
@@ -904,9 +907,16 @@ release-docs-pdf:
     paths:
       - dist/
     expire_in: 30 days
-  # Keep these rules identical in .release-build and release-publish: the
+  # The default branch and release tag rules match release-publish's: the
   # default branch builds the nightly channel under its short commit, a
-  # release tag builds the release channel under the tag (ADR 0040).
+  # release tag builds the release channel under the tag (ADR 0040). The head
+  # of a release/YY.M branch is built too, under its short commit, so the
+  # packages of a line's unreleased fixes can be downloaded and tried before
+  # the next tag; release-publish has no such rule, so these builds never
+  # reach a distribution source or move a channel. They are built on the
+  # release channel so that, installed for testing, they are offered the
+  # line's next tag as an update rather than master's nightly; such a server
+  # reports itself as a development build.
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       variables:
@@ -915,6 +925,10 @@ release-docs-pdf:
     - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
       variables:
         GPUWORKS_RELEASE_ID: "$CI_COMMIT_TAG"
+        GPUWORKS_RELEASE_CHANNEL: "release"
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^release\/[0-9]+\.[0-9]+$/'
+      variables:
+        GPUWORKS_RELEASE_ID: "$CI_COMMIT_SHORT_SHA"
         GPUWORKS_RELEASE_CHANNEL: "release"
     - when: never
 
@@ -986,9 +1000,10 @@ release-publish:
     - export RCLONE="/host-go-cache/tools/rclone-$GPUWORKS_RCLONE_VERSION/rclone"
     - test -x "$RCLONE" || GOBIN="$(dirname "$RCLONE")" go install "github.com/rclone/rclone@$GPUWORKS_RCLONE_VERSION"
     - ./scripts/publish_dist.sh "$GPUWORKS_RELEASE_CHANNEL" dist
-  # Keep these rules identical in .release-build and release-publish: the
+  # Keep these rules identical to the first two of .release-build: the
   # default branch builds the nightly channel under its short commit, a
-  # release tag builds the release channel under the tag (ADR 0040).
+  # release tag builds the release channel under the tag (ADR 0040). Release
+  # branch builds are not published.
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       variables:
@@ -1061,8 +1076,8 @@ release-agent-image:
       -e GPUWORKS_BUILDKIT_IMAGE=docker.m.daocloud.io/moby/buildkit:v0.25.2
       "$DOCKER_GO_IMAGE"
       make agent-image-publish VERSION="$GPUWORKS_RELEASE_ID" COMMIT="$CI_COMMIT_SHA"
-  # Keep these rules identical in .release-build, release-publish and
-  # release-agent-image (ADR 0040).
+  # Keep these rules identical to release-publish's and to the first two of
+  # .release-build (ADR 0040); release branch builds publish no agent image.
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       variables:

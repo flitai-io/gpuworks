@@ -8,6 +8,9 @@
 #    are served as immutable and a CDN keeps the first copy it sees. When a
 #    source already holds releases/<id>/ (the commit was built and published
 #    before), its archives and build time are republished, not this build's.
+#    The release channel only takes a vYY.M.PATCH release: a release/YY.M
+#    branch build, packaged on that channel under its short commit for
+#    development and testing, is refused before any source is touched.
 # 1. Pipelines can finish out of order: when a source already serves a build
 #    of the channel created after this one, nothing is published. Servers
 #    order releases by build time, so the release channel also refuses a
@@ -72,6 +75,14 @@ export RCLONE_CONFIG="$work/rclone.conf"
 go build -o "$work/gpuworks-dist" ./cmd/gpuworks-dist
 
 release_id=$("$work/gpuworks-dist" release-id -dist "$dist")
+# A release/YY.M branch build is packaged on the release channel under its
+# short commit for development and testing; only a version tag reaches the
+# release channel's users.
+if [ "$channel" = release ] && ! printf '%s\n' "$release_id" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+  echo "not publishing: the release channel only takes a vYY.M.PATCH release, not $release_id" >&2
+  exit 1
+fi
+
 published="$work/published"
 adopted_release=false
 for remote in $remotes; do
