@@ -139,11 +139,13 @@ func TestStopKillsAWorkloadThatIgnoresSIGTERMAndStillReapsIt(t *testing.T) {
 	if elapsed := time.Since(started); elapsed < 200*time.Millisecond {
 		t.Fatalf("the stop took %s: the graceful window was not waited out before the kill", elapsed)
 	}
+	// Check the Stop boundary before waiting for the leader's exit record.
+	if err := syscall.Kill(worker, 0); !errors.Is(err, syscall.ESRCH) {
+		stat, statErr := readProcStat("/proc", strconv.Itoa(worker))
+		t.Fatalf("worker %d still present after Stop: kill(0)=%v, state=%q ppid=%d pgid=%d (%v)", worker, err, stat.state, stat.ppid, stat.pgid, statErr)
+	}
 	if exists, code := waitExited(t, tr, "stubborn"); !exists || code != 128+int(syscall.SIGKILL) {
 		t.Fatalf("exists=%v code=%d, want the SIGKILL docker reports as 137", exists, code)
-	}
-	if err := syscall.Kill(worker, 0); !errors.Is(err, syscall.ESRCH) {
-		t.Fatalf("the killed workload's worker is still in the process table: kill(0) = %v", err)
 	}
 	assertGroupGone(t, leader.Process.Pid)
 }
