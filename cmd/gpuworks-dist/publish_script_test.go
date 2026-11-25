@@ -62,11 +62,12 @@ func TestPublishScriptRequiresDocsOnlyForUnpublishedReleases(t *testing.T) {
 					writeFile(t, filepath.Join(published, "SHA256SUMS"), strings.Repeat("0", 64)+"  "+archive+"\n")
 				}
 			}
+			writeFile(t, filepath.Join(repo, "Makefile"), `dist-tool:
+	cp "$(DIST_TEST_WRAPPER)" "$(DIST_TOOL)"
+`)
 			writeExecutable(t, filepath.Join(bin, "go"), `#!/bin/sh
-if [ "$*" = "run ./cmd/gpuworks database-migration" ]; then echo 230; exit 0; fi
-[ "$1" = build ] && [ "$2" = -o ] || exit 97
-cp "$DIST_TEST_WRAPPER" "$3"
-chmod +x "$3"
+[ "$*" = "run ./cmd/gpuworks database-migration" ] || exit 97
+echo 230
 `)
 			wrapper := filepath.Join(bin, "dist-helper")
 			writeExecutable(t, wrapper, `#!/bin/sh

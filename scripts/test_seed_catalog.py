@@ -2,6 +2,7 @@
 reports the date it was given and the manifest its compiler would read.
 """
 
+from datetime import datetime
 import os
 from pathlib import Path
 import select
@@ -53,6 +54,13 @@ class SeedCatalogBuildTest(unittest.TestCase):
         return subprocess.run([SCRIPT, action], cwd=cwd, text=True, capture_output=True,
                               timeout=20, env=dict(self.env, **env))
 
+    def assert_manifest_date(self, cwd, expected, **env):
+        result = self.invoke(cwd, "manifest", **env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        timestamp_format = "%Y-%m-%dT%H:%M:%S%z"
+        self.assertEqual(datetime.strptime(result.stdout.strip(), timestamp_format),
+                         datetime.strptime(expected, timestamp_format))
+
     def test_shallow_boundary_needs_history_or_explicit_date(self):
         repo = self.root / "repo"
         (repo / CATALOG).mkdir(parents=True)
@@ -61,15 +69,15 @@ class SeedCatalogBuildTest(unittest.TestCase):
         self.git(repo, "add", ".")
         self.git(repo, "commit", "-qm", "catalog")
         self.git(repo, "commit", "--allow-empty", "-qm", "unrelated", date=SECOND)
-        self.assertEqual(self.invoke(repo, "manifest").stdout.strip(), FIRST)
+        self.assert_manifest_date(repo, FIRST)
         shallow = self.root / "shallow"
         self.git(self.root, "clone", "--depth=1", repo.as_uri(), str(shallow))
         refused = self.invoke(shallow, "manifest")
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn("SEED_CATALOG_PUBLISHED_AT", refused.stderr)
-        self.assertEqual(self.invoke(shallow, "manifest", SEED_CATALOG_PUBLISHED_AT=FIRST).stdout.strip(), FIRST)
+        self.assert_manifest_date(shallow, FIRST, SEED_CATALOG_PUBLISHED_AT=FIRST)
         self.git(shallow, "fetch", "--unshallow")
-        self.assertEqual(self.invoke(shallow, "manifest").stdout.strip(), FIRST)
+        self.assert_manifest_date(shallow, FIRST)
 
     def test_shallow_clone_with_a_visible_catalog_change_uses_its_date(self):
         repo = self.root / "repo"
@@ -82,9 +90,7 @@ class SeedCatalogBuildTest(unittest.TestCase):
         self.git(repo, "commit", "-qm", "add catalog", date=SECOND)
         shallow = self.root / "shallow"
         self.git(self.root, "clone", "--depth=2", repo.as_uri(), str(shallow))
-        result = self.invoke(shallow, "manifest")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), SECOND)
+        self.assert_manifest_date(shallow, SECOND)
 
     def test_concurrent_builds_keep_their_own_manifest_until_compile_finishes(self):
         with subprocess.Popen([SCRIPT, "build"], cwd=self.root, text=True, stdin=subprocess.PIPE,
