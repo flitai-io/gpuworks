@@ -13,10 +13,18 @@
 #   scripts/ui_check_ci.sh                 # every page, no comparison
 #   UI_CHECK_BASE_REF=origin/master scripts/ui_check_ci.sh
 #   UI_CHECK_COMPARE=1 UI_CHECK_BASE_REF=origin/master scripts/ui_check_ci.sh
+#   UI_CHECK_FULL=1 UI_CHECK_COMPARE=1 UI_CHECK_BASE_REF=origin/master scripts/ui_check_ci.sh
 #
 # Needs Go, Node, Python Playwright and Chromium. CHROME_PATH can select an
 # existing Chromium for both browser test runners.
 set -euo pipefail
+
+# A full PR walk collects results from each independent browser check.
+status=0
+record_failure() {
+  if [ "${UI_CHECK_FULL:-0}" != 1 ]; then exit "$1"; fi
+  if [ "$status" -eq 0 ]; then status=$1; fi
+}
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
@@ -51,10 +59,12 @@ if [ -z "${CHROME_PATH:-}" ]; then
     fi
   done
 fi
-UI_BROWSER_CHANNEL=chrome make test-ui-template-catalog-layout UI_TEMPLATE_CATALOG_TESTS="TemplateCatalogLayout.test_vendor_marks_follow_the_theme TemplateCatalogLayout.test_detail_profile_list_uses_theme_surface_and_dividers"
+UI_BROWSER_CHANNEL=chrome make test-ui-template-catalog-layout UI_TEMPLATE_CATALOG_TESTS="TemplateCatalogLayout.test_vendor_marks_follow_the_theme TemplateCatalogLayout.test_detail_profile_list_uses_theme_surface_and_dividers" || record_failure "$?"
 
 routes_arg=()
-if [ -n "${UI_CHECK_BASE_REF:-}" ]; then
+if [ "${UI_CHECK_FULL:-0}" = 1 ]; then
+  echo "ui-check: walking all pages at widths ${UI_CHECK_WIDTHS:-1440,1024} in locales ${UI_CHECK_LOCALES:-zh,en}"
+elif [ -n "${UI_CHECK_BASE_REF:-}" ]; then
   node scripts/ui_antd_inventory.mjs --base "$UI_CHECK_BASE_REF" --affected > "$work/affected.json"
   echo "ui-check: pages to walk: $(cat "$work/affected.json")"
   if [ "$(cat "$work/affected.json")" = "[]" ]; then
@@ -116,15 +126,12 @@ EOF
 fi
 
 cd ui
-status=0
 node tests/browser/ui-check.mjs --base "http://127.0.0.1:$port" --password-file "$work/pw" \
   --widths "${UI_CHECK_WIDTHS:-1440,1024}" --locales "${UI_CHECK_LOCALES:-zh,en}" \
-  --out "$out" ${routes_arg[@]+"${routes_arg[@]}"} ${compare_arg[@]+"${compare_arg[@]}"} || status=$?
+  --out "$out" ${routes_arg[@]+"${routes_arg[@]}"} ${compare_arg[@]+"${compare_arg[@]}"} || record_failure "$?"
 git -C "$root" worktree remove --force "$work/base" 2>/dev/null || true
-if [ "$status" -eq 0 ] && [ ! -s "$out/results.json" ]; then echo "ui-check: the checker produced no results; failing" >&2; status=2; fi
-if [ "$status" -eq 0 ]; then
-  echo "ui-check: checking resource detail spacing and network tables"
-  node tests/browser/detail-spacing.mjs "$out/detail-spacing" > "$work/detail-spacing.log" 2>&1 || { status=$?; tail -30 "$work/detail-spacing.log" >&2; }
-fi
-if [ "$status" -eq 0 ] && [ ! -s "$out/detail-spacing/measurements.json" ]; then echo "ui-check: the detail-spacing checker produced no measurements; failing" >&2; status=2; fi
+if [ ! -s "$out/results.json" ]; then echo "ui-check: the checker produced no results; failing" >&2; record_failure 2; fi
+echo "ui-check: checking resource detail spacing and network tables"
+node tests/browser/detail-spacing.mjs "$out/detail-spacing" > "$work/detail-spacing.log" 2>&1 || { code=$?; tail -30 "$work/detail-spacing.log" >&2; record_failure "$code"; }
+if [ ! -s "$out/detail-spacing/measurements.json" ]; then echo "ui-check: the detail-spacing checker produced no measurements; failing" >&2; record_failure 2; fi
 exit "$status"

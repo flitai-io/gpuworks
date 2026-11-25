@@ -1,7 +1,8 @@
 # The UI walk, the GitHub counterpart of ui-check in .gitlab-ci.yml: a pull
 # request that touches the UI walks the pages it affects in both languages at
-# 1024 px against the target branch's UI; the nightly run and a manual run walk
-# every page at every width. scripts/ui_check_ci.sh does the work; the report
+# 1024 px against the target branch's UI. Start a PR title with [full ui-check]
+# to walk every page at both widths, as in the nightly and manual runs.
+# scripts/ui_check_ci.sh does the work; the report
 # is for a person to look through, so it is uploaded whether or not the walk
 # passes.
 name: ui-check
@@ -59,11 +60,12 @@ jobs:
         env:
           UI_CHECK_COMPARE: "1"
           BASE_REF: ${{ github.base_ref }}
+          UI_CHECK_FULL: ${{ startsWith(github.event.pull_request.title, '[full ui-check]') && '1' || '0' }}
         run: |
           export CHROME_PATH=$(command -v google-chrome)
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             export UI_CHECK_BASE_REF="origin/$BASE_REF"
-            export UI_CHECK_WIDTHS=1024
+            if [ "$UI_CHECK_FULL" != 1 ]; then export UI_CHECK_WIDTHS=1024; fi
           fi
           python3 -m venv "$RUNNER_TEMP/ui-check-python"
           export UI_BROWSER_PYTHON="$RUNNER_TEMP/ui-check-python/bin/python"
