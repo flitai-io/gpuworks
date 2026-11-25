@@ -162,7 +162,11 @@ func waitForInstalledHost(t *testing.T, env *testenv.Env, providerPath, hostID s
 	// and report its inventory; on a loaded runner that has outlasted 15s (the
 	// zstackcloud cases failing together at 17s in CI). Like the harness's own
 	// node waits, bound it by what a starved scheduler needs, not by speed.
-	env.Eventually(t, 60*time.Second, func() bool {
+	// What the last poll saw, so a timeout says which step never happened:
+	// the instance's link to its node, the node coming online, or its
+	// inventory (GPUs, memory) arriving.
+	seen := "no poll finished"
+	ok := env.EventuallyNoFail(60*time.Second, func() bool {
 		raw := requestJSON(t, env, "GET", providerPath+"/instances", "", http.StatusOK)
 		if bytes.Contains(raw, []byte("ssh-secret")) || bytes.Contains(raw, []byte("test-access-secret")) {
 			t.Fatal("instance list leaked credentials")
@@ -182,11 +186,20 @@ func waitForInstalledHost(t *testing.T, env *testenv.Env, providerPath, hostID s
 			}
 		}
 		if nodeID == 0 {
+			seen = fmt.Sprintf("instance %s not linked to a node; instances: %s", hostID, raw)
 			return false
 		}
 		node, err := env.Store().NodeByID(nodeID)
-		return err == nil && node.State == store.NodeStateOnline && node.GPUCount > 0 && node.MemTotalKB > 0
+		if err != nil {
+			seen = fmt.Sprintf("node %d: %v", nodeID, err)
+			return false
+		}
+		seen = fmt.Sprintf("node %d state=%s gpus=%d mem_total_kb=%d", nodeID, node.State, node.GPUCount, node.MemTotalKB)
+		return node.State == store.NodeStateOnline && node.GPUCount > 0 && node.MemTotalKB > 0
 	})
+	if !ok {
+		t.Fatalf("installed host %s not ready within 60s; last seen: %s", hostID, seen)
+	}
 	node, err := env.Store().NodeByID(nodeID)
 	if err != nil {
 		t.Fatal(err)
