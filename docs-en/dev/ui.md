@@ -173,6 +173,15 @@ Confirmed 2026-11-06. Check every migrated page against this, by screenshot.
 | Overlays | While antd and Zeron coexist, both libraries' overlays sit on one 1000 layer (`src/theme/layers.css`): the one opened last is on top. Right-side drawers of either library open beside the AI assistant. |
 | Status words | Show a state as Zeron `Badge` with `status`, not as coloured text: dark success text reads as black. |
 
+### Dismissing editing dialogs
+
+When a dialog stages edits or selections before saving, keep it open on a
+backdrop click, including before the first edit. Set `disablePointerDismissal`
+on the page's Zeron `Dialog`. Keep the explicit Cancel and close actions and
+the usual Escape handling. In a browser, stage a change, click outside the
+dialog and verify the selection is still present. If a dropdown is open, test
+a second click after the dropdown closes.
+
 ## Vendor marks
 
 Accelerator vendor marks (NVIDIA, AMD, Ascend, ...) live in
@@ -405,6 +414,7 @@ Resource names that open a drawer use the native link button variant (`variant="
 <!-- translation-source-sha256: 4e6ecdfae8ebd5c05e8c7ff1dd34de61dc226b9b89faa8094a0d4a2c60f0c359 ## Verification -->
 <!-- translation-source-sha256: c7b61b2ede38b04e51393df4490c765efbc0d8ea7a17d80b16538e355c3e829e ## Migration close-out checklist -->
 <!-- translation-source-sha256: 1318afa013ade9be7b3751ffcdccc06b442a512cef5b728790ea7adc728bd6d9 ## Page look -->
+<!-- translation-source-sha256: c5ad3090909372f97b1af7ea39f29735db1a2ee0296ca2a49c35f2de28e35ed8 ### Dismissing editing dialogs -->
 <!-- translation-source-sha256: 4b30836bdd43985503aafd5807e275e3b328f812a2a3038781bd808b5bbeeae8 ## Vendor marks -->
 <!-- translation-source-sha256: fddaafffae7e564494407df1c976f2beec4c1c8827cc55a1fc620c0d00eafb0c ## Copy on the page -->
 <!-- translation-source-sha256: 4f94d2593a004f64b16607597a4142b04e86ca85affe710e12aabd04fffe4721 ### Problems and what to do -->

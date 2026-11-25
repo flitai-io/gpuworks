@@ -13,6 +13,12 @@ func TestCatalogUsesTwoLevelNVIDIAClassification(t *testing.T) {
 		arch     string
 	}{
 		"NVIDIA B300":          {10.3, CategoryDataCenter, "Blackwell"},
+		"NVIDIA H800":          {9.0, CategoryDataCenter, "Hopper"},
+		"NVIDIA H20":           {9.0, CategoryDataCenter, "Hopper"},
+		"NVIDIA H20-3e":        {9.0, CategoryDataCenter, "Hopper"},
+		"NVIDIA A800":          {8.0, CategoryDataCenter, "Ampere"},
+		"NVIDIA A10G":          {8.6, CategoryDataCenter, "Ampere"},
+		"NVIDIA L20":           {8.9, CategoryDataCenter, "Ada"},
 		"NVIDIA H100":          {9.0, CategoryDataCenter, "Hopper"},
 		"NVIDIA RTX Spark N1X": {12.1, CategoryWorkstation, "Blackwell"},
 		"GeForce RTX 4090":     {8.9, CategoryWorkstation, "Ada"},
@@ -38,7 +44,7 @@ func TestCatalogIncludesLockedDomesticChoices(t *testing.T) {
 	want := map[string]string{
 		"Ascend 310P": "ascend", "Ascend 910B": "ascend", "Ascend 910C": "ascend", "Ascend 950PR": "ascend", "Ascend 950DT": "ascend",
 		"Hygon K100": "hygon", "Hygon K500": "hygon", "Hygon BW1000": "hygon", "Hygon BW1100": "hygon",
-		"PPU ZW810E": "ppu", "PPU M890": "ppu",
+		"PPU ZW810E": "ppu", "PPU M890": "ppu", "PPU M890P": "ppu", "Hygon BW": "hygon", "Hygon Z100": "hygon",
 	}
 	for _, gpu := range List() {
 		vendor, exists := want[gpu.Name]
@@ -86,7 +92,7 @@ func TestCatalogVendorsAreKnownAcceleratorVendors(t *testing.T) {
 }
 
 func TestCatalogIncludesAMDWithoutNVIDIAComputeCapability(t *testing.T) {
-	want := map[string]string{"AMD Instinct MI300X": CategoryDataCenter, "AMD Radeon 8060S (AMD395)": CategoryWorkstation}
+	want := map[string]string{"AMD Instinct MI300X": CategoryDataCenter, "AMD Instinct MI325X": CategoryDataCenter, "AMD Instinct MI350X": CategoryDataCenter, "AMD Instinct MI355X": CategoryDataCenter, "AMD Radeon 8060S (AMD395)": CategoryWorkstation}
 	for _, gpu := range List() {
 		category, ok := want[gpu.Name]
 		if !ok {

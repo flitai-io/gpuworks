@@ -15,8 +15,8 @@ export function TemplateHardwareFilters({ chips, detectedKeys, value, onChange }
     <div className="min-w-0">
     <div className="template-hardware-groups">{vendors.map(vendor => <div className="template-hardware-group" key={vendor}>
       <VendorLogo vendor={vendor} size={18} />
-      <FilterChips label={t(`vendor.${vendor}`, { defaultValue: vendor })} value={value} onChange={onChange}
-        items={chips.filter(chip => chip.vendor === vendor).map(chip => ({ value: chipKey(chip), label: <span>
+      <FilterChips className="min-w-0 [&_button]:max-w-full [&_[data-slot=button-label]]:truncate" label={t(`vendor.${vendor}`, { defaultValue: vendor })} value={value} onChange={onChange}
+        items={chips.filter(chip => chip.vendor === vendor).map(chip => ({ value: chipKey(chip), label: <span title={chipDisplayLabel(chip)}>
           <i aria-hidden="true" className={`template-chip-dot${detectedKeys.has(chipKey(chip)) ? "" : " is-hypothetical"}`} />{chipDisplayLabel(chip)}
         </span> }))} />
     </div>)}</div>

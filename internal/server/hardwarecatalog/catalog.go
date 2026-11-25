@@ -82,10 +82,10 @@ var catalog = func() []GPU {
 		"NVIDIA RTX PRO 6000 Blackwell Server Edition", "NVIDIA RTX PRO 4500 Blackwell Server Edition")...)
 	result = append(result, nvidia(CategoryDataCenter, 10.3, "NVIDIA GB300", "NVIDIA B300")...)
 	result = append(result, nvidia(CategoryDataCenter, 10.0, "NVIDIA GB200", "NVIDIA B200")...)
-	result = append(result, nvidia(CategoryDataCenter, 9.0, "NVIDIA GH200", "NVIDIA H200", "NVIDIA H100")...)
-	result = append(result, nvidia(CategoryDataCenter, 8.9, "NVIDIA L4", "NVIDIA L40", "NVIDIA L40S")...)
-	result = append(result, nvidia(CategoryDataCenter, 8.6, "NVIDIA A40", "NVIDIA A10", "NVIDIA A16", "NVIDIA A2")...)
-	result = append(result, nvidia(CategoryDataCenter, 8.0, "NVIDIA A100", "NVIDIA A30")...)
+	result = append(result, nvidia(CategoryDataCenter, 9.0, "NVIDIA GH200", "NVIDIA H200", "NVIDIA H100", "NVIDIA H800", "NVIDIA H20", "NVIDIA H20-3e")...)
+	result = append(result, nvidia(CategoryDataCenter, 8.9, "NVIDIA L4", "NVIDIA L20", "NVIDIA L40", "NVIDIA L40S")...)
+	result = append(result, nvidia(CategoryDataCenter, 8.6, "NVIDIA A40", "NVIDIA A10", "NVIDIA A10G", "NVIDIA A16", "NVIDIA A2")...)
+	result = append(result, nvidia(CategoryDataCenter, 8.0, "NVIDIA A100", "NVIDIA A800", "NVIDIA A30")...)
 	result = append(result, nvidia(CategoryDataCenter, 7.5, "NVIDIA T4")...)
 	result = append(result, nvidia(CategoryDataCenter, 7.0, "NVIDIA V100")...)
 
@@ -114,6 +114,9 @@ var catalog = func() []GPU {
 	// support or GPU-memory-capacity claim. Device eligibility uses probe facts.
 	result = append(result,
 		GPU{Vendor: accelerator.VendorAMD, Name: "AMD Instinct MI300X", Category: CategoryDataCenter, Architecture: "CDNA 3", ArchID: "gfx942"},
+		GPU{Vendor: accelerator.VendorAMD, Name: "AMD Instinct MI325X", Category: CategoryDataCenter, Architecture: "CDNA 3", ArchID: "gfx942"},
+		GPU{Vendor: accelerator.VendorAMD, Name: "AMD Instinct MI350X", Category: CategoryDataCenter, Architecture: "CDNA 4", ArchID: "gfx950"},
+		GPU{Vendor: accelerator.VendorAMD, Name: "AMD Instinct MI355X", Category: CategoryDataCenter, Architecture: "CDNA 4", ArchID: "gfx950"},
 		GPU{Vendor: accelerator.VendorAMD, Name: "AMD Radeon 8060S (AMD395)", Category: CategoryWorkstation, Architecture: "RDNA 3.5", ArchID: "gfx1151"},
 	)
 	result = append(result, apple("M5", "", "Pro", "Max")...)
@@ -123,8 +126,8 @@ var catalog = func() []GPU {
 	result = append(result, apple("M1", "", "Pro", "Max", "Ultra")...)
 
 	result = append(result, domestic(accelerator.VendorAscend, "Ascend 310P", "Ascend 910B", "Ascend 910C", "Ascend 950PR", "Ascend 950DT")...)
-	result = append(result, domestic(accelerator.VendorHygon, "Hygon K100", "Hygon K500", "Hygon BW1000", "Hygon BW1100")...)
-	result = append(result, domestic(accelerator.VendorPPU, "PPU ZW810E", "PPU M890")...)
+	result = append(result, domestic(accelerator.VendorHygon, "Hygon K100", "Hygon K500", "Hygon Z100", "Hygon BW", "Hygon BW1000", "Hygon BW1100")...)
+	result = append(result, domestic(accelerator.VendorPPU, "PPU ZW810E", "PPU M890", "PPU M890P")...)
 	result = append(result, GPU{Vendor: accelerator.VendorKunlunxin, Name: "Kunlunxin P800 PCIe", Category: CategoryDomestic, Architecture: "KL3"})
 	return result
 }()

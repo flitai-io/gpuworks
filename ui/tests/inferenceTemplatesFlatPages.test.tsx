@@ -136,7 +136,7 @@ test("flat catalog exposes loading, success, keyboard navigation, and chip filte
   const importButton = screen.getByRole("button", { name: "Import Templates" });
   assert.ok(importButton.classList.contains("text-fg-on-primary-action"));
   assert.ok(importButton.querySelector('[data-slot="button-leading-icon"]'));
-  assert.ok(screen.getByRole("button", { name: "Edit chips" }).classList.contains("text-fg-default"));
+  assert.ok(screen.getByRole("button", { name: "Manage followed chips" }).classList.contains("text-fg-default"));
   resolvePage({ items: [upstreamModel], page: 1, page_size: 200, total: 1 } as never);
   assert.equal((await screen.findByText("DeepSeek Model")).textContent, "DeepSeek Model");
   const open = screen.getByRole("link", { name: "DeepSeek Model" });
@@ -1020,14 +1020,38 @@ test("saving a template in the editor shows the warnings the import returned", a
 });
 
 
+test("saved chips stay in the editor when the initial catalog request fails", async () => {
+  const saved = { vendor: "ppu", name: "PPU M890P" };
+  const storageKey = "gpuworks.inferenceTemplates.hypotheticalChips";
+  localStorage.setItem(storageKey, JSON.stringify([saved]));
+  api.inferenceTemplates = (async () => { throw new Error("Catalog unavailable"); }) as never;
+  api.detectedInferenceTemplateChips = (async () => list([])) as never;
+  api.inferenceTemplateChips = (async () => list([])) as never;
+  renderList();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Manage followed chips" }));
+  const picker = within(screen.getByRole("dialog", { name: "Manage followed chips" }));
+  await user.type(picker.getByRole("combobox", { name: "GPU model" }), "Lab GPU{Enter}");
+  await user.click(picker.getByRole("button", { name: "Add", exact: true }));
+  await user.click(picker.getByRole("button", { name: "Save selection" }));
+  assert.deepEqual(JSON.parse(localStorage.getItem(storageKey)!), [saved, { vendor: "nvidia", name: "Lab GPU" }]);
+});
+
 test("a hypothetical AMD chip retains its architecture selector", async () => {
   api.inferenceTemplates = (async () => ({ items: [], page: 1, page_size: 200, total: 0 })) as never;
   api.detectedInferenceTemplateChips = (async () => list([])) as never;
   api.inferenceTemplateChips = (async () => list([{ vendor: "amd", name: "AMD Radeon 8060S", category: "workstation-consumer", architecture: "RDNA 3.5", arch_id: "gfx1151" }])) as never;
   render(<I18nextProvider i18n={i18n}><MemoryRouter><InferenceTemplatesPage /></MemoryRouter></I18nextProvider>);
-  fireEvent.click(await screen.findByRole("button", { name: /Edit chips/ }));
-  const dialog = await screen.findByRole("dialog", { name: "Edit chips" });
-  await userEvent.setup().click(within(dialog).getByRole("checkbox", { name: /gfx1151/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /Manage followed chips/ }));
+  const dialog = await screen.findByRole("dialog", { name: "Manage followed chips" });
+  const user = userEvent.setup();
+  within(dialog).getByRole("combobox", { name: "GPU vendor" }).focus();
+  await user.keyboard("{ArrowDown}");
+  await user.click(await screen.findByRole("option", { name: "AMD", exact: true }));
+  await user.click(within(dialog).getByRole("combobox", { name: "GPU model" }));
+  await user.click(screen.getByRole("option", { name: /gfx1151/ }));
+  await user.keyboard("{Escape}");
+  await user.click(within(dialog).getByRole("button", { name: "Add", exact: true }));
   fireEvent.click(within(dialog).getByRole("button", { name: "Save selection", exact: true }));
   const { loadHypotheticalChips } = await import("../src/pages/InferenceTemplatesPage.tsx");
   await waitFor(() => assert.equal(loadHypotheticalChips().some((chip) => chip.vendor === "amd" && chip.arch_id === "gfx1151"), true));
@@ -1086,13 +1110,11 @@ test("removing the selected hypothetical chip clears its filter, persists remova
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: /Radeon 8060S/ }));
   assert.ok(screen.getByRole("button", { name: /Filters.*8060S/ }));
-  await user.click(screen.getByRole("button", { name: "Edit chips", exact: true }));
-  const picker = within(screen.getByRole("dialog", { name: "Edit chips" }));
-  assert.equal(picker.getByRole("checkbox", { name: /H100/ }).getAttribute("aria-disabled"), "true");
-  await user.click(picker.getByRole("button", { name: "AMD", exact: true }));
-  await user.click(picker.getByRole("checkbox", { name: /gfx1151/ }));
+  await user.click(screen.getByRole("button", { name: "Manage followed chips", exact: true }));
+  const picker = within(screen.getByRole("dialog", { name: "Manage followed chips" }));
+  await user.click(picker.getByRole("button", { name: /Remove .*8060S/ }));
   await user.click(picker.getByRole("button", { name: "Save selection" }));
-  await waitFor(() => assert.ok(screen.queryByRole("dialog", { name: "Edit chips" }) === null));
+  await waitFor(() => assert.ok(screen.queryByRole("dialog", { name: "Manage followed chips" }) === null));
   assert.deepEqual(JSON.parse(localStorage.getItem("gpuworks.inferenceTemplates.hypotheticalChips")!), []);
   assert.ok(screen.queryByRole("button", { name: /8060S/ }) === null);
   assert.ok(screen.getByRole("button", { name: "Filters", exact: true }));

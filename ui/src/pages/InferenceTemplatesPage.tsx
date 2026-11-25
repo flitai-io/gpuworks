@@ -72,7 +72,7 @@ export default function InferenceTemplatesPage() {
   const [urlSearch, setURLSearch] = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
   const [models, setModels] = useState<InferenceTemplate[]>([]);
-  const [chips, setChips] = useState<DetectedTemplateChip[]>([]);
+  const [chips, setChips] = useState<DetectedTemplateChip[]>(loadHypotheticalChips);
   const [catalogChips, setCatalogChips] = useState<InferenceTemplateChip[]>([]);
   const [selectedChip, setSelectedChip] = useState(() => urlSearch.get("chip") || "");
   const [addingChip, setAddingChip] = useState(false);
@@ -172,6 +172,12 @@ export default function InferenceTemplatesPage() {
     const retainedKeys = new Set([...detectedKeys, ...next.map(chipKey)]);
     setSelectedChip(current => retainedKeys.has(current) ? current : "");
     setAddingChip(false);
+    if (selectedChip && !retainedKeys.has(selectedChip)) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("chip");
+      window.history.replaceState(window.history.state, "", url);
+    }
+    window.location.reload();
   };
   const importCatalog = async (file: File, overwrite = false) => {
     try {

@@ -165,6 +165,15 @@ Confirmed 2026-11-06. Check every migrated page against this, by screenshot.
 | Overlays | While antd and Zeron coexist, both libraries' overlays sit on one 1000 layer (`src/theme/layers.css`): the one opened last is on top. Right-side drawers of either library open beside the AI assistant. |
 | Status words | Show a state as Zeron `Badge` with `status`, not as coloured text: dark success text reads as black. |
 
+### Dismissing editing dialogs
+
+When a dialog stages edits or selections before saving, keep it open on a
+backdrop click, including before the first edit. Set `disablePointerDismissal`
+on the page's Zeron `Dialog`. Keep the explicit Cancel and close actions and
+the usual Escape handling. In a browser, stage a change, click outside the
+dialog and verify the selection is still present. If a dropdown is open, test
+a second click after the dropdown closes.
+
 ## Vendor marks
 
 Accelerator vendor marks (NVIDIA, AMD, Ascend, ...) live in

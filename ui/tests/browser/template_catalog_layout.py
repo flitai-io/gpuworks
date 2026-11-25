@@ -32,7 +32,7 @@ api.monitorMetrics = async () => ({items:[]});
 const i18n = require('i18next').createInstance();
 const h = React.createElement;
 const vendors = ['nvidia', 'ascend', 'amd', 'hygon', 'ppu', 'kunlunxin'];
-const chips = vendors.flatMap(vendor => Array.from({length:8}, (_,i) => ({vendor, name:`MOCK-${vendor}-${i}`})));
+const chips = vendors.flatMap(vendor => Array.from({length:8}, (_,i) => ({vendor, name:vendor === 'nvidia' && i === 7 ? 'Q'.repeat(128) : `MOCK-${vendor}-${i}`})));
 // Include organizations with no shipped artwork to exercise initials on both themes.
 const models = ['black-forest-labs', 'thinkingmachines', 'deepseek-ai', 'fixture-org-a', 'fixture-org-b', 'fixture-org-c'].flatMap(org => Array.from({length:12}, (_,i) => ({
  id:`${org}-${i}`, model_id:`${org}/MOCK-long-model-name-${i}`, source:'upstream',
@@ -42,7 +42,7 @@ const models = ['black-forest-labs', 'thinkingmachines', 'deepseek-ai', 'fixture
 })));
 api.inferenceTemplates = async () => ({items:models,total:models.length,page:1,page_size:200});
 api.detectedInferenceTemplateChips = async () => ({items:chips});
-api.inferenceTemplateChips = async () => ({items:chips});
+api.inferenceTemplateChips = async () => ({items:[...chips, ...['NVIDIA H20','NVIDIA H200'].map(name => ({vendor:'nvidia', name, cc:9}))]});
 api.inferenceTemplate = async id => {
   const model = models.find(item => item.model_id === id);
   const kunlun = model.specs.find(spec => spec.gpus.vendor === 'kunlunxin');
@@ -181,6 +181,36 @@ class TemplateCatalogLayout(unittest.TestCase):
                     self.assertGreaterEqual(name_cell.bounding_box()['x'], container.bounding_box()['x'] - 1)
                     self.capture(page, f'templates-{width}-{"dark" if dark else "light"}.png')
 
+    def test_wrapped_chip_filters_and_checked_model_options(self):
+        for dark in (False, True):
+            page = self.render_page(820, dark)
+            group = page.locator(".template-hardware-group").first
+            buttons = group.get_by_role("button")
+            long_label = group.get_by_title("Q" * 128, exact=True)
+            expect(long_label).to_be_visible()
+            self.assertTrue(group.evaluate("el => el.scrollWidth <= el.clientWidth + 1"))
+            first = buttons.first.bounding_box()
+            self.assertGreater(buttons.last.bounding_box()["y"], first["y"] + 1)
+            logo = group.locator(".vendor-logo img").bounding_box()
+            self.assertAlmostEqual(logo["y"] + logo["height"]/2, first["y"] + first["height"]/2, delta=2)
+            page.get_by_role("button", name="Manage followed chips").click()
+            model = page.get_by_role("combobox", name="GPU model")
+            model.fill("H20")
+            model.press("Enter")
+            if model.get_attribute("aria-expanded") != "true":
+                model.click()
+            checked = page.get_by_role("option", name="H20", exact=True)
+            unchecked = page.get_by_role("option", name="H200", exact=True)
+            expect(checked).to_have_attribute("data-selected", "")
+            expect(checked.locator('[data-slot="combobox-item-indicator"]')).to_be_visible()
+            expect(unchecked.locator('[data-slot="combobox-item-indicator"]')).to_have_count(0)
+            self.capture(page, f'chip-selection-{"dark" if dark else "light"}.png')
+            checked.click()
+            expect(model).to_have_value("")
+            if model.get_attribute("aria-expanded") == "true":
+                model.press("Escape")
+            expect(page.get_by_role("button", name="Add", exact=True)).to_be_disabled()
+
     def test_collapsing_filters_returns_space_to_the_catalog(self):
         page = self.render_page(1280)
         table = page.locator('[data-slot="table"]')
@@ -218,15 +248,70 @@ class TemplateCatalogLayout(unittest.TestCase):
         clear.click()
         expect(toggle).to_have_attribute('aria-expanded', 'true')
 
+    def test_chip_groups_wrap_in_the_model_column_and_use_available_height(self):
+        for width, height in ((1440, 1000), (390, 660)):
+            page = self.render_page(width)
+            page.set_viewport_size({"width": width, "height": height})
+            page.get_by_role("button", name="Manage followed chips").click()
+            dialog = page.get_by_role("dialog", name="Manage followed chips")
+            model = dialog.get_by_role("combobox", name="GPU model")
+            model.fill("Long accelerator model " * 4)
+            model.press("Enter")
+            dialog.get_by_role("button", name="Add", exact=True).click()
+            section = dialog.get_by_role("region", name="Added chips")
+            groups = section.get_by_role("group")
+            expect(groups).to_have_count(6)
+            for group in groups.all():
+                geometry = group.evaluate("""row => {
+                    const [logo, models] = row.children;
+                    const bounds = models.getBoundingClientRect();
+                    return {
+                        labelRight: logo.getBoundingClientRect().right,
+                        columnLeft: bounds.left,
+                        allInside: [...models.children].every(chip =>
+                            chip.getBoundingClientRect().left >= bounds.left - 1 &&
+                            chip.getBoundingClientRect().right <= bounds.right + 1)
+                    };
+                }""")
+                self.assertLess(geometry["labelRight"], geometry["columnLeft"])
+                self.assertTrue(geometry["allInside"])
+            self.assertTrue(groups.first.evaluate("el => el.parentElement.scrollWidth <= el.parentElement.clientWidth + 1"))
+            last = groups.last
+            last.scroll_into_view_if_needed()
+            self.assertGreater(section.bounding_box()["height"], 200)
+            box = dialog.bounding_box()
+            self.assertGreaterEqual(box["y"], 0)
+            self.assertLessEqual(box["y"] + box["height"], height)
+            expect(dialog.get_by_role("button", name="Save selection")).to_be_in_viewport()
+
+    def test_chip_picker_backdrop_preserves_pending_and_added_models(self):
+        page = self.render_page(1280)
+        page.get_by_role("button", name="Manage followed chips", exact=True).click()
+        dialog = page.get_by_role("dialog", name="Manage followed chips")
+        model = dialog.get_by_role("combobox", name="GPU model")
+        model.fill("Custom A")
+        model.press("Enter")
+        dialog.get_by_role("button", name="Add", exact=True).click()
+        model.fill("Custom B")
+        model.press("Enter")
+        backdrop = page.locator('[data-slot="dialog-backdrop"]')
+        # The first outside press can dismiss the model list before the dialog.
+        for _ in range(2):
+            backdrop.click(position={"x": 12, "y": 12})
+        expect(dialog.get_by_role("region").get_by_text("Custom A", exact=True)).to_be_visible()
+        expect(dialog.get_by_role("button", name="Remove Custom B", exact=True)).to_be_visible()
+        dialog.get_by_role("button", name="Cancel", exact=True).click()
+        expect(dialog).not_to_be_visible()
+
     def test_plain_dialog_prose_inherits_global_body_size_in_both_themes(self):
         for locale, width, dark in product(("en", "zh"), (820, 1280, 1920), (False, True)):
-            title = "Edit chips" if locale == "en" else "编辑芯片"
+            title = "Manage followed chips" if locale == "en" else "管理关注芯片"
             page = self.render_page(width, dark=dark, locale=locale)
             expect(page.locator('[data-slot="table"]')).to_be_visible()
             page.get_by_role('button', name=title, exact=True).click()
             dialog = page.get_by_role('dialog', name=title, exact=True)
             expect(dialog).to_be_visible()
-            label = dialog.locator('.template-chip-options label > span').first
+            label = dialog.locator('label[for="template-chip-model"]').first
             expect(label).to_be_visible()
             self.assertEqual(label.evaluate('el=>getComputedStyle(el).fontSize'), '14px')
             self.assertEqual(page.locator('body').evaluate('el=>getComputedStyle(el).fontSize'), '14px')

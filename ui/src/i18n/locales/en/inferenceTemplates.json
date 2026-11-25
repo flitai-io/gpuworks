@@ -3,7 +3,7 @@
   "page": { "loading": "Loading inference templates…", "title": "Inference Templates", "loadFailed": "Failed to load inference templates: {{detail}}" },
   "organization": { "other": "Other", "title": "Model Organizations", "aria": "Model organizations" },
   "models": { "view": "View {{title}}", "count": "{{count}} models" },
-  "chips": {"edit": "Edit chips", "remove": "Remove {{name}}", "saveSelection": "Save selection", "detected": "Detected in this environment", "search": "Search vendor or model",  "mine": "Chip models", "noOnlineNode": "No chip models" },
+  "chips": {"added": "Added chips", "clear": "Clear all", "empty": "No chips added", "model": "GPU model", "placeholder": "Select models or type and press Enter", "add": "Add", "edit": "Manage followed chips", "remove": "Remove {{name}}", "saveSelection": "Save selection", "detected": "Detected in this environment", "search": "Search vendor or model",  "mine": "Chip models", "noOnlineNode": "No chip models" },
   "filters": { "clear": "Clear filters", "title": "Filters", "modelType": "Model type", "all": "All", "operationAria": "Filter by task type" },
   "columns": { "model": "Model", "inputModalities": "Input modalities", "weightVariants": "Weight artifacts", "vendor": "GPU vendor", "engine": "Engine" },
   "vendor": { "nvidia": "NVIDIA", "amd": "AMD", "ascend": "Ascend", "hygon": "Hygon", "ppu": "PPU", "kunlunxin": "Kunlunxin", "apple": "Apple", "hygonAlt": "Hygon" },

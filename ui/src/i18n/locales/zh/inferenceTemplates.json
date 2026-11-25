@@ -3,7 +3,7 @@
   "page": { "loading": "正在加载推理模板…", "title": "推理模板", "loadFailed": "推理模板加载失败：{{detail}}" },
   "organization": { "other": "其他", "title": "模型组织", "aria": "模型组织" },
   "models": { "view": "查看 {{title}}", "count": "{{count}} 个模型" },
-  "chips": {"edit": "编辑芯片", "remove": "移除 {{name}}", "saveSelection": "保存选择", "detected": "环境已接入", "search": "搜索品牌或型号",  "mine": "芯片型号", "noOnlineNode": "暂无芯片型号" },
+  "chips": {"added": "已添加的芯片", "clear": "一键清空", "empty": "尚未添加芯片", "model": "GPU 型号", "placeholder": "选择型号或输入回车", "add": "添加", "edit": "管理关注芯片", "remove": "移除 {{name}}", "saveSelection": "保存选择", "detected": "环境已接入", "search": "搜索品牌或型号",  "mine": "芯片型号", "noOnlineNode": "暂无芯片型号" },
   "filters": { "clear": "清空筛选", "title": "筛选", "modelType": "模型类型", "all": "全部", "operationAria": "按任务类型筛选" },
   "columns": { "model": "模型", "inputModalities": "输入模态", "weightVariants": "权重制品", "vendor": "GPU 厂商", "engine": "引擎" },
   "vendor": { "nvidia": "英伟达", "amd": "AMD", "ascend": "昇腾", "hygon": "海光", "ppu": "平头哥", "kunlunxin": "昆仑芯", "apple": "Apple", "hygonAlt": "海光" },
