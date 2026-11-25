@@ -23,6 +23,7 @@ permissions:
 env:
   GOTOOLCHAIN: local
   GPUWORKS_USAGE_REPORT: "off"
+  SEED_CATALOG_OVERLAY: build/seed-catalog/overlay.json
 
 jobs:
   # One release id, channel and build time for every job of the run, as
@@ -79,7 +80,11 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      # The gates' UI build, embedded as is.
+      # All server binaries and the publisher embed the same seed manifest.
+      - uses: actions/download-artifact@v5
+        with:
+          name: seed-catalog-manifest
+          path: bin/seed-catalog/
       - uses: actions/download-artifact@v5
         with:
           name: webui-dist
@@ -159,6 +164,10 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+      - uses: actions/download-artifact@v5
+        with:
+          name: seed-catalog-manifest
+          path: bin/seed-catalog/
       - uses: actions/download-artifact@v5
         with:
           pattern: dist-*-*

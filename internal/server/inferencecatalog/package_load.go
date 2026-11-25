@@ -39,8 +39,21 @@ func loadPackage(fsys fs.FS, tolerant bool) (Package, []Skipped, error) {
 		return Package{}, nil, err
 	}
 
+	pkg, skipped, err := loadPackageContents(fsys, tolerant, manifest)
+	if err != nil {
+		return Package{}, nil, err
+	}
+	if manifest.Models != pkg.Manifest.Models || manifest.Specs != pkg.Manifest.Specs {
+		return Package{}, nil, fmt.Errorf("inference catalog manifest says %d models/%d specs, package contains %d/%d", manifest.Models, manifest.Specs, pkg.Manifest.Models, pkg.Manifest.Specs)
+	}
+	return pkg, skipped, nil
+}
+
+// loadPackageContents fills the counts from the files as published, including
+// specs an older reader skips. Seed generation uses this same walk strictly.
+func loadPackageContents(fsys fs.FS, tolerant bool, manifest PackageManifest) (Package, []Skipped, error) {
 	var modelFiles []string
-	err = fs.WalkDir(fsys, ".", func(name string, entry fs.DirEntry, walkErr error) error {
+	err := fs.WalkDir(fsys, ".", func(name string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -146,9 +159,8 @@ func loadPackage(fsys fs.FS, tolerant bool) (Package, []Skipped, error) {
 		return catalog.Models[i].ModelID < catalog.Models[j].ModelID
 	})
 
-	if manifest.Models != len(modelFiles) || manifest.Specs != statedSpecs {
-		return Package{}, nil, fmt.Errorf("inference catalog manifest says %d models/%d specs, package contains %d/%d", manifest.Models, manifest.Specs, len(modelFiles), statedSpecs)
-	}
+	manifest.Models = len(modelFiles)
+	manifest.Specs = statedSpecs
 	return Package{Manifest: manifest, Catalog: catalog}, skipped, nil
 }
 

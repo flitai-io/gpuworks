@@ -10,6 +10,12 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "seed-manifest" {
+		if err := writeSeedManifest(os.Args[2:], os.Stdout); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	catalog := flag.String("catalog", "", "catalog directory")
 	output := flag.String("output", "", "output tar.gz path")
 	flag.Parse()

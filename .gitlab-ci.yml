@@ -415,6 +415,8 @@ core-test-image:
 core-test:
   extends: .go-core
   stage: core
+  variables:
+    GIT_DEPTH: "0" # Find the last seed catalog commit, even on a quiet release branch.
   image: $GPUWORKS_CORE_TEST_IMAGE
   rules:
     - if: '$GPUWORKS_CORE_TEST_IMAGE'
@@ -429,6 +431,7 @@ core-test:
   # still fail the pipeline; the retry only heals one-shot flakes.
   retry: 1
   script:
+    - make seed-manifest
     - if [ "${CHECK_CORE_IMAGE_SHELLCHECK:-}" = 1 ]; then ./scripts/test_slurmboot_shellcheck.sh; fi
     - ./scripts/check_time_policy.sh
     - ./scripts/check_architecture.sh
@@ -469,6 +472,7 @@ core-test:
   artifacts:
     when: always
     paths:
+      - bin/seed-catalog/manifest.yaml
       - coverage-core.out
       - .testlogs/core-test.log
     expire_in: 14 days
@@ -869,6 +873,8 @@ release-docs-pdf:
 .release-build:
   extends: .go-core
   stage: release
+  variables:
+    SEED_CATALOG_OVERLAY: build/seed-catalog/overlay.json
   # Same gate policy as .l4-acceptance: only the fast deterministic gates.
   # core-l2/l3/ui-test flakes must not also kill the nightly packages, as
   # they did on 2026-09-30 and 2026-10-01.
@@ -965,6 +971,8 @@ release-publish:
   extends: .go-core
   stage: publish
   needs:
+    - job: core-test
+      artifacts: true
     - job: release-build-linux-amd64
       artifacts: true
     - job: release-build-linux-arm64
@@ -979,6 +987,7 @@ release-publish:
   resource_group: distribution
   interruptible: false
   variables:
+    SEED_CATALOG_OVERLAY: build/seed-catalog/overlay.json
     # Not RCLONE_VERSION: rclone reads every RCLONE_<FLAG> variable as that
     # flag, and took this one for --version (job 217655).
     GPUWORKS_RCLONE_VERSION: "v1.75.2"

@@ -7,8 +7,10 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 )
 
 type packageDigestReadFS struct {
@@ -55,7 +57,20 @@ func TestPackageDigestLoadsSemanticCatalogOnce(t *testing.T) {
 }
 
 func BenchmarkPackageDigestRealCatalog(b *testing.B) {
-	input := os.DirFS("seed/catalog")
+	source := os.DirFS("seed/catalog")
+	dir := b.TempDir()
+	if err := os.CopyFS(dir, source); err != nil {
+		b.Fatal(err)
+	}
+	manifest, err := BuildSeedManifest(source, time.Unix(0, 0))
+	if err != nil {
+		b.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), manifest, 0o644); err != nil {
+		b.Fatal(err)
+	}
+	input := os.DirFS(dir)
+	b.ResetTimer()
 	b.ReportAllocs()
 	for range b.N {
 		pkg, digest, err := LoadPackageDigest(input)

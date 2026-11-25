@@ -69,7 +69,7 @@ trap 'rm -rf "$work"' EXIT INT TERM
 # reading (or complaining about) the operator's own.
 : >"$work/rclone.conf"
 export RCLONE_CONFIG="$work/rclone.conf"
-go build -o "$work/gpuworks-dist" ./cmd/gpuworks-dist
+make dist-tool DIST_TOOL="$work/gpuworks-dist"
 
 release_id=$("$work/gpuworks-dist" release-id -dist "$dist")
 published="$work/published"

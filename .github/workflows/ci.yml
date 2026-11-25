@@ -151,6 +151,12 @@ jobs:
         with:
           name: webui-dist
           path: internal/server/webui/dist/
+      - run: make seed-manifest
+      - uses: actions/upload-artifact@v5
+        if: inputs.release_gates
+        with:
+          name: seed-catalog-manifest
+          path: bin/seed-catalog/manifest.yaml
       - run: ./scripts/check_time_policy.sh
       - run: ./scripts/check_architecture.sh
       - run: ./scripts/check_ci_yaml.sh

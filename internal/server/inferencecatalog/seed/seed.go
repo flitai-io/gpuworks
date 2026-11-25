@@ -134,11 +134,3 @@ func embeddedPackage() (inferencecatalog.Package, error) {
 	}
 	return pkg, nil
 }
-
-func embeddedPackageFS() (fs.FS, error) {
-	root, err := fs.Sub(embeddedCatalog, "catalog")
-	if err != nil {
-		return nil, fmt.Errorf("open embedded inference catalog package: %w", err)
-	}
-	return root, nil
-}

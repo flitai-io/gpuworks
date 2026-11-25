@@ -352,28 +352,42 @@ func (writer *countingWriter) Write(data []byte) (int, error) {
 
 func parsePackageManifest(data []byte, knownFields bool) (PackageManifest, error) {
 	var manifest PackageManifest
-	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	if err := decodeManifest(data, &manifest, knownFields); err != nil {
+		return PackageManifest{}, err
+	}
+	if err := validatePackageManifest(manifest); err != nil {
+		return PackageManifest{}, err
+	}
+	return manifest, nil
+}
+
+func validatePackageManifest(manifest PackageManifest) error {
+	if manifest.SchemaVersion < oldestPackageSchemaVersion || manifest.SchemaVersion > PackageSchemaVersion {
+		return fmt.Errorf("unsupported inference catalog package schema_version %d", manifest.SchemaVersion)
+	}
+	if _, err := time.Parse(time.RFC3339, strings.TrimSpace(manifest.PublishedAt)); err != nil {
+		return fmt.Errorf("inference catalog package published_at must be RFC3339: %w", err)
+	}
+	if manifest.Models <= 0 || manifest.Specs <= 0 {
+		return errors.New("inference catalog package manifest requires positive models and specs")
+	}
+	return nil
+}
+
+func decodeManifest(data []byte, target any, knownFields bool) error {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(knownFields)
-	if err := decoder.Decode(&manifest); err != nil {
-		return PackageManifest{}, fmt.Errorf("parse inference catalog package manifest: %w", err)
+	if err := decoder.Decode(target); err != nil {
+		return fmt.Errorf("parse inference catalog package manifest: %w", err)
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		if err == nil {
-			return PackageManifest{}, errors.New("inference catalog package manifest must contain one document")
+			return errors.New("inference catalog package manifest must contain one document")
 		}
-		return PackageManifest{}, fmt.Errorf("parse inference catalog package manifest: %w", err)
+		return fmt.Errorf("parse inference catalog package manifest: %w", err)
 	}
-	if manifest.SchemaVersion < oldestPackageSchemaVersion || manifest.SchemaVersion > PackageSchemaVersion {
-		return PackageManifest{}, fmt.Errorf("unsupported inference catalog package schema_version %d", manifest.SchemaVersion)
-	}
-	if _, err := time.Parse(time.RFC3339, strings.TrimSpace(manifest.PublishedAt)); err != nil {
-		return PackageManifest{}, fmt.Errorf("inference catalog package published_at must be RFC3339: %w", err)
-	}
-	if manifest.Models <= 0 || manifest.Specs <= 0 {
-		return PackageManifest{}, errors.New("inference catalog package manifest requires positive models and specs")
-	}
-	return manifest, nil
+	return nil
 }
 
 func parseModelYAML(data []byte) (InferenceModel, error) {

@@ -3,7 +3,6 @@ package seed
 import (
 	"bytes"
 	"crypto/sha256"
-	"io/fs"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -183,7 +182,7 @@ func TestEmbeddedCatalogPackageSummaryAndDeterministicArchive(t *testing.T) {
 	if _, err := embeddedPackage(); err != nil {
 		t.Fatal(err)
 	}
-	root, err := fs.Sub(embeddedCatalog, "catalog")
+	root, err := embeddedPackageFS()
 	if err != nil {
 		t.Fatal(err)
 	}
