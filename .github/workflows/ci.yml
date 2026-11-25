@@ -152,6 +152,7 @@ jobs:
           name: webui-dist
           path: internal/server/webui/dist/
       - run: make seed-manifest
+      - run: SEED_CATALOG_MANIFEST=bin/seed-catalog/manifest.yaml make test-seed-catalog-build
       - uses: actions/upload-artifact@v5
         if: inputs.release_gates
         with:

@@ -1,5 +1,0 @@
-{
-  "Replace": {
-    "internal/server/inferencecatalog/seed/catalog/manifest.yaml": "bin/seed-catalog/manifest.yaml"
-  }
-}

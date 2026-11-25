@@ -2,13 +2,37 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
+
+	"gpuworks.ai/gpuworks/internal/server/inferencecatalog"
+	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/seed"
 )
 
 func TestSeedManifestCommandUsesPublicationTime(t *testing.T) {
-	source := filepath.Join("..", "..", "internal", "server", "inferencecatalog", "seed", "catalog")
+	// Even an incomplete checkout in the working directory cannot add files
+	// to the source tree embedded in this generator.
+	t.Chdir(t.TempDir())
+	models := filepath.Join("internal", "server", "inferencecatalog", "seed", "catalog", "models")
+	if err := os.MkdirAll(filepath.Join(models, "_local"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{".DS_Store", "_local/model.yaml"} {
+		if err := os.WriteFile(filepath.Join(models, file), []byte("invalid YAML: ["), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	catalog, err := seed.Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	specs := 0
+	for _, model := range catalog.Models {
+		specs += len(model.Specs)
+	}
 	for _, tc := range []struct {
 		name string
 		date string
@@ -19,11 +43,15 @@ func TestSeedManifestCommandUsesPublicationTime(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var output bytes.Buffer
-			if err := writeSeedManifest([]string{"--catalog", source, "--published-at", tc.date}, &output); err != nil {
+			if err := writeSeedManifest([]string{"--published-at", tc.date}, &output); err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(output.String(), tc.want) {
-				t.Fatalf("manifest missing publication time %s: %s", tc.want, &output)
+			var got inferencecatalog.PackageManifest
+			if err := yaml.Unmarshal(output.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if got.PublishedAt != tc.want || got.Models != len(catalog.Models) || got.Specs != specs {
+				t.Fatalf("manifest for %d embedded models / %d specs at %s: %+v", len(catalog.Models), specs, tc.want, got)
 			}
 		})
 	}

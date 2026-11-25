@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io/fs"
+	"os"
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog"
@@ -43,6 +44,15 @@ func TestPublishedSeedMatchesServerPackage(t *testing.T) {
 	packed, err := fs.ReadFile(archive.FS, "manifest.yaml")
 	if err != nil || !bytes.Equal(source, packed) {
 		t.Fatal("the release archive did not preserve the server manifest")
+	}
+	if file := os.Getenv("SEED_CATALOG_MANIFEST"); file != "" {
+		expected, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(expected, packed) {
+			t.Fatal("the release archive did not embed the build's input manifest")
+		}
 	}
 	t.Logf("server and channel version %s", inferencecatalog.CatalogVersion(manifest.PublishedAt, channelDigest))
 }

@@ -23,7 +23,7 @@ permissions:
 env:
   GOTOOLCHAIN: local
   GPUWORKS_USAGE_REPORT: "off"
-  SEED_CATALOG_OVERLAY: build/seed-catalog/overlay.json
+  SEED_CATALOG_MANIFEST: bin/seed-catalog/manifest.yaml
 
 jobs:
   # One release id, channel and build time for every job of the run, as

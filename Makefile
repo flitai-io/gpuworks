@@ -83,76 +83,72 @@ agent-image-publish:
 	GO="$(GO)" LDFLAGS="$(LDFLAGS)" VERSION="$(VERSION)" \
 	NERDCTL_VERSION="$(NERDCTL_VERSION)" DEBIAN_MIRROR="$(DEBIAN_MIRROR)" ./scripts/agent_image.sh publish
 
-# Release jobs supply the overlay prepared once for the pipeline. Standalone
-# builds generate it from the current checkout without editing tracked files.
-SEED_CATALOG := internal/server/inferencecatalog/seed/catalog
-SEED_CATALOG_PUBLISHED_AT ?= $(shell git log -1 --format=%cI -- $(SEED_CATALOG) 2>/dev/null)
-ifeq ($(strip $(SEED_CATALOG_OVERLAY)),)
-SEED_CATALOG_OVERLAY := build/seed-catalog/overlay.json
-SEED_CATALOG_INPUT := seed-manifest
-endif
+# CI shares the generated manifest. Each compiler invocation owns its overlay.
+SEED_BUILD = GO="$(GO)" ./scripts/seed_catalog.sh
 
 .PHONY: seed-manifest
 seed-manifest:
 	@mkdir -p bin/seed-catalog
 	@set -eu; tmp=$$(mktemp bin/seed-catalog/manifest.XXXXXX); trap 'rm -f "$$tmp"' EXIT; \
-		CGO_ENABLED=0 GOOS= GOARCH= $(GO) run ./cmd/gpuworks-pack-catalog seed-manifest --catalog "$(SEED_CATALOG)" \
-			--published-at "$(SEED_CATALOG_PUBLISHED_AT)" > "$$tmp"; \
-		mv "$$tmp" bin/seed-catalog/manifest.yaml
+		$(SEED_BUILD) manifest > "$$tmp"; mv "$$tmp" bin/seed-catalog/manifest.yaml
+
+.PHONY: test-seed-catalog-build
+test-seed-catalog-build:
+	python3 -B -m unittest discover -s scripts -p test_seed_catalog.py
+	$(SEED_BUILD) test -count=1 -run '^TestPublishedSeedMatchesServerPackage$$' ./internal/server/inferencecatalog/seed
 
 .PHONY: server
 ## server: build the control-plane binary (embeds UI + cross-compiled agents)
-server: cross-agents $(SEED_CATALOG_INPUT)
-	CGO_ENABLED=0 $(GO) build -overlay="$(SEED_CATALOG_OVERLAY)" -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks $(SERVER_PKG)
+server: cross-agents
+	CGO_ENABLED=0 $(SEED_BUILD) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks $(SERVER_PKG)
 
 .PHONY: server-linux-amd64
 # Explicit release targets avoid accidentally deploying a host (for example,
 # Darwin/arm64) control-plane binary to a Linux node from a developer laptop.
-server-linux-amd64: ui cross-agents $(SEED_CATALOG_INPUT)
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -overlay="$(SEED_CATALOG_OVERLAY)" -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks-linux-amd64 $(SERVER_PKG)
+server-linux-amd64: ui cross-agents
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(SEED_BUILD) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks-linux-amd64 $(SERVER_PKG)
 
 .PHONY: server-linux-amd64-prebuilt-ui
 # CI receives internal/server/webui/dist from core-ui. This target builds the
 # hosted cloud-test server without trying to run npm inside the Go image.
-server-linux-amd64-prebuilt-ui: cross-agents $(SEED_CATALOG_INPUT)
+server-linux-amd64-prebuilt-ui: cross-agents
 	@test -f internal/server/webui/dist/index.html || (echo "prebuilt UI artifact is required" >&2; exit 2)
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -overlay="$(SEED_CATALOG_OVERLAY)" -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks-linux-amd64 $(SERVER_PKG)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(SEED_BUILD) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks-linux-amd64 $(SERVER_PKG)
 
 .PHONY: server-linux-arm64
-server-linux-arm64: ui cross-agents $(SEED_CATALOG_INPUT)
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(GO) build -overlay="$(SEED_CATALOG_OVERLAY)" -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks-linux-arm64 $(SERVER_PKG)
+server-linux-arm64: ui cross-agents
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(SEED_BUILD) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks-linux-arm64 $(SERVER_PKG)
 
 .PHONY: server-linux-arm64-prebuilt-ui
 # CI receives the same prebuilt UI artifact for both server architectures.
-server-linux-arm64-prebuilt-ui: cross-agents $(SEED_CATALOG_INPUT)
+server-linux-arm64-prebuilt-ui: cross-agents
 	@test -f internal/server/webui/dist/index.html || (echo "prebuilt UI artifact is required" >&2; exit 2)
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(GO) build -overlay="$(SEED_CATALOG_OVERLAY)" -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks-linux-arm64 $(SERVER_PKG)
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(SEED_BUILD) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks-linux-arm64 $(SERVER_PKG)
 
 .PHONY: server-darwin-amd64-prebuilt-ui
 # macOS release binaries are cross-compiled by the Linux release job. They
 # still embed Linux agents because managed GPU nodes run the agent on Linux.
-server-darwin-amd64-prebuilt-ui: cross-agents $(SEED_CATALOG_INPUT)
+server-darwin-amd64-prebuilt-ui: cross-agents
 	@test -f internal/server/webui/dist/index.html || (echo "prebuilt UI artifact is required" >&2; exit 2)
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(GO) build -overlay="$(SEED_CATALOG_OVERLAY)" -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks-darwin-amd64 $(SERVER_PKG)
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(SEED_BUILD) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks-darwin-amd64 $(SERVER_PKG)
 
 .PHONY: server-darwin-arm64-prebuilt-ui
-server-darwin-arm64-prebuilt-ui: cross-agents $(SEED_CATALOG_INPUT)
+server-darwin-arm64-prebuilt-ui: cross-agents
 	@test -f internal/server/webui/dist/index.html || (echo "prebuilt UI artifact is required" >&2; exit 2)
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 $(GO) build -overlay="$(SEED_CATALOG_OVERLAY)" -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks-darwin-arm64 $(SERVER_PKG)
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 $(SEED_BUILD) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/gpuworks-darwin-arm64 $(SERVER_PKG)
 
 .PHONY: release-packages
 ## release-packages: build versioned Linux and macOS server archives with checksums
-release-packages: $(SEED_CATALOG_INPUT)
+release-packages:
 	./scripts/ui_overlay_guard.sh
-	SEED_CATALOG_OVERLAY="$(SEED_CATALOG_OVERLAY)" \
-	GPUWORKS_RELEASE_CHANNEL="$${GPUWORKS_RELEASE_CHANNEL:-$(CHANNEL)}" GPUWORKS_SERVER_PKG="$(SERVER_PKG)" GPUWORKS_PACKAGE_PREFIX="$(PACKAGE_PREFIX)" ./scripts/package_release.sh
+	GPUWORKS_RELEASE_CHANNEL="$${GPUWORKS_RELEASE_CHANNEL:-$(CHANNEL)}" GPUWORKS_SERVER_PKG="$(SERVER_PKG)" GPUWORKS_PACKAGE_PREFIX="$(PACKAGE_PREFIX)" $(SEED_BUILD) ./scripts/package_release.sh
 
 DIST_DIR ?= dist
 
 DIST_TOOL ?= $(BIN)/gpuworks-dist
 .PHONY: dist-tool
-dist-tool: $(SEED_CATALOG_INPUT)
-	$(GO) build -overlay="$(SEED_CATALOG_OVERLAY)" -o "$(DIST_TOOL)" ./cmd/gpuworks-dist
+dist-tool:
+	$(SEED_BUILD) build -o "$(DIST_TOOL)" ./cmd/gpuworks-dist
 
 .PHONY: dist-publish
 ## dist-publish: sign dist/ and the embedded catalogs into the CHANNEL tree and publish it to every distribution source
@@ -234,7 +230,7 @@ test-unit: check-change-record
 # A recursive boundary keeps even make -j from starting UI or tests before
 # the change-record gate succeeds.
 .PHONY: test-unit-checked
-test-unit-checked: ui check-time-policy check-architecture check-api-conventions check-ci-yaml check-artifacts githooks check-doc-links check-translations test-host-env-adapters test-e2e-coverage-check test-inference-template-assets test-strata-queue-assets test-sglang-video-cancel-assets test-runner-image-scripts
+test-unit-checked: ui test-seed-catalog-build check-time-policy check-architecture check-api-conventions check-ci-yaml check-artifacts githooks check-doc-links check-translations test-host-env-adapters test-e2e-coverage-check test-inference-template-assets test-strata-queue-assets test-sglang-video-cancel-assets test-runner-image-scripts
 	CGO_ENABLED=0 $(GO) test -timeout $(UNIT_TIMEOUT) $(GO_TEST_FLAGS) ./...
 	cd build/runtime-assets/hygon-vdev-helper && CGO_ENABLED=0 $(GO) test $(GO_TEST_FLAGS) ./...
 	$(MAKE) test-extapi
