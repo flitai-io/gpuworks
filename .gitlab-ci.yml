@@ -8,6 +8,11 @@ stages:
 
 default:
   interruptible: true
+  # Fail up front, naming the runner, when its disk is too full to run the
+  # job, instead of failing at a random step that reads as a flaky test.
+  # Jobs with their own before_script run it first themselves.
+  before_script:
+    - sh scripts/ci_disk_check.sh
 
 # Run validation for merge requests, the default branch and release tags
 # (vYY.M.PATCH, docs/dev/release.md#版本号). Ordinary feature branch and other
@@ -83,6 +88,7 @@ change-record:
   script:
     - ./scripts/check_ci_yaml.sh
     - python3 -B -m unittest discover -s scripts -p test_check_ci_yaml.py
+    - python3 -B -m unittest discover -s scripts -p test_ci_disk_check.py
     - CGO_ENABLED=0 go test -timeout 2m ./scripts/changerecord
     - CGO_ENABLED=0 go run ./scripts/changerecord
 
@@ -327,6 +333,7 @@ ui-check:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - when: never
   before_script:
+    - sh scripts/ci_disk_check.sh
     # Chromium and CJK fonts from Debian, through the mirror docs-pdf uses: the
     # runners reach deb.debian.org too slowly. Node 22 (Debian ships 18,
     # Playwright needs 20+) as the pinned, checksummed tarball from the npm
@@ -1103,6 +1110,7 @@ release-agent-image:
     # untagged core report. Each cloud job runs one authoritative suite.
     GO_TEST_FLAGS: "-coverpkg=./internal/...,./pkg/... -coverprofile=coverage-cloud.out"
   before_script:
+    - sh scripts/ci_disk_check.sh
     - make test-l4-cleanup-leaked
   after_script:
     - make test-l4-cleanup-leaked
