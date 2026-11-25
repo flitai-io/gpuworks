@@ -24,27 +24,28 @@
 </p>
 
 GPUWorks is an ultra-lightweight GPU management and Model-as-a-Service (MaaS) platform. The whole control plane, web
-UI included, is a 40 MB download. Join your own GPU servers, rented cloud instances or containers, or a Mac with one
-command, pick a model, and GPUWorks estimates the memory it needs, picks the GPUs, starts vLLM, SGLang or any engine
-an inference template defines (Strata, ninfer, …), and serves it behind one OpenAI-compatible endpoint.
+UI included, is a 40 MB download. Join your own GPU servers, rented cloud instances or containers, or a Mac
+with one command, pick a model, and GPUWorks estimates the memory it needs, picks the GPUs, starts vLLM, SGLang or any
+engine an inference template defines (Strata, ninfer, …), and serves it behind one OpenAI-compatible endpoint.
 NVIDIA, AMD Instinct and Ryzen AI Max, Huawei Ascend, T-Head PPU, Hygon DCU and Apple Silicon run side by side in the
 same cluster.
 
-The pool of capacity is the core: bare-metal servers, public cloud instances, private cloud VMs and existing
-Kubernetes clusters today, with Slurm partitions joining next. On top of it, GPUWorks serves models now and will run
-fine-tuning and training jobs on the same accelerators.
+The pool of capacity is the core: bare-metal servers, public cloud instances, private cloud VMs, and existing
+Kubernetes and Slurm clusters. On top of it, GPUWorks serves models now and will run fine-tuning and training jobs
+on the same accelerators.
 
 ## Highlights
 
-- **Verified model × accelerator combinations deploy in one click.** The built-in catalog ships 1,235 launch specs
-  for 392 models: image, engine, flags and pinned weight revisions for each GPU type. The combinations we have run
+- **Verified model × accelerator combinations deploy in one click.** The built-in catalog ships 1,295 launch specs
+  for 404 models: image, engine, flags and pinned weight revisions for each GPU type. The combinations we have run
   on real NVIDIA, AMD, Ascend, PPU and Apple hardware come with launch settings that are known to work, so you pick a
   model and press deploy instead of hunting for flags. Qwen, DeepSeek, GLM, Kimi, MiniMax, Llama, Gemma, gpt-oss,
   plus embedding, rerank, speech, image and video models.
 - **Heterogeneous accelerators, one scheduler.** NVIDIA, AMD, Ascend, PPU, Hygon, Kunlunxin and Apple Silicon nodes join
   the same cluster; the scheduler matches each deployment to hardware its launch spec supports.
-- **Public and private cloud in one pool.** Sync instances from RunPod, CompShare, AutoDL, Vast.ai and Alibaba Cloud,
-  or VMs from ZStack Cloud, install the agent in one click, and schedule them together with your own servers.
+- **Public and private cloud in one pool.** Sync instances from RunPod, CompShare, AutoDL, Vast.ai, DigitalOcean and
+  Alibaba Cloud, or VMs from ZStack Cloud, install the agent in one click, and schedule them together with your own
+  servers.
 - **Joins an existing Kubernetes cluster and coexists with its other workloads.** Apply one manifest to connect a
   cluster; each node's accelerator is detected automatically, so one cluster entry can hold nodes of several vendors.
   GPUWorks keeps the device plugin the cluster already runs and works with HAMi and ACK GPU sharing. It
@@ -93,9 +94,9 @@ host:
 curl -fsSL http://<server>:8800/install.sh | sh -s -- --server http://<server>:8800 --token <node-token>
 ```
 
-**3. Deploy a model.** Open **Deploy**, pick a model such as `Qwen/Qwen3-1.7B` and a recommended inference template,
-review the configuration evaluation (memory estimate and placement), and deploy. Then create an inference token under
-**API Tokens** and call the model by its public model name:
+**3. Deploy a model.** Open **Inference Services → Create Deployment**, pick a model such as `Qwen/Qwen3-1.7B` and a
+recommended inference template, review the configuration evaluation (memory estimate and placement), and deploy. Then
+create an inference token under **API Tokens** and call the model by its public model name:
 
 ```bash
 curl http://<server>:8800/v1/chat/completions \
@@ -127,16 +128,17 @@ Install the GPUWorks control plane on this host and verify it.
 | Accelerator | Whole-GPU deploy | dGPU (shared GPU) | Sleep/wake | Multi-node | PD disaggregation |
 |---|---|---|---|---|---|
 | **NVIDIA** (CUDA) | ✅ Docker, containerd or runveil (built-in rootless runtime) | ✅ memory quota at MiB granularity | ✅ vLLM | ✅ | ✅ vLLM + NIXL |
-| **AMD** (ROCm: Instinct MI300 series, Ryzen AI Max) | ✅ Docker, containerd or runveil (built-in rootless runtime) | 🧪 libvrocm memory quota; tested on MI300X under Docker/runveil | ✅ vLLM | ✅ vLLM | ✅ vLLM + NIXL |
+| **AMD** (ROCm: Instinct MI300 series, Ryzen AI Max) | ✅ Docker, containerd or runveil (built-in rootless runtime) | 🧪 rocm-slicing-shim memory quota; tested on MI300X under Docker/runveil | ✅ vLLM | ✅ vLLM | ✅ vLLM + NIXL |
 | **Huawei Ascend** (CANN) | ✅ Docker, containerd or runveil (built-in rootless runtime) | 🧪 vcann-rt memory quota; requires device-share permissions and a per-GPU probe | ✅ vLLM-Ascend | ✅ | ✅ vLLM-Ascend + Mooncake |
-| **T-Head PPU** (HGGC) | ✅ Docker, containerd or runveil (built-in rootless runtime) | 🧪 ppu-slicing-shim memory quota and weighted QoS; Docker only | ✅ vLLM | ✅ | ✅ SGLang + Mooncake (same node or over RDMA), vLLM + Mooncake (RDMA) |
+| **T-Head PPU** (HGGC) | ✅ Docker, containerd or runveil (built-in rootless runtime) | 🧪 ppu-slicing-shim memory quota and weighted QoS; Docker or Kubernetes | ✅ vLLM | ✅ | ✅ SGLang + Mooncake (same node or over RDMA), vLLM + Mooncake (RDMA) |
 | **Hygon DCU** (DTK) | ✅ Docker, containerd or runveil (built-in rootless runtime) | 🧪 Z100 / K100_AI / BW native vdev; Docker or runveil | ✅ vLLM | ✅ | ✅ vLLM 0.21 + Mooncake |
+| **Kunlunxin** (XRE: P800 PCIe) | ✅ Docker or containerd | — | — | — | — |
 | **Apple Silicon** (M1–M5, macOS 15+) | ✅ vllm-metal, MLX, llama.cpp as native processes | — | — | — | — |
 
 ✅ verified on real hardware · 🧪 experimental · — not supported or not validated. Sleep/wake beyond NVIDIA is
 verified on Ascend 910C, PPU ZW810E, Hygon K100 and AMD MI300X; the tested versions and limits are in
 [choosing features](docs-en/explanation/choosing-features.md#sleepwake-models-take-turns-on-one-gpu).
-GPUs are detected with the vendor CLIs (`nvidia-smi`, `npu-smi`, `ppu-smi`, `hy-smi`) or, for AMD, amdgpu sysfs and KFD, so there is no NVML or cgo
+GPUs are detected with the vendor CLIs (`nvidia-smi`, `npu-smi`, `ppu-smi`, `hy-smi`, `xpu-smi`) or, for AMD, amdgpu sysfs and KFD, so there is no NVML or cgo
 dependency. Per-combination status lives in the [support matrix](docs-en/reference/support-matrix.md) and the
 [Ascend matrix](docs-en/reference/ascend-support-matrix.md).
 
@@ -157,15 +159,15 @@ engine and accelerator. The deploy page recommends the specs that match the mode
 | Speech | Qwen3-ASR, Whisper large-v3, Qwen3-TTS, GLM-TTS, Voxtral, FishAudio S2-Pro |
 | Image / video | Qwen-Image, GLM-Image, Stable Diffusion 3.5, Wan 2.1 / 2.2, LTX-2.5, Cosmos3 |
 
-Catalog totals: 392 models from 77 organizations, 1,235 launch specs (745 NVIDIA, 216 PPU, 209 Ascend, 41 Hygon,
-15 AMD, 9 Apple). Models outside the catalog can be registered from Hugging Face, ModelScope, a local directory, NFS or an
-HTTP file server and deployed with your own arguments.
+Catalog totals: 404 models from 80 organizations, 1,295 launch specs (780 NVIDIA, 218 Ascend, 217 PPU, 42 Hygon,
+18 AMD, 18 Apple, 2 Kunlunxin). Models outside the catalog can be registered from Hugging Face, ModelScope, a local
+directory, NFS or an HTTP file server and deployed with your own arguments.
 
 ## Screenshots
 
 | | |
 |---|---|
-| ![Overview](docs/assets/screenshots/readme/overview.webp) **Overview** of a production cluster with NVIDIA, PPU, Ascend and Hygon GPUs | ![Scheduling](docs/assets/screenshots/readme/scheduling.webp) **Scheduling analysis**: models taking turns on the same GPUs, card by card |
+| ![Overview](docs/assets/screenshots/readme/overview.webp) **Overview** of a cluster with NVIDIA, PPU, Ascend and Hygon GPUs | ![Scheduling](docs/assets/screenshots/readme/scheduling.webp) **Scheduling analysis**: models taking turns on the same GPUs, card by card |
 | ![Monitor](docs/assets/screenshots/readme/monitor.webp) **Monitoring** in production: latency, request shapes, concurrency and KV cache over 7 days | ![Usage](docs/assets/screenshots/readme/usage.webp) **Usage analytics**: tokens by hour, API key and model |
 | ![PD](docs/assets/screenshots/readme/pd.webp) **PD disaggregation** on Ascend 910C: KV hand-off, latency breakdown, requests in flight | ![Health](docs/assets/screenshots/readme/health-ai.webp) **GPU health checks**, diagnosed by the AI assistant |
 | ![Network](docs/assets/screenshots/readme/network.webp) **Network test**: HCCS card-to-card reachability matrix | ![Benchmark](docs/assets/screenshots/readme/benchmark.webp) **Benchmark** report: throughput, TTFT, latency |
