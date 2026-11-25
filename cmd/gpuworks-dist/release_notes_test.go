@@ -70,3 +70,28 @@ func TestPackageReleaseNightlySkipsReleaseNotes(t *testing.T) {
 		t.Fatalf("err=%v output=%q", err, out)
 	}
 }
+
+// A release/YY.M branch build is packaged on the release channel under its
+// short commit: it needs no release notes, while any other id that is not a
+// version tag is still refused.
+func TestPackageReleaseBranchBuildOnReleaseChannel(t *testing.T) {
+	for _, tc := range []struct{ id, want string }{
+		{"74285901", "unsupported release arch: none"},
+		{"74285901ab34bb6c226e6667c4ed0a8b36d41f65", "unsupported release arch: none"},
+		{"v26.12.0-rc.1", "needs a vYY.M.PATCH release id or, for a release branch build, a short commit"},
+		{"7428590", "unsupported release arch: none"},
+		{"742859", "needs a vYY.M.PATCH release id or, for a release branch build, a short commit"},
+		{"7428590G", "needs a vYY.M.PATCH release id or, for a release branch build, a short commit"},
+	} {
+		t.Run(tc.id, func(t *testing.T) {
+			cmd := exec.Command("sh", filepath.Join("..", "..", "scripts", "package_release.sh"))
+			cmd.Env = append(os.Environ(), "GPUWORKS_RELEASE_CHANNEL=release", "GPUWORKS_RELEASE_ID="+tc.id,
+				"GPUWORKS_RELEASE_ARCHES=none", "TMPDIR="+t.TempDir())
+			out, err := cmd.CombinedOutput()
+			var exit *exec.ExitError
+			if !errors.As(err, &exit) || exit.ExitCode() != 2 || !strings.Contains(string(out), tc.want) || strings.Contains(string(out), "release notes") {
+				t.Fatalf("err=%v output=%q, want exit 2 with %q", err, out, tc.want)
+			}
+		})
+	}
+}

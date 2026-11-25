@@ -46,23 +46,29 @@ esac
 
 # A release build is named by its version tag, vYY.M.PATCH
 # (docs/dev/release.md#版本号); publish_dist.sh orders the release channel by it.
+# The head of a release/YY.M branch is also built on the release channel, under
+# its short commit, so the binaries follow that channel's tags for upgrades;
+# such a build is for development and testing, carries no release notes and is
+# never published (publish_dist.sh only publishes a version tag to the release
+# channel).
 case "$channel" in
   nightly) ;;
   release)
-    if ! printf '%s\n' "$release_id" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-      echo "release channel build needs a vYY.M.PATCH release id, got: $release_id" >&2
-      exit 2
-    fi
-    # Every release ships with its notes (docs/dev/release.md#版本号): the
-    # version's page in both languages and its row in the version list.
-    for notes in "docs/releases/$release_id.md" "docs-en/releases/$release_id.md"; do
-      if [ ! -f "$notes" ]; then
-        echo "release $release_id has no release notes: add $notes before tagging" >&2
+    if printf '%s\n' "$release_id" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+      # Every release ships with its notes (docs/dev/release.md#版本号): the
+      # version's page in both languages and its row in the version list.
+      for notes in "docs/releases/$release_id.md" "docs-en/releases/$release_id.md"; do
+        if [ ! -f "$notes" ]; then
+          echo "release $release_id has no release notes: add $notes before tagging" >&2
+          exit 2
+        fi
+      done
+      if ! grep -Fq "]($release_id.md)" docs/releases/README.md; then
+        echo "release $release_id is not listed in docs/releases/README.md" >&2
         exit 2
       fi
-    done
-    if ! grep -Fq "]($release_id.md)" docs/releases/README.md; then
-      echo "release $release_id is not listed in docs/releases/README.md" >&2
+    elif ! printf '%s\n' "$release_id" | grep -Eq '^[0-9a-f]{7,40}$'; then
+      echo "release channel build needs a vYY.M.PATCH release id or, for a release branch build, a short commit, got: $release_id" >&2
       exit 2
     fi
     ;;

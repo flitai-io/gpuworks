@@ -115,7 +115,12 @@ server 版本、系统镜像目录与内置推理模板目录通过同一个发�
 
 渠道 `nightly` 是每次 master 构建，release id 是短提交号；`release` 是每个版本 tag，release id 就是 tag（见[版本号](#版本号)）。
 二进制跟随构建时注入的渠道（`make CHANNEL=…`，默认 `nightly`；`scripts/package_release.sh` 读 `GPUWORKS_RELEASE_CHANNEL`，
-`release` 渠道只接受 `vYY.M.PATCH` 形式的 release id）。
+`release` 渠道的 release id 是 `vYY.M.PATCH`，或下面发布分支构建的短提交号）。
+
+发布分支 `release/YY.M` 的每次推送也跑核心门禁和四个构建 job，供开发测试下载这条线尚未打 tag 的修复。
+这些构建的 release id 是短提交号，二进制渠道为 `release`：装上它的 server 把这条线之后发布的 tag 当作更新，
+而不是 master 的 nightly，设置页把它标成开发测试版。它们只是 CI 产物，`release-publish` 不在发布分支上运行，
+`publish_dist.sh` 也拒绝把非 `vYY.M.PATCH` 的 release id 发布到 `release` 渠道，所以正式版用户的更新检查看不到它们。
 
 CI 的 `release-publish` 在 master 或版本 tag 的四个构建 job 全部成功后运行 `scripts/publish_dist.sh <渠道> dist`。
 它位于独立的 `publish` 阶段，因为 GitLab 14.0 的 needs 只能指向更早阶段的 job；

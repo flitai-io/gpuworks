@@ -117,7 +117,12 @@ and `<sha256>` is the content digest of the corresponding catalog file:
 
 The `nightly` channel is every master build, with the short commit hash as the release id; `release` is every version tag, with the tag as the release id (see [Version Numbers](#version-numbers)).
 Binaries follow the channel injected at build time (`make CHANNEL=…`, defaulting to `nightly`; `scripts/package_release.sh` reads `GPUWORKS_RELEASE_CHANNEL`,
-and the `release` channel accepts only release ids of the form `vYY.M.PATCH`).
+and a `release` channel release id is either `vYY.M.PATCH` or the short commit hash of a release branch build, described below).
+
+Every push to a `release/YY.M` branch also runs the core gates and the four build jobs, so the line's fixes that have no tag yet can be downloaded for development and testing.
+These builds use the short commit hash as the release id and put the binaries on the `release` channel: a server running one is offered the line's later tags as updates,
+not master's nightly, and the settings page labels it a development build. They are CI artifacts only: `release-publish` does not run on release branches,
+and `publish_dist.sh` refuses to publish a release id that is not `vYY.M.PATCH` to the `release` channel, so release users' update checks never see them.
 
 CI's `release-publish` runs `scripts/publish_dist.sh <channel> dist` after all four build jobs on master or on a version tag succeed.
 It runs in a separate `publish` stage because GitLab 14.0 allows needs to reference only jobs in earlier stages.
@@ -260,7 +265,7 @@ On new servers, Check for updates keeps conflicting custom or community entries,
 <!-- translation-source-sha256: 9aadf552a7b17d37e4bb529f3165267cf854b47d6e32bf8cbca5992f5ab761e4 ## Build Artifacts -->
 <!-- translation-source-sha256: 42932b93632fa7546204b34d9107d978394aecabb5dea1d91d77f4aecd28097e ## Release Documentation PDFs -->
 <!-- translation-source-sha256: d7ce5d3d9eeb9df54e385d8877ce972c83455c47a0527194b5eb544befb004a8 ## Version Numbers -->
-<!-- translation-source-sha256: 76a74f767d39dfbee237cef24fd07069619e753a65f6ffffb48339b5416d22b8 ## Distribution Channel -->
+<!-- translation-source-sha256: 45a4d948512339ccdfaa81f1a634562af3a1b2bfe63df90154a64cb86302bee8 ## Distribution Channel -->
 <!-- translation-source-sha256: 43e6e82a406f6474f33b1436024c8e7d2e9a8f5167bc8d4a1ed73cfd15fea161 ### GitHub Actions Releases -->
 <!-- translation-source-sha256: 32a0c93ed7537847e5c6869de4228919ff01e969e898cef1f5f3a268150adfcd ### Kubernetes Agent Image -->
 <!-- translation-source-sha256: 28162a8691fe3e14460cdf3b97b977de5713069ca949be433af79bd0c0473b36 ## Embedded Native Assets -->
