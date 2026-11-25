@@ -27,6 +27,11 @@ var ErrModelDownloadInactive = errors.New("the model file has no active public d
 
 // CancelModelDownload fences late status reports and withdraws the task without
 // deleting resumable data. Keeping the writer lets reconnect deliver withdrawal.
+//
+// With owner it is that service's withdrawal, and the row keeps the owner: a
+// deployment that needs the model there later starts it again
+// (ResumeWithdrawnDownload). Without one it is an operator's cancel, which no
+// deployment undoes: the row loses its owner.
 func (s *Store) CancelModelDownload(id uint, transferID, message string, owner ...uint) (*ModelFile, error) {
 	row, err := s.ModelFileByID(id)
 	if err != nil {
@@ -42,7 +47,11 @@ func (s *Store) CancelModelDownload(id uint, transferID, message string, owner .
 	if len(owner) > 0 {
 		q = q.Where("download_deployment_id = ?", owner[0])
 	}
-	result := q.Updates(map[string]any{"state": proto.MFCanceled, "rate_bps": 0, "message": message, "transfer_error_code": ""})
+	updates := map[string]any{"state": proto.MFCanceled, "rate_bps": 0, "message": message, "transfer_error_code": ""}
+	if len(owner) == 0 {
+		updates["download_deployment_id"] = 0
+	}
+	result := q.Updates(updates)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -51,6 +60,33 @@ func (s *Store) CancelModelDownload(id uint, transferID, message string, owner .
 	}
 	s.publishModelFile(id, proto.MFCanceled)
 	return s.ModelFileByID(id)
+}
+
+// WithdrawnWithService reports whether the row is a download canceled because
+// the service it was for was deleted or stopped, as opposed to one an
+// operator canceled.
+func (mf *ModelFile) WithdrawnWithService() bool {
+	return mf != nil && mf.State == proto.MFCanceled && mf.DownloadDeploymentID != 0
+}
+
+// ResumeWithdrawnDownload makes a download withdrawn with its service a
+// pending acquisition for deploymentID, as if the row had just been created
+// for it: a peer or the public source serves it, under a new transfer, and
+// the agent resumes from the bytes the canceled one left. A row that changed
+// since observed was read is ErrModelDownloadInactive.
+func (s *Store) ResumeWithdrawnDownload(observed *ModelFile, deploymentID uint) (*ModelFile, error) {
+	updates := transferReset(observed.Path, proto.MFPending, proto.ModelAcquireAuto, map[string]any{"download_deployment_id": deploymentID, "rate_limit": 0})
+	result := s.db.Model(&ModelFile{}).
+		Where("id = ? AND state = ? AND transfer_id = ? AND download_deployment_id <> 0", observed.ID, proto.MFCanceled, observed.TransferID).
+		Updates(updates)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, ErrModelDownloadInactive
+	}
+	s.publishModelFile(observed.ID, proto.MFPending)
+	return s.ModelFileByID(observed.ID)
 }
 
 // SetDownloadDeployment associates only the named transfer. A later explicit

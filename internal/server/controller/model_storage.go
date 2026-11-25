@@ -78,6 +78,17 @@ func (c *Controller) acquireLocalModel(ctx context.Context, node *store.Node, de
 		}
 		mf = created
 	}
+	if mf.WithdrawnWithService() {
+		resumed, err := c.store.ResumeWithdrawnDownload(mf, dep.ID)
+		if errors.Is(err, store.ErrModelDownloadInactive) {
+			return nil // changed under this pass; its event brings the next one
+		}
+		if err != nil {
+			return err
+		}
+		c.log.Info("restarting a download withdrawn with its service", "dep", dep.ID, "model", model.ID, "node", node.UUID)
+		mf = resumed
+	}
 	handled, refused := c.syncModelWithin(ctx, node, model, mf, pinned)
 	if !handled {
 		// A definitive download failure (already reported by the agent,
