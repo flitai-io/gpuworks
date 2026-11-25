@@ -101,7 +101,7 @@ func TestFleetServerOriginBenchmarkAcrossProcesses(t *testing.T) {
 	}
 	t.Cleanup(func() { stopProcess(host) })
 	waitForFile(t, readyPath, time.Minute)
-	if _, err := fleet.WaitFleetOnline(client, nodeCount, 10*time.Minute); err != nil {
+	if _, err := fleet.WaitFleetCards(client, nodeCount, max(gpusPerNode, 1), 10*time.Minute); err != nil {
 		t.Fatal(err)
 	}
 

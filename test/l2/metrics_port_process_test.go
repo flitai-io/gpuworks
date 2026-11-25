@@ -382,7 +382,9 @@ func TestMetricsPortServedOnItsOwnPortIsScrapedByTheRealAgent(t *testing.T) {
 	stopProcess(server)
 	server = startServer()
 	waitHTTP(t, base+"/api/v1/healthz", serverHealthTimeout, func(r *http.Response) bool { return r.StatusCode == http.StatusUnauthorized }, serverLogPath)
-	waitNode(t, base, adminToken, func(candidate processNode) bool { return candidate.UUID == node.UUID && candidate.State == "online" })
+	// A deployment of the edited template follows, so wait for the cards too:
+	// online is set at the handshake, before the status report that carries them.
+	waitNodeWithCards(t, base, adminToken, node.UUID)
 	after := readMetricsPortInstances(t, dataDir)
 	for deployment, in := range before {
 		got := after[deployment]

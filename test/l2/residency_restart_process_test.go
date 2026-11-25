@@ -73,7 +73,7 @@ func startRestartableRig(t *testing.T, name string) *restartableRig {
 			func(r *http.Response) bool { return r.StatusCode == http.StatusUnauthorized })
 		rig.token = login(t, base)
 		if rig.node != "" {
-			waitNode(t, base, rig.token, func(n processNode) bool { return n.UUID == rig.node && n.State == "online" })
+			waitNodeWithCards(t, base, rig.token, rig.node)
 		}
 	}
 	rig.stop = func() {

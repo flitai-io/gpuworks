@@ -93,7 +93,7 @@ func TestFleet1000NodesRedeployChurnAcrossProcesses(t *testing.T) {
 		} else {
 			writeFleetRoster(t, nextRosterPath, roster[from:])
 		}
-		if _, err := fleet.WaitFleetOnline(client, limit, 10*time.Minute); err != nil {
+		if _, err := fleet.WaitFleetCards(client, limit, max(fleet.EnvInt("GPUWORKS_FLEET_GPUS", 1), 1), 10*time.Minute); err != nil {
 			t.Fatal(err)
 		}
 		t.Logf("%s: online in %s", phase, time.Since(start).Round(time.Millisecond))

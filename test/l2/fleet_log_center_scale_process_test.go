@@ -98,7 +98,7 @@ func TestFleetLogCenterScaleAcrossProcesses(t *testing.T) {
 	t.Cleanup(func() { stopProcess(host) })
 	waitForFile(t, readyPath, time.Minute)
 
-	if online, err := fleet.WaitFleetOnline(client, nodeCount, 10*time.Minute); err != nil {
+	if online, err := fleet.WaitFleetCards(client, nodeCount, 1, 10*time.Minute); err != nil {
 		t.Fatalf("%v", err)
 	} else {
 		t.Logf("%d nodes online in %s", online, time.Since(start).Round(time.Millisecond))
