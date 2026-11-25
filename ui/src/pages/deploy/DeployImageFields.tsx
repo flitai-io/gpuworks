@@ -23,6 +23,7 @@ import type {
 import { localizedText } from "../../i18n/localizedText";
 import { type ImageSelectionMode } from "./deployHelpers";
 import { warningText } from "./deployWarnings";
+import { splitImageRef } from "../images/ImageVersionColumns";
 import ContainerOverridesEditor from "./ContainerOverridesEditor";
 import { effectiveShmDefaultBytes } from "./shmDefault";
 
@@ -140,7 +141,7 @@ export default function DeployImageFields({
                 optionFilterProp="label"
                 options={catalogVersions.map((image) => ({
                   value: image.id,
-                  label: `${image.engine_version ? `v${image.engine_version}` : t("image.engineVersionUndeclared")} · ${image.framework || "framework"} ${image.framework_version || "?"} · ${image.arch || "multi"}`,
+                  label: `${splitImageRef(image.image_ref).tag} · ${image.engine_version ? `v${image.engine_version}` : t("image.engineVersionUndeclared")} · ${image.framework || "framework"} ${image.framework_version || "?"} · ${image.arch || "multi"}`,
                 }))}
               />
             </Form.Item>

@@ -233,10 +233,12 @@ test("selecting a catalog image chooses its engine when no template is selected"
       <DeployImageRow
         acquisition={{ image: { image: "catalog/vllm:v1", options: [
           { image: "catalog/vllm:v1", reason: "catalog_match", compatible: true },
+          { image: "catalog/omni:v1", reason: "catalog_match", compatible: true },
           { image: "catalog/sglang:v1", reason: "catalog_match", compatible: true },
         ] } }}
         images={[
           { image_ref: "catalog/vllm:v1", engine: "vllm" },
+          { image_ref: "catalog/omni:v1", engine: "vllm-omni" },
           { image_ref: "catalog/sglang:v1", engine: "sglang" },
         ] as never}
       />
@@ -249,6 +251,13 @@ test("selecting a catalog image chooses its engine when no template is selected"
   await waitFor(() => {
     assert.equal(formInstance?.getFieldValue("image"), "catalog/sglang:v1");
     assert.equal(formInstance?.getFieldValue("engine"), "sglang");
+  });
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: text("imageOptions") }));
+  const omni = await screen.findAllByText("catalog/omni:v1");
+  fireEvent.click(omni[omni.length - 1]);
+  await waitFor(() => {
+    assert.equal(formInstance?.getFieldValue("image"), "catalog/omni:v1");
+    assert.equal(formInstance?.getFieldValue("engine"), "vllm");
   });
 });
 

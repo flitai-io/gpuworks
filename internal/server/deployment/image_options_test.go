@@ -75,3 +75,98 @@ func TestDeploymentImageTargetCarriesEveryNodeFact(t *testing.T) {
 		t.Fatalf("selected-profile target = %+v", selected)
 	}
 }
+
+func TestManualOmniImageUsesVLLMEngine(t *testing.T) {
+	st, err := store.Open("file:manual_omni?mode=memory&cache=shared", bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if _, err = imagecatalog.SyncSeed(st); err != nil {
+		t.Fatal(err)
+	}
+	const ref = "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-910b-vllm-omni0.32.0-r2-linux-amd64"
+	s := New(Deps{Store: st})
+	target := deploy.ImageTarget{Engine: "vllm", Vendor: "ascend", Framework: "cann", PlatformArch: "amd64", PlatformOS: "linux"}
+	for _, selection := range []templateSelection{{}, {Spec: &store.InferenceSpecRow{Engine: "vllm"}}} {
+		found := false
+		for _, o := range s.deploymentImageOptions(target, selection, "", nil) {
+			if o.Image == ref && o.Compatible {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("Omni unavailable with template=%t", selection.Spec != nil)
+		}
+	}
+	if auto := imagecatalog.Resolve(st, target); auto.Image == ref {
+		t.Fatal("auto-selected manual Omni image")
+	}
+	target.Override = ref
+	if pick := imagecatalog.Resolve(st, target); pick.Blocking || len(pick.Warnings) != 0 {
+		t.Fatalf("Omni override: %+v", pick)
+	}
+	target.PlatformArch = "arm64"
+	if pick := imagecatalog.Resolve(st, target); !pick.Blocking {
+		t.Fatal("accepted amd64 image on arm64")
+	}
+}
+
+func TestManualOmniUsesBaseVersionForVLLMDefaults(t *testing.T) {
+	st, err := store.Open(":memory:", bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if _, err := imagecatalog.SyncSeed(st); err != nil {
+		t.Fatal(err)
+	}
+	svc := New(Deps{Store: st})
+	const ref = "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre-vllm0.25.1-omni-r1"
+	row, err := st.ImageByRef(ref)
+	if err != nil || row.EngineVersion != "0.22.1.dev145+gdae5023bb.kunlun" {
+		t.Fatalf("catalog=%v err=%v", row, err)
+	}
+	command, err := deploy.ResolveEffectiveCommand(deploy.ContainerOverrides{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{nil, {"--omni"}} {
+		version := svc.imageEngineVersion("vllm", ref)
+		out, err := deploy.Materialize(deploy.MaterializeInput{Engine: "vllm", Command: &command, EngineVersion: version, TemplateArgs: args})
+		if err != nil || version != "0.25.1" || out.Quick.EnableRequestMetrics == nil || !*out.Quick.EnableRequestMetrics {
+			t.Fatalf("args=%v vllm=%s metrics=%v err=%v", args, version, out.Quick.EnableRequestMetrics, err)
+		}
+	}
+}
+
+func TestPPUReleasesAvailableForManualDeployment(t *testing.T) {
+	st, err := store.Open(":memory:", bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if _, err := imagecatalog.SyncSeed(st); err != nil {
+		t.Fatal(err)
+	}
+	svc := New(Deps{Store: st})
+	for engine, tag := range map[string]string{"vllm": "hggc13.0-vllm0.34.0-r1", "sglang": "hggc13.0-sglang0.5.23-r1"} {
+		target := deploy.ImageTarget{Engine: engine, Vendor: "ppu", Framework: "hggc", FrameworkVersion: "13.0", PlatformOS: "linux", PlatformArch: "amd64"}
+		template := templateSelection{Spec: &store.InferenceSpecRow{Engine: engine}}
+		options := svc.deploymentImageOptions(target, template, "", nil)
+		ref := "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:" + tag
+		found := false
+		for _, option := range options {
+			if option.Image == ref && option.Compatible {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("%s missing from compatible PPU options", ref)
+		}
+		if auto := imagecatalog.Resolve(st, target); auto.Image == ref {
+			t.Errorf("automatically selected manual-only %s", ref)
+		}
+	}
+}

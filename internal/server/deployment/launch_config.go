@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"gpuworks.ai/gpuworks/internal/engines"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
@@ -247,6 +248,11 @@ func launchConfigDiff(req *dto.DeployRequest, selection templateSelection) []str
 func (s *Service) imageEngineVersion(engine, image string) string {
 	catalogVersion := ""
 	if row, err := s.d.Store.ResolveImageRef(image); err == nil {
+		// Omni images can launch plain vLLM. Its CLI gates follow base vLLM,
+		// while the Omni catalog series records the plugin distribution.
+		if row.Engine == engines.VLLMOmni && strings.EqualFold(engine, engines.VLLM) {
+			return deploy.ImageEngineVersion(engine, row.ImageRef, "")
+		}
 		catalogVersion = row.EngineVersion
 	}
 	return deploy.ImageEngineVersion(engine, image, catalogVersion)

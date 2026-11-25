@@ -5,6 +5,7 @@ import type {
   ImageCatalogEntry,
   ProductWarning,
 } from "../../api";
+import { deploymentEngineForImage } from "./useDeployImageState";
 import { warningText } from "./deployWarnings";
 import { useControlLocked } from "./DeployEditContext";
 
@@ -66,7 +67,7 @@ export default function DeployImageRow({
             if (!templateID && catalogImage?.engine && !engineLocked) {
               form.setFieldsValue({
                 image: value,
-                engine: catalogImage.engine,
+                engine: deploymentEngineForImage(catalogImage.engine),
               });
               return;
             }
