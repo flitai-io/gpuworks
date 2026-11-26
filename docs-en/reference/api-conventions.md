@@ -181,7 +181,7 @@ The following table lists common management API cases. The HTTP status indicates
 
 Clients first check the HTTP status, then read `code` and `params`. For a generic or unrecognized code, they must still retain and display `error`.
 These conventions apply to the management API. For the inference gateway's error format, see [OpenAI-Compatible Gateway](openai-gateway.md). Error codes are defined in
-`internal/server/api/errors.go` and `internal/server/messages` (generic codes in `messages/http.go`). Individual endpoints may also return business-specific error codes.
+`internal/server/api/errors.go`, the per-area `errors_<area>.go` files (such as `errors_images.go` for the image catalog and update sources), and `internal/server/messages` (generic codes in `messages/http.go`). Individual endpoints may also return business-specific error codes.
 
 The cluster enrollment listener also uses `CLUSTER_TLS_REQUIRED` (426, enrollment requires a completed HTTPS handshake), `CLUSTER_REQUEST_INVALID` (400), `CLUSTER_INVITATION_REQUIRED` (401, enrollment needs the invitation bearer), `CLUSTER_IDENTITY_MISMATCH` (409), `CLUSTER_ADMISSION_REJECTED` (403), and `CLUSTER_UNAVAILABLE` (503). Issuing an invitation uses the existing management session; a non-administrator still receives `ADMINISTRATOR_REQUIRED`. While a control-plane cluster upgrades its schema, every member answers business requests (including `/api/v1/readyz`) with 503 `CLUSTER_UPGRADE_IN_PROGRESS` and `Retry-After`; the request was not processed, and the members recover on their own when the upgrade ends.
 
@@ -206,6 +206,6 @@ This check is included in `make test-unit`.
 <!-- translation-source-sha256: 91f772294d3153eda1852c479296e5d88259cadd4a779ade09b249f546cda4f2 ## Collections -->
 <!-- translation-source-sha256: f48d1e262baadf4e58cd76b542e243659f052e731b0b0c9089ff9ec9f5f92d51 ## Opaque Fields -->
 <!-- translation-source-sha256: 45246930eb15fb28bdee8f1e45cdc066df26656c641684fb62651b59316c2f53 ## Errors -->
-<!-- translation-source-sha256: a37a4acd1e93e90eec106457859d9276dffe3e93770dbfba52ca6b7232db4ddc ### Common HTTP Statuses and Error Codes -->
+<!-- translation-source-sha256: cea858b690cb14c48c1577245f75c103933935a09c6b866d39dd7b8784d5dbac ### Common HTTP Statuses and Error Codes -->
 <!-- translation-source-sha256: bdd75ee5112cec32ed080569cff9a49c8a785efea72efb8951bb812243add9a4 ## Checks -->
 <!-- translation-localized-code-block: bae0e4c7d262a34ee3ef790d5e20acb056000102304e33d31fffd72989b4b11c 575be17f25555cdcb9a913a995f63b3814eab0f2391908631ca49f5fa2d37787 Translate password input prompt -->

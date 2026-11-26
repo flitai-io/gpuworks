@@ -135,7 +135,7 @@ image catalog synced catalog_version=2026-10-09.f085e40b created=0 updated=25 de
 ### manifest 格式
 
 内嵌种子使用 schema 4，服务端兼容导入 schema 2、3。遇到不支持的 schema 返回 HTTP 400
-`IMAGE_MANIFEST_INVALID`。`catalog_version` 必填，形如 `<日期>.<内容 hash 前 8 位>`，用于展示、日志与更新时的等值比较；可选的 `sha256` 是正文完整性哈希（按 `sha256` 字段置空后的规范 JSON 计算），存在时不匹配即拒绝。
+`IMAGE_MANIFEST_INVALID`。`catalog_version` 必填，形如 `<日期>.<内容 hash 前 8 位>`，日期为 `YYYY-MM-DD`（生成器拒绝其他格式），用于展示、日志与更新时的等值比较；可选的 `sha256` 是正文完整性哈希（按 `sha256` 字段置空后的规范 JSON 计算），存在时不匹配即拒绝。
 
 ```json
 {

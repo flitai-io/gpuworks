@@ -2436,7 +2436,7 @@ Playground 与 `/v1` 网关的边界、外部模型命名 `external:<config-id>:
   `internal/server/api/router_inventory_test.go` 中的 `TestRouterInventoryMatchesCompleteContract` 逐条断言实际路由树，
   新增或删除路由时必须同步更新该测试。
 - 管理鉴权由 `internal/server/api/auth.go` 的 `managementAuth` 校验，管理员操作再经过 `managementAdmin`。
-  产品错误使用 `messages.ProductError`；130+ 个稳定错误码定义在 `internal/server/api/errors.go`，本文不逐一罗列。
+  产品错误使用 `messages.ProductError`；130+ 个稳定错误码定义在 `internal/server/api/errors*.go`，本文不逐一罗列。
 - `make check-api-conventions` 从类型上检查字段命名和列表结构，详见 [API 规范](api-conventions.md)。
 - `internal/server/app` 在生产装配时始终为 `/v1/*`、`/v1/models`、`/api/v1/playground/v1/*` 注入非空
   `ProxyV1`、`ProxyModels`、`PlaygroundV1` handler。路由清单测试使用零值 `Deps{}`，因此这三个网关路由

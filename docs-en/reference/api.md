@@ -2426,7 +2426,7 @@ The following conventions maintain the endpoint inventory; they are not prerequi
   `TestRouterInventoryMatchesCompleteContract` in `internal/server/api/router_inventory_test.go` asserts each entry in the actual route tree;
   update this test whenever you add or remove a route.
 - Management authentication is checked by `managementAuth` in `internal/server/api/auth.go`; administrator operations also pass through `managementAdmin`.
-  Product errors use `messages.ProductError`; 130+ stable error codes are defined in `internal/server/api/errors.go` and are not listed individually here.
+  Product errors use `messages.ProductError`; 130+ stable error codes are defined in `internal/server/api/errors*.go` and are not listed individually here.
 - `make check-api-conventions` checks field naming and list structures at the type level; see [API Conventions](api-conventions.md).
 - During production assembly, `internal/server/app` always injects non-nil
   `ProxyV1`, `ProxyModels`, and `PlaygroundV1` handlers for `/v1/*`, `/v1/models`, and `/api/v1/playground/v1/*`. Route inventory tests use zero-value `Deps{}`, so these three gateway routes
@@ -2556,6 +2556,6 @@ An unknown `target_vendor` on `/api/v1/engines` returns 400. If custom-command f
 <!-- translation-source-sha256: fab893a3efb3fa86d45b0a6e875f1cebad71738dc6424310e5af4b801fa794f4 ### Console Endpoints `/api/v1/batches` -->
 <!-- translation-source-sha256: d90c2a891f76775aec3f7b48248481bd52e0751724b4a75648d8f62318cd8799 ### OpenAI-Compatible Files and Batches Endpoints -->
 <!-- translation-source-sha256: a896a5dab1c99b94dd8ffc62b82650f6309812d3ef0bf90b28daeb38d7cc2c25 ## Out of Scope -->
-<!-- translation-source-sha256: a065b875b11936222db3d33c7671feb5120f5ed464965d91d9278a81bb51ecb0 ## Route and Contract Maintenance -->
+<!-- translation-source-sha256: c4754e1c0339b7b8667346967d3065633f65a4f92b8e5c978e7d78101e64be0e ## Route and Contract Maintenance -->
 <!-- translation-source-sha256: 1f082a1dc64217e23acc8eb01bf5b2781011ef80a37db2325a8ca6b8f758ede1 ### Console manifest and extension routes -->
 <!-- translation-source-sha256: 3b39ae121cdbd7a4964c45d1deacffa4a4772f5ddd32c4530ca202ffcd247aef ### Whether GPU capacity is known -->

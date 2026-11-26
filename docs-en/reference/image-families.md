@@ -135,7 +135,7 @@ Response (the startup sync log uses these same counters):
 ### Manifest Format
 
 The embedded seed uses schema 4. The server also imports schemas 2 and 3. Unsupported schemas return HTTP 400
-`IMAGE_MANIFEST_INVALID`. `catalog_version` is required, takes the form `<date>.<first-8-content-hash-characters>`, and is used for display, logging and equality checks. The optional `sha256` is a content integrity hash (calculated over canonical JSON with the `sha256` field set to an empty value); if present, a mismatch causes rejection.
+`IMAGE_MANIFEST_INVALID`. `catalog_version` is required, takes the form `<date>.<first-8-content-hash-characters>` with the date as `YYYY-MM-DD` (the generator refuses any other format), and is used for display, logging and equality checks. The optional `sha256` is a content integrity hash (calculated over canonical JSON with the `sha256` field set to an empty value); if present, a mismatch causes rejection.
 
 ```json
 {
@@ -255,7 +255,7 @@ runtime explanation.
 <!-- translation-source-sha256: e2b838cefca66793fc982b53cee60799b35fbb3f686107db9c5ee6d098b8afed ## System Images -->
 <!-- translation-source-sha256: 39168c329fca1b60b4dac45940c92fb95a7eac8dab8b30e86e9ea76fcc060e2a ### Startup Sync -->
 <!-- translation-source-sha256: 571821954b1f6897853432ab61d81d5f2ebe445bd78f9bd8e944f7766cf73f4c ### Updating the Catalog -->
-<!-- translation-source-sha256: 350e814cf682e2ae1de88e80ea7ef93b75ece3210572861146ecc5470a1e49b0 ### Manifest Format -->
+<!-- translation-source-sha256: 397515e4600d2a33b15a7f7f56b11e66783f00d6cfd310d01031a84f766215d9 ### Manifest Format -->
 <!-- translation-source-sha256: da92f9dfca846e8a1b55ab4708a4b1f01f97ccd6dd44145d4619b20fd54ee18e ## Community Images -->
 <!-- translation-source-sha256: 77522a45a9d473abc1fd18744cbf1bd083213fe1c1c54f96fe725d892d366f57 ## Custom Images -->
 <!-- translation-source-sha256: 805025bcb72e52bd5d6cb9496e9072b968df6e5021ac6078fd9fad2a474dd203 ## Rolling Tags -->
