@@ -104,7 +104,7 @@ There are only two update paths for the system catalog, both on the Images page'
   `UPDATE_SOURCES_UNAVAILABLE`. If the index is usable but no source provides a catalog file matching it, it returns 502 `UPDATE_DOWNLOAD_FAILED`
   (both include each source's reason in `detail`). If the channel has not published an image catalog, it returns 404 `UPDATE_NOT_PUBLISHED`. The database remains unchanged in all these cases.
 - **Upload manifest**: `POST /api/v1/images/import`, with the manifest JSON itself as the request body. Use this when the server cannot access the internet:
-  on a machine with internet access, download the current channel's `<channel>/manifest.json` from any release source (such as `https://dl.gpuworks.ai/release/manifest.json`, the same file as the image catalog in the channel's index), then upload it.
+  Download `<channel>/manifest.json` after upgrading the server to a build that supports schema 4. Schemas 2 and 3 preserve a known measurement for the same immutable tag and architecture. Omitting the field in schema 4 clears the measurement. See [offline catalog updates](../how-to/deploy-offline.md).
 
 Both paths record the imported `catalog_version` as the current catalog version. The settings page's Version and updates section uses it to show whether updates are available.
 An uploaded catalog that differs from the channel's is not an available update; its row reads "Uploaded". "Check for updates" and "Use the channel's catalog" then both ask for confirmation first; only after it does the channel's catalog replace the upload under the rules below, and versions that only the uploaded catalog has are deleted or become old versions. Without `replace_uploaded=true` the API answers 409 `IMAGE_CATALOG_UPLOADED`.
@@ -133,15 +133,14 @@ Response (the startup sync log uses these same counters):
 
 ### Manifest Format
 
-The embedded seed and upstream `manifest.json` are the same file. `schema_version` must be `3` (`2` is also accepted for compatibility; other values return 400
-`IMAGE_MANIFEST_INVALID`). `catalog_version` is required, takes the form `<date>.<first-8-content-hash-characters>`, and is used only for display and logging,
-not comparisons. The optional `sha256` is a content integrity hash (calculated over canonical JSON with the `sha256` field set to an empty value); if present, a mismatch causes rejection.
+The embedded catalog uses schema 4. Its optional `download_size_bytes` sums compressed registry layers for one platform, using the maximum for a multi-platform tag. A positive integer records a measurement. Omit the field or set it to zero for an unknown size. Schemas 2 and 3 reject a nonzero download size. The signed index references the same file as `<channel>/manifest.json` through `image_catalog`. The server accepts schemas 2, 3 and 4 (other values return 400
+`IMAGE_MANIFEST_INVALID`). `catalog_version` is required. The server compares local and channel version strings to identify updates. The full catalog uses `<date>.<first 8 characters of the series hash>`.
+The optional `sha256` is a content integrity hash (calculated over canonical JSON with the `sha256` field set to an empty value); if present, a mismatch causes rejection.
 
 ```json
 {
-  "schema_version": 3,
-  "catalog_version": "2026-10-09.f085e40b",
-  "sha256": "<content-sha256-optional>",
+  "schema_version": 4,
+  "catalog_version": "2026-11-26.87c35c95",
   "series": [
     {
       "name": "vLLM · CUDA",
@@ -150,16 +149,16 @@ not comparisons. The optional `sha256` is a content integrity hash (calculated o
       "framework": "cuda",
       "versions": [
         {
-          "name": "cuda13.0-vllm0.30.0-r2",
-          "image_ref": "gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r2",
+          "name": "cuda13.0-vllm0.30.0-r4",
+          "image_ref": "gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4",
           "engine_version": "0.30.0",
           "framework_version": "13.0",
           "arch": "multi",
           "registry_sources": [
-            "quay.io/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r2",
-            "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r2"
+            "quay.io/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4",
+            "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4"
           ],
-          "notes": "..."
+          "download_size_bytes": 10055140754
         }
       ]
     }
@@ -254,8 +253,8 @@ runtime explanation.
 <!-- translation-source-sha256: 883ab9f8b2d790c67dcf7570053662a81dc49f9ffb70f511ff169cbee4275bd2 ## Node Image Identity and Periodic Inventory -->
 <!-- translation-source-sha256: e2b838cefca66793fc982b53cee60799b35fbb3f686107db9c5ee6d098b8afed ## System Images -->
 <!-- translation-source-sha256: 39168c329fca1b60b4dac45940c92fb95a7eac8dab8b30e86e9ea76fcc060e2a ### Startup Sync -->
-<!-- translation-source-sha256: 68bed54e3458c74443e91677b50b6f95dc701fc08b2e692fad5d1ded8957aecb ### Updating the Catalog -->
-<!-- translation-source-sha256: 08cbd3a68161bac743ed7d8cb6f162c396865921af93b019a514f113f24a1a3a ### Manifest Format -->
+<!-- translation-source-sha256: 96f227144e899e08957938097c6261ffc2e7f571289bf3d999145e8abce0a9c7 ### Updating the Catalog -->
+<!-- translation-source-sha256: eefaf75a3c944901f5184a31ee9e7f3d467f9a5d86fdb9ceb6eab32919a4af2f ### Manifest Format -->
 <!-- translation-source-sha256: da92f9dfca846e8a1b55ab4708a4b1f01f97ccd6dd44145d4619b20fd54ee18e ## Community Images -->
 <!-- translation-source-sha256: 77522a45a9d473abc1fd18744cbf1bd083213fe1c1c54f96fe725d892d366f57 ## Custom Images -->
 <!-- translation-source-sha256: 805025bcb72e52bd5d6cb9496e9072b968df6e5021ac6078fd9fad2a474dd203 ## Rolling Tags -->

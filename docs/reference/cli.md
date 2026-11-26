@@ -596,7 +596,7 @@ server 在 `/install.sh` 提供的引导脚本，添加节点时界面生成 `cu
 ### gpuworks-image-manifest
 
 从 gpuworks-runner 构建矩阵（`build/runner-images/matrix.yaml`）生成系统镜像目录
-manifest（schema 3）。同一份输出既是 server 内嵌的种子 `internal/server/imagecatalog/catalog-seed.json`，也随每次发布进入
+manifest（schema 4）。同一份输出既是 server 内嵌的种子 `internal/server/imagecatalog/catalog-seed.json`，也随每次发布进入
 [发布通道](#gpuworks-dist)。格式与导入规则见[镜像目录](image-families.md#manifest-格式)。
 
 | flag | 默认值 | 说明 |

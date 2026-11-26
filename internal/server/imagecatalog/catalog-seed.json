@@ -1,7 +1,7 @@
 {
-  "schema_version": 3,
-  "catalog_version": "2026-11-25.e54abab6",
-  "sha256": "f0223ad43195a6105d2e7f1f33b3a14b174958864e8b2a7020c3c1cb7c03ccaf",
+  "schema_version": 4,
+  "catalog_version": "2026-11-26.8f5c292b",
+  "sha256": "e16fd1071eccf378cc2424ccb14c0101f6312669aa7bc74fabb08788ef0832c8",
   "series": [
     {
       "name": "MLX Audio · Metal",
@@ -19,6 +19,7 @@
             "quay.io/gpuworks/gpuworks-runner:metal15.0-mlx-audio0.5.9-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:metal15.0-mlx-audio0.5.9-r1"
           ],
+          "download_size_bytes": 299757988,
           "notes": "Apple silicon 的 mlx-audio 档（目录引擎 callable）：ASR/TTS 模板用，入口 gpuworks-mlx-audio 预加载 --model 并补 /health。webrtcvad 换成同模块的 webrtcvad-wheels（原包只有源码），misaki[en] 与 spaCy 英文模型预装，运行时不联网。 构建：build/host-envs/build.sh mlx-audio 0.5.9 r1。"
         }
       ]
@@ -39,6 +40,7 @@
             "quay.io/gpuworks/gpuworks-runner:metal15.0-mlx-vlm0.7.8-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:metal15.0-mlx-vlm0.7.8-r2"
           ],
+          "download_size_bytes": 231149761,
           "notes": "Apple silicon 的 mlx-vlm 档（目录引擎 callable）：视觉/OCR 模板用，入口 gpuworks-mlx-vlm 把实例钉在 --model 上（网关会改写请求的 model）。r2 修正该入口 截断流式响应的问题。构建：build/host-envs/build.sh mlx-vlm 0.7.8 r2。"
         },
         {
@@ -51,6 +53,7 @@
             "quay.io/gpuworks/gpuworks-runner:metal15.0-mlx-vlm0.8.1.dev20261121-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:metal15.0-mlx-vlm0.8.1.dev20261121-r1"
           ],
+          "download_size_bytes": 215014159,
           "notes": "Apple silicon 的 mlx-vlm 档，与 0.7.8 档并存（PaddleOCR-VL 的 Mac 模板仍用 0.7.8， 它在那一档上实测过）。上游主线 2026-11-21 的提交 f1618d6：Inkling 2 Mini（inkling2_loop， Blaizzy/mlx-vlm #2778）与其 tool parser（#2783）合入时还没有 PyPI 版本（最新 0.8.0 早于它们），版本号按 PEP 440 写作 0.8.1 的开发版。入口 gpuworks-mlx-vlm 把回复里 回显的模型路径换回请求的名字。Inkling 2 Mini 的 Mac MLX 模板用这档；0.8.1 发布后换正式版。 构建：GPUWORKS_HOSTENV_COMMIT=f1618d6d52be4ef25d3fe65270f7528a59c55df3 build/host-envs/build.sh mlx-vlm 0.8.1.dev20261121 r1。"
         }
       ]
@@ -71,6 +74,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann8.5-910b-sglang0.5.12.post1-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-910b-sglang0.5.12.post1-r2"
           ],
+          "download_size_bytes": 5977820703,
           "notes": "CANN 8.5 的存量机队 sglang 档，含 diffusion 依赖。\nrequires: engine, diffusion, overlays\nmodel: 910b"
         },
         {
@@ -83,6 +87,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann8.5-a3-sglang0.5.12.post1-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-a3-sglang0.5.12.post1-r2"
           ],
+          "download_size_bytes": 5951392388,
           "notes": "A3（910C）的 CANN 8.5 存量档，其余同 910b 档。\nrequires: engine, diffusion, overlays\nmodel: a3"
         },
         {
@@ -95,6 +100,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.0-910b-sglang0.5.18-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-910b-sglang0.5.18-r2"
           ],
+          "download_size_bytes": 6560264423,
           "notes": "910B 的 sglang 档，CANN 9.0.0，含 diffusion 依赖。\nrequires: engine, diffusion, overlays\nmodel: 910b"
         },
         {
@@ -107,6 +113,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.0-a3-sglang0.5.18-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-a3-sglang0.5.18-r2"
           ],
+          "download_size_bytes": 6538042779,
           "notes": "A3（910C）的 sglang 档，其余同 910b 档。\nrequires: engine, diffusion, overlays\nmodel: a3"
         },
         {
@@ -119,6 +126,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.1-a3-sglang0.5.23-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-a3-sglang0.5.23-r1"
           ],
+          "download_size_bytes": 7153848941,
           "notes": "A3（910C）的 sglang 0.5.23 档，CANN 9.1，含 diffusion 依赖。\nmodel: a3"
         }
       ]
@@ -139,6 +147,7 @@
             "quay.io/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.18-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.18-r2"
           ],
+          "download_size_bytes": 18382693457,
           "notes": "CUDA 12.x 的 sglang 档，含 diffusion 依赖。\nrequires: engine, engine_import, diffusion, overlays"
         },
         {
@@ -151,6 +160,7 @@
             "quay.io/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.21-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.21-r2"
           ],
+          "download_size_bytes": 15237583061,
           "notes": "CUDA 13 的 sglang 档，含 diffusion 依赖（从 base 的 sglang 源码树安装， 装不上即构建失败）。\nrequires: engine, engine_import, diffusion, overlays"
         },
         {
@@ -163,6 +173,7 @@
             "quay.io/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.23-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-sglang0.5.23-r2"
           ],
+          "download_size_bytes": 16236673467,
           "notes": "CUDA 13 的 sglang 0.5.23 档，含 diffusion 依赖，amd64 与 arm64。"
         }
       ]
@@ -183,6 +194,7 @@
             "quay.io/gpuworks/gpuworks-runner:dtk26.04-sglang0.5.12-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-sglang0.5.12-r2"
           ],
+          "download_size_bytes": 9129075661,
           "notes": "K100 等海光 DCU 的 sglang 档，含 diffusion 依赖。DCU 的 fa3 注意力后端要求 KV 页大小为 64，推理目录的 spec 必须带 --page-size 64，否则第一次 forward 就 崩且容器进程挂住不退出。\nrequires: engine, diffusion, overlays"
         }
       ]
@@ -203,6 +215,7 @@
             "quay.io/gpuworks/gpuworks-runner:hggc13.0-sglang0.5.13-r3",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-sglang0.5.13-r3"
           ],
+          "download_size_bytes": 11969554510,
           "notes": "PPU 的 sglang 档。与 vllm 档同一 vanilla、同一 rootfs，只有 label 与引擎标识 不同，因此两档共享 base 的全部层（前提是 base 只压一次，见本线说明）。 r3 加 PPU 同机 PD 补丁（hggc/ppu-pd，pdmode sglang-ppu-ipc），只在 PD 的 环境变量打开时生效；r2 → r3 只多这一层，r2 的部署照常可用。\nrequires: engine, diffusion, overlays, ppu_pd"
         }
       ]
@@ -223,6 +236,7 @@
             "quay.io/gpuworks/gpuworks-runner:metal15.0-llama.cpp-b11617-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:metal15.0-llama.cpp-b11617-r1"
           ],
+          "download_size_bytes": 12158302,
           "notes": "Apple silicon 的 llama.cpp 档（目录引擎 callable）：上游 b11617 的 macOS arm64 预编译包（llama-server 与它的 dylib，Metal 着色器内嵌），不带 Python。b10660 起 上游支持 Qwen3.8-Flash-Next（qwen4exp，含 n-gram 嵌入表），Mac 上跑它的模板用这档。 构建：build/host-envs/build.sh llama.cpp b11617 r1。"
         },
         {
@@ -235,6 +249,7 @@
             "quay.io/gpuworks/gpuworks-runner:metal15.0-llama.cpp-b12631-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:metal15.0-llama.cpp-b12631-r1"
           ],
+          "download_size_bytes": 16601621,
           "notes": "Apple silicon 的 llama.cpp 档，与 b11617 档并存（Qwen3.8-Flash-Next 的 Mac 模板仍用 b11617，它在那一档上实测过）。上游 b12600 起支持 Inkling 2 Mini（inkling2_loop， ggml-org/llama.cpp PR #32694），b12611 修正循环层共享 slot 时漏掉逐专家 scale （#32704）；Inkling 2 Mini 的 Mac 模板用这档。 构建：build/host-envs/build.sh llama.cpp b12631 r1。"
         }
       ]
@@ -255,6 +270,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.0-910b-vllm-omni0.23.0rc1-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-910b-vllm-omni0.23.0rc1-r1"
           ],
+          "download_size_bytes": 7399401369,
           "notes": "910B 的 omni 基线档，CANN 9.0.0，**驱动 26.0.rc1 也能用**（0.30.0 线要 26.1.1）。 驱动未升级的机队要跑 omni 负载就用本档。仍需 002 补丁才能跑 Ming-omni-tts。\nrequires: engine, omni, omni_no_mooncake, omni_patched, overlays\nmodel: 910b"
         },
         {
@@ -267,6 +283,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.0-a3-vllm-omni0.23.0rc1-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.0-a3-vllm-omni0.23.0rc1-r1"
           ],
+          "download_size_bytes": 7449968538,
           "notes": "A3（910C）的 omni 基线档，其余同 910b 档。\nrequires: engine, omni, omni_no_mooncake, omni_patched, overlays\nmodel: a3"
         },
         {
@@ -279,6 +296,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.1-910b-vllm-omni0.30.0-r3",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-910b-vllm-omni0.30.0-r3"
           ],
+          "download_size_bytes": 9112566365,
           "notes": "910B 的 omni 档，CANN 9.1.0，要求 HDK ≥ 26.1.1。omni 由 base 提供，不装 PyPI 的 vllm-omni。不含 mooncake（见本线说明），需要 PD 分离请用 vllm 线。\nrequires: engine, omni, omni_no_mooncake, omni_patched, overlays\nmodel: 910b"
         },
         {
@@ -291,6 +309,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.1-950-vllm-omni0.30.0-r3",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-950-vllm-omni0.30.0-r3"
           ],
+          "download_size_bytes": 9232946138,
           "notes": "950 的 omni 档，omni 由 base 的 a5 变体自带（NPU 原生）。其余同 910b 档。\nrequires: engine, omni, omni_no_mooncake, omni_patched, overlays\nmodel: 950"
         },
         {
@@ -303,6 +322,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.1-a3-vllm-omni0.30.0-r3",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-a3-vllm-omni0.30.0-r3"
           ],
+          "download_size_bytes": 9100301855,
           "notes": "A3（910C）的 omni 档，其余同 910b 档。\nrequires: engine, omni, omni_no_mooncake, omni_patched, overlays\nmodel: a3"
         }
       ]
@@ -323,6 +343,7 @@
             "quay.io/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.30.0-r4",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.30.0-r4"
           ],
+          "download_size_bytes": 10747294292,
           "notes": "omni 档，给 vllm-omni 独家支持的负载用（Qwen3-TTS、Ming-omni-tts、图像与 视频生成等）。代价是 transformers 被压到 \u003c5.15、accelerate 钉到 1.12.0， 所以普通负载请用默认档。不声明 diffusion：omni 自带 diffusers 但不带 opencv， 与 sglang 的 diffusion 扩展不是一回事。r3 加装 vllm-omni 的 indextts2 前端 （fugashi、unidic-lite，x86_64 另有 WeTextProcessing）；arm64 上没有 pynini 的 cp312 wheel， 所以 IndexTTS 2.5 的中英文文本规范化只在 x86_64 上可用。r4 以 --no-deps 加装 voxcpm （VoxCPM2 用），并打 omni 补丁 003（MOSS-TTS-Realtime 参考音频编码的设备不一致）。\nrequires: engine, engine_import, omni, indextts2_frontend, voxcpm, mooncake, overlays, audit"
         },
         {
@@ -335,6 +356,7 @@
             "quay.io/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.32.0-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.32.0-r2"
           ],
+          "download_size_bytes": 11118550773,
           "notes": "omni 档，vllm-omni 0.32.0，amd64 与 arm64。用途同 cuda13.0-vllm-omni0.30.0。"
         },
         {
@@ -347,6 +369,7 @@
             "quay.io/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.34.0-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.34.0-r1"
           ],
+          "download_size_bytes": 11262042169,
           "notes": "omni 档，vllm 0.34.0 + vllm-omni 0.34.0（transformers \u003c5.23、accelerate 1.13.0、 diffusers 0.42.0），取舍同 cuda13.0-vllm-omni0.30.0，只有 amd64。给 vllm-omni 独家支持的 负载用（SenseNova-U1.6 的文生图与图像编辑、Qwen3-TTS 等），普通负载请用默认档。 与 0.30 档的配方差异：opentelemetry-* 整套对齐到 1.45.2（base 的 1.40.0 低于 vllm 与 vllm-omni 的 \u003e=1.45.1），base 自带 lmcache 的 \u003c=1.40.0 钉子因此成为声明过的 pip check 冲突； opencv-python 约束到 base 的 opencv-python-headless 版本；补丁里 vllm 的 001、002，omni 的 002、003 在 0.34 上不适用或上游已修，按 PATCHES_NOT_APPLICABLE / OMNI_PATCHES_NOT_APPLICABLE 声明（原因见 README 补丁表），omni 的 001（--omni 旁路）已重新定位。与上游官方 omni 镜像 的差异：不重编 LMCache，不另装 cuDNN 9.25.1 预加载（上游为 Qwen-Image 2.1 的像素门加的）。 真机：RTX 4090 与 RTX 3090 上 SenseNova-U1.6 的 FP8 文生图与编辑通过，不带 --omni 时普通 文本模型照常起服务。\nrequires: engine, engine_import, omni, indextts2_frontend, voxcpm, mooncake, overlays, audit"
         }
       ]
@@ -367,6 +390,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann8.5-910b-vllm0.18.0-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-910b-vllm0.18.0-r2"
           ],
+          "download_size_bytes": 6326834696,
           "notes": "CANN 8.5 的存量机队档。该引擎版本没有配套的 omni，也不声明 mooncake 断言 （base 自带的版本不一定齐）。\nrequires: engine, overlays\nmodel: 910b"
         },
         {
@@ -379,6 +403,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.1-310p-vllm0.27.1rc1-r3",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-310p-vllm0.27.1rc1-r3"
           ],
+          "download_size_bytes": 7128288860,
           "notes": "310P，要求 HDK ≥ 26.1.1。**不含 mooncake**：该型号没有对应的 NPU 传输后端， 所以也不支持 mooncake 路线的 PD 分离。该硬件没有 bf16 单元，部署规格必须钉 `--dtype float16`，否则 vLLM 按模型默认取 bf16 并报 `aclnnInplaceOne ... DT_BFLOAT16`。\nrequires: engine, overlays\nmodel: 310p"
         },
         {
@@ -391,6 +416,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.1-910b-vllm0.26.0rc1-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-910b-vllm0.26.0rc1-r2"
           ],
+          "download_size_bytes": 7156574980,
           "notes": "910B，**驱动 26.0.rc1 可用**，也可在 26.1.1 上跑。驱动未升级到 26.1.1 的机队 选本档，不要选 0.27.1rc1。含 NPU 版 mooncake，PD 分离（vllm-ascend-mooncake 模式）用本线。\nrequires: engine, mooncake, overlays\nmodel: 910b"
         },
         {
@@ -403,6 +429,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.1-910b-vllm0.27.1rc1-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-910b-vllm0.27.1rc1-r2"
           ],
+          "download_size_bytes": 8795234978,
           "notes": "910B，**要求 Ascend HDK ≥ 26.1.1**（driver 与 firmware 都要到位）。在 26.0.rc1 上该栈的引擎初始化子进程会堆损坏崩溃，升级驱动前请用 0.26.0rc1 档。 含 NPU 版 mooncake。\nrequires: engine, mooncake, overlays\nmodel: 910b"
         },
         {
@@ -415,6 +442,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.1-950-vllm0.27.1rc1-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-950-vllm0.27.1rc1-r2"
           ],
+          "download_size_bytes": 9687605733,
           "notes": "950。950 自己的驱动线与 910B 不同（实测 driver 25.7.rc1.10 上本档可正常 serving），不照搬 910B 的 HDK 26.1.1 门槛。含 NPU 版 mooncake。\nrequires: engine, mooncake, overlays\nmodel: 950"
         },
         {
@@ -427,6 +455,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.1-a3-vllm0.26.0rc1-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-a3-vllm0.26.0rc1-r2"
           ],
+          "download_size_bytes": 7144431576,
           "notes": "A3（910C），其余同 910b 档。\nrequires: engine, mooncake, overlays\nmodel: a3"
         },
         {
@@ -439,6 +468,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.1-a3-vllm0.27.1rc1-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-a3-vllm0.27.1rc1-r2"
           ],
+          "download_size_bytes": 8757458371,
           "notes": "A3（910C），要求 HDK ≥ 26.1.1，其余同 910b 档。\nrequires: engine, mooncake, overlays\nmodel: a3"
         },
         {
@@ -451,6 +481,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.2-310p-vllm0.30.0rc2-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.2-310p-vllm0.30.0rc2-r1"
           ],
+          "download_size_bytes": 7362711649,
           "notes": "310P 的 0.30.0rc2 档。**不含 mooncake**：该型号没有对应的 NPU 传输后端。 该硬件没有 bf16 单元，部署规格必须钉 `--dtype float16`。 base 是否仍留着遮蔽真 triton 的空目录待构建时确认，先沿用 0.27.1rc1 档的 PURGE_STUB_PKGS 声明；若已修复，构建会因「声明过期」失败，届时删掉该项。\nrequires: engine, overlays\nmodel: 310p"
         },
         {
@@ -463,6 +494,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.2-910b-vllm0.30.0-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.2-910b-vllm0.30.0-r1"
           ],
+          "download_size_bytes": 9218164606,
           "notes": "910B 的 vllm 0.30.0 档（vllm-ascend 0.30.0 正式版），CANN 9.2，含 NPU 版 mooncake。\nmodel: 910b"
         },
         {
@@ -475,6 +507,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.2-910b-vllm0.30.0rc2-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.2-910b-vllm0.30.0rc2-r1"
           ],
+          "download_size_bytes": 9411505830,
           "notes": "910B 的 0.30.0rc2 档，CANN 9.2.0。含 NPU 版 mooncake。\nrequires: engine, mooncake, overlays\nmodel: 910b"
         },
         {
@@ -487,6 +520,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.2-910b-vllm0.32.0rc1-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.2-910b-vllm0.32.0rc1-r1"
           ],
+          "download_size_bytes": 9980152277,
           "notes": "910B 的 vllm 0.32.0 档（vllm-ascend 0.32.0rc1），CANN 9.2，含 NPU 版 mooncake。\nmodel: 910b"
         },
         {
@@ -499,6 +533,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.2-950-vllm0.30.0rc2-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.2-950-vllm0.30.0rc2-r1"
           ],
+          "download_size_bytes": 9822421024,
           "notes": "950 的 0.30.0rc2 档。950 自己的驱动线与 910B 不同，不照搬 910B 的 HDK 门槛。 含 NPU 版 mooncake。\nrequires: engine, mooncake, overlays\nmodel: 950"
         },
         {
@@ -511,6 +546,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.2-a3-vllm0.30.0-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.2-a3-vllm0.30.0-r1"
           ],
+          "download_size_bytes": 9210786089,
           "notes": "A3（910C）的 vllm 0.30.0 档，其余同 910b 档。\nmodel: a3"
         },
         {
@@ -523,6 +559,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.2-a3-vllm0.30.0rc2-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.2-a3-vllm0.30.0rc2-r1"
           ],
+          "download_size_bytes": 9404443297,
           "notes": "A3（910C）的 0.30.0rc2 档，其余同 910b 档。\nrequires: engine, mooncake, overlays\nmodel: a3"
         },
         {
@@ -535,6 +572,7 @@
             "quay.io/gpuworks/gpuworks-runner:cann9.2-a3-vllm0.32.0rc1-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.2-a3-vllm0.32.0rc1-r1"
           ],
+          "download_size_bytes": 9945283436,
           "notes": "A3（910C）的 vllm 0.32.0 档，其余同 910b 档。\nmodel: a3"
         }
       ]
@@ -555,6 +593,7 @@
             "quay.io/gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2"
           ],
+          "download_size_bytes": 12097598549,
           "notes": "CUDA 12.x 的 vllm 档（驱动低于 580 的节点用它，CUDA 13.0 要求驱动 ≥580）。 不含 omni。torchcodec 换成 0.16.0+cu129，其余 torch 栈与 base 逐包一致。 补丁 001（wrong_dp_ray）在 vllm 0.31 上打不上：上游只是重排了 get_open_port 的 docstring（vllm #52136），端口问题本身没有修，故暂由 PATCHES_NOT_APPLICABLE 声明跳过， 下次升 revision 时要按 0.31 的上下文重做 001。002 应用。\nrequires: engine, engine_import, mooncake, overlays, audit"
         },
         {
@@ -567,6 +606,7 @@
             "quay.io/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4"
           ],
+          "download_size_bytes": 10055140754,
           "notes": "CUDA 13 的默认档，普通文本/多模态推理负载用。不含 vllm-omni，transformers 不设上界。mooncake 由 base 预装（cuda13 的包名是 mooncake-transfer-engine-cuda13）。 r3 加装 decord2（import 名 decord），ERNIE-4.5-VL 的 HF 动态模块要它；PyPI 的 decord 只有 x86_64 wheel，所以不用它。r4 再加装 moviepy：同一个动态模块还直接 import 它。\nrequires: engine, engine_import, decord, moviepy, mooncake, overlays, audit"
         },
         {
@@ -579,6 +619,7 @@
             "quay.io/gpuworks/gpuworks-runner:cuda13.0-vllm0.33.0-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.33.0-r1"
           ],
+          "download_size_bytes": 10059978449,
           "notes": "CUDA 13 的 vllm 0.33.0 档，只有 amd64。base 是 vllm/vllm-openai:v0.33.0，含 decord2、moviepy， mooncake 由 base 预装；不含 vllm-omni。"
         },
         {
@@ -591,6 +632,7 @@
             "quay.io/gpuworks/gpuworks-runner:cuda13.0-vllm0.34.0-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.34.0-r1"
           ],
+          "download_size_bytes": 10358123871,
           "notes": "CUDA 13 的 vllm 0.34.0 档，只有 amd64。base 是 vllm/vllm-openai:v0.34.0，含 decord2、moviepy， mooncake 由 base 预装；不含 vllm-omni（omni 负载用 cuda13.0-vllm-omni0.34.0）。"
         }
       ]
@@ -611,6 +653,7 @@
             "quay.io/gpuworks/gpuworks-runner:dtk26.04-vllm0.18.1-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-vllm0.18.1-r2"
           ],
+          "download_size_bytes": 32486666812,
           "notes": "K100 等海光 DCU 的 vllm 档。**不含 omni**：厂商原件的 pip 清单是 vllm 0.18.1、 vllm-hcu 0.18.1、transformers 5.5.0、flash-attn、flash_mla，没有 vllm-omni； 海光的 omni 负载在推理目录里走厂商 custom:* 系列镜像，不依赖本档。 内置 vllm-hcu-apply-patches（推理目录的 pre_start_argv 依赖它）。 callable runtime 不烤进镜像：推理目录用 sha256 钉住同一资产并只读挂到同一路径。\nrequires: engine, hcu_patches, overlays, diffusion"
         },
         {
@@ -623,6 +666,7 @@
             "quay.io/gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r4",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r4"
           ],
+          "download_size_bytes": 8474247684,
           "notes": "K100 等海光 DCU 的 vllm 0.21 档。r2 起应用 patches/vllm_dtk/001：base 自带海光构建的 mooncake-transfer-engine 0.3.10 与 vLLM 的 MooncakeConnector（PD 模式 vllm-mooncake 用它），但连接器 把拉取失败的请求当作已收到 KV，decode 照样回答、kv_load_failure_policy 不生效；补丁让失败的块上报给调度器。r3 起再应用 002、003：Qwen3.5/3.6/3.8 这类 GDN 混合模型做 PD 时，连接器原样只认全注意力（Mamba 层注册即断言失败、强制 HND 布局让混合模型算错），调度器遇到 多 KV 组的拉取失败直接让 EngineCore 崩；补丁让同 TP、PP=1 的混合模型按整页传 KV、prefill 只算 N-1、失败按策略处理（K100 实测 Qwen3.5-0.8B 与 hygon/Qwen3.8-27B-Channel-INT8-w8a8）。混合模型须带 `--no-disable-hybrid-kv-cache-manager`，平台对 vllm-mooncake 的混合模型自动加。r4 起再应用 004： 混合模型新分配的块要清零，调度器把块号随该步输出交给 worker 发清零 kernel，而 decode 在同一步发起远端 KV 拉取，二者无序，清零晚于写入时抹掉收到的 KV/状态（BW 实测把清零延后时 20/20 次输出错）；004 不清零 异步加载要写入的块（上游 vLLM 后来的 `_skip_zero_block_ids` 同理）。**不含 omni**：厂商原件（ubuntu22.04 / py3.10）的 pip 清单是 vllm 0.21.0、vllm-hcu 0.21.0（vllm 平台插件）、transformers 5.5.0、torch 2.10.0（dtk2604）， 没有 vllm-omni；海光的 omni 负载仍走厂商 custom:* 系列镜像。 内置 vllm-hcu-apply-patches（厂商 base 构建时已执行过一次，可重复执行；推理目录的 pre_start_argv 依赖它）。callable runtime 不烤进镜像：推理目录用 sha256 钉住同一资产并只读挂到同一路径。 注意：vllm-hcu 插件默认开启自定义量化 GEMM，compressed-tensors W8A8 INT8 在 K100 上输出全是 `!` （K100 真机实测）；INT8 spec 须设 `VLLM_HCU_USE_CUSTOM_QUANTIZATION_GEMM=0`，BF16 不受影响。\nrequires: engine, hcu_patches, overlays, mooncake, mooncake_load_errors, mooncake_hybrid"
         }
       ]
@@ -643,6 +687,7 @@
             "quay.io/gpuworks/gpuworks-runner:hggc13.0-vllm0.23.0-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-vllm0.23.0-r2"
           ],
+          "download_size_bytes": 11969510327,
           "notes": "PPU 的 vllm 档。omni、diffusion、mooncake 都来自 vanilla，所以本档同时能跑 omni 负载。本层只做：排障工具与 tini、清掉 vanilla 的 BASH_ENV 自启动 （每次 bash 启动都部署 cache bundle，拖慢健康检查）、把 vanilla 继承的 内网包源 env 改回公网源、运行期 env（VLLM_USE_V1=0 等）。\nrequires: engine, omni, mooncake, diffusion, overlays"
         }
       ]
@@ -663,6 +708,7 @@
             "quay.io/gpuworks/gpuworks-runner:metal15.0-vllm0.31.0-r2",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:metal15.0-vllm0.31.0-r2"
           ],
+          "download_size_bytes": 425340908,
           "notes": "Apple silicon（M1–M5，macOS 15+）的 vLLM 档，引擎是 vllm-metal 0.31.0（钉 vLLM 0.31.0 CPU 核心 + MLX）。不是容器镜像：agent 的 host 运行时把它解包成宿主环境， 引擎以 macOS 原生进程跑在 Metal 上。构建： build/host-envs/build.sh vllm-metal 0.31.0 r2。r2 起带 vLLM 源码里的 examples/*.jinja 并以 /vllm-workspace 为工作目录（与 Linux runner 一致，模板的 --chat-template 可原样引用）。 不支持 sleep、多机、KV 磁盘层（accelerator.Supports）。"
         }
       ]
@@ -683,6 +729,7 @@
             "quay.io/gpuworks/gpuworks-runner:rocm7.2.3-vllm0.30.0-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:rocm7.2.3-vllm0.30.0-r1"
           ],
+          "download_size_bytes": 11663055302,
           "notes": "vLLM 0.30.0 on ROCm 7.2.3 (upstream vllm-openai-rocm); tested on MI325X (gfx942) and AMD395 (gfx1151).\nrequires: engine"
         }
       ]
@@ -703,6 +750,7 @@
             "quay.io/gpuworks/gpuworks-runner:xre5.0.21.46-vllm0.25.1-r1",
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre5.0.21.46-vllm0.25.1-r1"
           ],
+          "download_size_bytes": 18544375312,
           "notes": "Kunlunxin P800 PCIe / KL3, Linux amd64; native XRE inference with RDMA userspace libraries. The runtime entrypoint is /opt/vllm025-venv/bin/vllm. Qwen profiles load original BF16 weights with FP16 computation. Single-node inference does not require XDR; cross-node inference requires the validated host XDR/RDMA stack."
         }
       ]

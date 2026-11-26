@@ -45,6 +45,11 @@ function summary(key: string) {
 
 for (const scenario of [
   {
+    name: "registry download size is known before the first pull",
+    versions: [{ ...systemVersion, size_bytes: undefined, download_size_bytes: 9980152277, present_nodes: 0, local_runtime_size_bytes: 0, local_size_known_nodes: 0 }],
+    catalog: "9.3 GiB", local: "0 B", missing: 0, catalogMissing: 0, catalogStatus: "全部体积已知", localStatus: "",
+  },
+  {
     name: "unknown catalog and local sizes",
     versions: [{ ...systemVersion, size_bytes: undefined, present_nodes: 2, local_runtime_size_bytes: undefined, local_size_known_nodes: undefined }],
     catalog: "—", local: "—", missing: 2, catalogMissing: 1, catalogStatus: "暂无已知体积", localStatus: "暂无已知体积",

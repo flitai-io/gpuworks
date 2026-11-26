@@ -38,6 +38,7 @@ export interface ImageCatalogEntry {
   enabled: boolean;
   notes?: string;
   size_bytes?: number;
+  download_size_bytes?: number;
   local_runtime_size_bytes?: number;
   local_size_known_nodes?: number;
   /** Deployments, live instances and models that name this image; a deprecated system image stays while this is above zero. */

@@ -17,6 +17,7 @@ type Image struct {
 	Enabled           bool     `json:"enabled"`
 	Notes             string   `json:"notes,omitempty"`
 	SizeBytes         int64    `json:"size_bytes,omitempty"`
+	DownloadBytes     int64    `json:"download_size_bytes,omitempty"`
 	DeprecatedSince   string   `json:"deprecated_since,omitempty"`
 	RegistrySources   []string `json:"registry_sources,omitempty"`
 	RollingTag        bool     `json:"rolling_tag"`

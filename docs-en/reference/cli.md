@@ -596,7 +596,7 @@ and the CI `release-publish` job. rclone handles uploads; this tool does not hol
 ### gpuworks-image-manifest
 
 Generate the system image catalog
-manifest (schema 3) from the gpuworks-runner build matrix (`build/runner-images/matrix.yaml`). The same output serves as the server's embedded seed, `internal/server/imagecatalog/catalog-seed.json`, and is included in every release through the
+manifest (schema 4) from the gpuworks-runner build matrix (`build/runner-images/matrix.yaml`). The same output serves as the server's embedded seed, `internal/server/imagecatalog/catalog-seed.json`, and is included in every release through the
 [release channel](#gpuworks-dist). For the format and import rules, see [Image Catalog](image-families.md#manifest-格式).
 
 | Flag | Default | Description |
@@ -692,7 +692,7 @@ Maintain each model's `model_config` in the inference catalog package (the subse
 <!-- translation-source-sha256: 1e41be4970bd2d73ce3f79aab2fd5cfe961379c19d28f17b30f480c49798ee94 ## Node Installation Script install.sh -->
 <!-- translation-source-sha256: a9d985c3ad4b30c8ba55f100bd0c05aed9ffe6938bcf955647daec83001aabf6 ## Other CLIs -->
 <!-- translation-source-sha256: 1aef641cd1b21706e2407379a8c7a698a092304e66f3b046047608156466ce3c ### gpuworks-dist -->
-<!-- translation-source-sha256: d7ac91dc2d516e46436bfc8c681d71ffda1fc25f77efaf669b999ef6604e6643 ### gpuworks-image-manifest -->
+<!-- translation-source-sha256: 51a8f5b66ae88e505b98e97e7f9c88ed1b9c7d3185b30331354ece9b14025bec ### gpuworks-image-manifest -->
 <!-- translation-source-sha256: 08e8efd3ebc6584b3186f57ac2f417e31199000da630e50f46ae83751d306a8f ### template-probe -->
 <!-- translation-source-sha256: 5097e5778748599ee45f714e05adb57fd7c82829cc8b950352f5c2e642a8065e ### gpuworks-catalog-model-config -->
 <!-- translation-localized-code-block: 97428c61d0b0a154e15b86cb32f62698fe47be9a13f5d8d97870a67b551d77de ad2a948283214a4b9cf06c0fbf9e90995a5b4e623c49d1e33386cb49050b110a Translate uninstall command comments. -->

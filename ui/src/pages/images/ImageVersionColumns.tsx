@@ -116,7 +116,7 @@ export function VersionExtra({ row, t }: { row: ImageCatalogEntry; t: TFunction 
         <dt>
           <Tooltip title={t("versionTable.sizeHelp")}>{t("versionTable.column.size")}</Tooltip>
         </dt>
-        <dd>{bytes(row.size_bytes)}</dd>
+        <dd>{bytes(row.download_size_bytes ?? row.size_bytes)}</dd>
       </div>
       <div>
         <dt>{t("versionTable.column.arch")}</dt>

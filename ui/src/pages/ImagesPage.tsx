@@ -94,9 +94,9 @@ export default function ImagesPage() {
     0,
   );
   const sizesAvailable = versions.data !== undefined && versions.data !== null && !versions.error;
-  const catalogUnknown = allVersions.filter((item) => item.size_bytes == null).length;
+  const catalogUnknown = allVersions.filter((item) => item.download_size_bytes == null && item.size_bytes == null).length;
   const catalogBytes = sizesAvailable && (allVersions.length === 0 || catalogUnknown < allVersions.length)
-    ? allVersions.reduce((sum, item) => sum + (item.size_bytes ?? 0), 0)
+    ? allVersions.reduce((sum, item) => sum + (item.download_size_bytes ?? item.size_bytes ?? 0), 0)
     : undefined;
   const localKnown = allVersions.reduce((sum, item) => sum + (item.local_size_known_nodes ?? 0), 0);
   const localUnknown = distributed - localKnown;

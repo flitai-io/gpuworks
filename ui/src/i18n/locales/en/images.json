@@ -50,7 +50,7 @@
       "distributed": "Distributed Copies",
       "catalogSize": "Total Image Package Size",
       "localSize": "Total Image Size on Nodes",
-      "catalogSizeHelp": "Sum of declared archive sizes for image versions in the current source. Unknown sizes are excluded; “—” means all sizes are unknown. Archive size is not actual node disk usage.",
+      "catalogSizeHelp": "Sum of compressed registry layers per version, using the largest supported platform for multi-platform tags. Declared archive sizes are used when registry sizes are unavailable. Unknown versions are excluded. Node disk usage is reported separately.",
       "localSizeHelp": "Sum of the most recently reported image-copy sizes across nodes. Shared layers are counted for each image, so this is not deduplicated disk usage. Unknown sizes are excluded.",
       "knownSubtotal": "Known subtotal",
       "allSizesKnown": "All sizes known",
