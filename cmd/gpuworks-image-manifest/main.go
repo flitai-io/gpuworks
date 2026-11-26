@@ -165,6 +165,12 @@ func parseTag(id string) (parsedTag, error) {
 }
 
 func generate(data []byte, opt options) ([]byte, error) {
+	if _, err := time.Parse("2006-01-02", opt.Date); err != nil {
+		// The catalog version is <date>.<hash>: publication reads the date
+		// back by cutting at the first dot, and only that shape gets the
+		// -schema3 marker on its compatibility projection.
+		return nil, fmt.Errorf("catalog date %q must be YYYY-MM-DD", opt.Date)
+	}
 	var matrix matrixFile
 	if err := yaml.Unmarshal(data, &matrix); err != nil {
 		return nil, fmt.Errorf("parse matrix: %w", err)

@@ -450,3 +450,15 @@ func TestExportedGrammarIsTheGenerators(t *testing.T) {
 		t.Fatal("build/runner-images/tag-grammar.txt is stale; run `make image-manifest`")
 	}
 }
+
+func TestGenerateRequiresAnISOCatalogDate(t *testing.T) {
+	matrix := []byte("items:\n  - id: cuda13.0-vllm0.34.0\n    revision: r1\n    backend: cuda\n    base: docker.io/library/ubuntu:24.04\n    platforms: [linux/amd64]\n")
+	for _, date := range []string{"", "2026.11.26", "2026-11-26.1", "26-11-26", "2026-13-01"} {
+		if _, err := generate(matrix, options{Date: date}); err == nil || !strings.Contains(err.Error(), "must be YYYY-MM-DD") {
+			t.Errorf("date %q: %v", date, err)
+		}
+	}
+	if _, err := generate(matrix, options{Date: "2026-11-26"}); err != nil {
+		t.Fatalf("ISO date: %v", err)
+	}
+}

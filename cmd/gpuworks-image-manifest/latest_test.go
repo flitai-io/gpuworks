@@ -44,7 +44,7 @@ func TestStableReleaseBeatsPaddedCandidateAndKeepsTemplatePin(t *testing.T) {
 func TestPrebuiltLegacyDeclarationDoesNotAdmitTag(t *testing.T) {
 	const tag = "cuda13.0-vllm0.34.0-r1-arm64"
 	matrix := "items:\n  - id: " + tag + "\n    backend: cuda\n    builder: prebuilt\n    artifact: quay.io/gpuworks/gpuworks-runner:" + tag + "@sha256:" + strings.Repeat("1", 64) + "\n    platforms: [linux/arm64]\nlegacy_tags:\n  - tag: " + tag + "\n    legacy_reason: Historical release.\n"
-	if _, err := generate([]byte(matrix), options{}); err == nil || !strings.Contains(err.Error(), "does not match") {
+	if _, err := generate([]byte(matrix), options{Date: "2026-11-26"}); err == nil || !strings.Contains(err.Error(), "does not match") {
 		t.Fatalf("invalid catalog tag: %v", err)
 	}
 }
