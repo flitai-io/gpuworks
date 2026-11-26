@@ -47,6 +47,8 @@ type ImageInput struct {
 	RollingTag       bool
 	BlobSHA256       string
 	SizeBytes        int64
+	DownloadBytes    int64
+	LegacyCatalog    bool
 	Deprecated       bool
 	DeprecatedSince  string
 	Notes            string
@@ -175,7 +177,7 @@ func ImportOfficial(m Manifest, sink Sink, opt ImportOptions) (Result, error) {
 				Framework: series.Framework, FrameworkVersion: version.FrameworkVersion,
 				Arch: version.Arch, ImageRef: version.ImageRef,
 				RegistrySources: version.RegistrySources, BlobSHA256: version.BlobSHA256, RollingTag: version.RollingTag,
-				SizeBytes:  version.SizeBytes,
+				SizeBytes: version.SizeBytes, DownloadBytes: version.DownloadBytes, LegacyCatalog: m.SchemaVersion < 4,
 				Deprecated: version.Deprecated, DeprecatedSince: deprecatedSince,
 				Notes: version.Notes,
 			}); err != nil {

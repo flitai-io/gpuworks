@@ -13,7 +13,7 @@ import (
 func TestImageRuntimeSizeSummaryWire(t *testing.T) {
 	run := newImageManifestRun(t)
 	var image store.Image
-	if err := run.store.DB().First(&image).Error; err != nil {
+	if err := run.store.DB().Where("source = ? AND download_bytes > 0 AND size_bytes = 0", "official").First(&image).Error; err != nil {
 		t.Fatal(err)
 	}
 	known, zero := int64(8192), int64(0)
@@ -55,7 +55,7 @@ func TestImageRuntimeSizeSummaryWire(t *testing.T) {
 			continue
 		}
 		found = true
-		for key, want := range map[string]string{"present_nodes": "3", "local_runtime_size_bytes": "8192", "local_size_known_nodes": "2"} {
+		for key, want := range map[string]string{"download_size_bytes": fmt.Sprint(image.DownloadBytes), "present_nodes": "3", "local_runtime_size_bytes": "8192", "local_size_known_nodes": "2"} {
 			if string(raw[key]) != want {
 				t.Fatalf("%s=%s want=%s", key, raw[key], want)
 			}

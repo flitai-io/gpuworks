@@ -21,11 +21,11 @@ from platform_token_read_revoke import check, collection
 KEYS = ("series", "images", "distributed", "catalogSize", "localSize")
 HELP = {
     "zh": (
-        "汇总当前来源中各镜像版本声明的归档体积。未知体积不计入小计；全部未知时显示“—”。归档体积不等于节点实际磁盘占用。",
+        "每个版本计一次仓库压缩层大小，多架构版本取支持平台中的最大值；没有下载量时使用已声明的归档大小。未知版本不计入小计。节点磁盘占用单独统计。",
         "汇总各节点最近上报的镜像副本体积。共享层按每个镜像重复计入，因此该数值不代表去重后的实际磁盘占用。未知体积不计入小计。",
     ),
     "en": (
-        "Sum of declared archive sizes for image versions in the current source. Unknown sizes are excluded; “—” means all sizes are unknown. Archive size is not actual node disk usage.",
+        "Sum of compressed registry layers per version, using the largest supported platform for multi-platform tags. Declared archive sizes are used when registry sizes are unavailable. Unknown versions are excluded. Node disk usage is reported separately.",
         "Sum of the most recently reported image-copy sizes across nodes. Shared layers are counted for each image, so this is not deduplicated disk usage. Unknown sizes are excluded.",
     ),
 }
@@ -38,15 +38,17 @@ def cards(page):
 def assert_layout(page, report, width):
     report["last_step"] = f"summary-layout-{width}"
     page.set_viewport_size({"width": width, "height": 900})
-    measured = []
     for key, card in zip(KEYS, cards(page)):
         expect(card).to_be_visible()
         expect(card.get_by_text(strings(report["locale"])["page"]["summary"][key], exact=True)).to_be_visible()
-        measured.append(card.evaluate("""el => {
-          const r = el.getBoundingClientRect();
-          return {width:r.width, height:r.height, top:r.top, bottom:r.bottom,
-            overflow:el.scrollWidth > el.clientWidth};
-        }"""))
+    # A viewport change can animate the sidebar. Compare all five cards in
+    # one browser layout snapshot so they share the same available width.
+    measured = page.evaluate("""keys => keys.map(key => {
+      const el = document.querySelector('[data-testid="image-summary-' + key + '"]');
+      const r = el.getBoundingClientRect();
+      return {width:r.width, height:r.height, top:r.top, bottom:r.bottom,
+        overflow:el.scrollWidth > el.clientWidth};
+    })""", list(KEYS))
     report.setdefault("layout", []).append({"viewport": width, "cards": measured})
     check(max(r["width"] for r in measured) - min(r["width"] for r in measured) < 1,
           f"summary widths differ: {measured}")

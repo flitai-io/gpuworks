@@ -191,8 +191,12 @@ agent 程序本身由 server 下发和升级，平时升级 server 不用再导�
 
 ### 更新镜像目录和推理模板
 
-想用比内嵌更新的系统镜像目录与推理模板目录时：在外网机上从任一发布源（如 `https://dl.gpuworks.ai`）下载 `<channel>/manifest.json`
-与 `<channel>/index.json` 里列出的 `catalog/templates/<sha256>.tar.gz`，在设置页「版本与更新」点「上传 manifest」「上传目录包」，
+在外网机从发布源（如 `https://dl.gpuworks.ai`）取得签名索引 `<channel>/index.json`，用受信任的发布公钥验签。按索引载荷中的字段取文件：
+
+1. 先将旧 server 升级到支持 schema 4 的版本，再导入新版镜像目录。相对发布源根地址下载 `image_catalog.path`，或直接下载 `<channel>/manifest.json`。两个地址提供同一文件，使用 `image_catalog.sha256` 核验。
+2. 从同一根地址下载推理模板 `template_catalog.path`，使用 `template_catalog.sha256` 核验。
+3. 将文件带入内网，在设置页「版本与更新」用「上传 manifest」导入镜像目录，用「上传目录包」导入推理模板。
+
 规则见[镜像目录](../reference/image-families.md#更新目录)。离线环境里「检查更新」会因为发布源不可达返回 502 `UPDATE_SOURCES_UNAVAILABLE`，不改库。
 
 ## 离线边界

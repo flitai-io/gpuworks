@@ -40,6 +40,7 @@ type Image struct {
 	Deprecated        bool   `gorm:"index"`
 	Enabled           bool   `gorm:"index"`
 	SizeBytes         int64
+	DownloadBytes     int64
 	VerificationState string `gorm:"size:16;index"` // verified | failed | unknown
 	VerificationError string `gorm:"size:512"`
 	Notes             string `gorm:"type:text"` // free text

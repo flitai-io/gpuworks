@@ -91,6 +91,59 @@
 defaults:
   platforms: [linux/amd64, linux/arm64]
 
+# Compressed layer bytes measured for each immutable release tag and platform.
+# Remove a tag's measurements when it leaves the matrix. A new revision has
+# unknown size until its own measurements are recorded.
+download_sizes:
+  cann8.5-910b-sglang0.5.12.post1-r2: {linux/amd64: 5977820703, linux/arm64: 5600822178}
+  cann8.5-910b-vllm0.18.0-r2: {linux/amd64: 6326834696, linux/arm64: 6093599678}
+  cann8.5-a3-sglang0.5.12.post1-r2: {linux/amd64: 5951392388, linux/arm64: 5572974289}
+  cann9.0-910b-sglang0.5.18-r2: {linux/amd64: 6560264423, linux/arm64: 6406074737}
+  cann9.0-910b-vllm-omni0.23.0rc1-r1: {linux/amd64: 7399401369, linux/arm64: 7157380463}
+  cann9.0-a3-sglang0.5.18-r2: {linux/amd64: 6538042779, linux/arm64: 6379730563}
+  cann9.0-a3-vllm-omni0.23.0rc1-r1: {linux/amd64: 7449968538, linux/arm64: 7207820904}
+  cann9.1-310p-vllm0.27.1rc1-r3: {linux/amd64: 7128288860, linux/arm64: 6925732175}
+  cann9.1-910b-vllm-omni0.30.0-r3: {linux/amd64: 9112566365, linux/arm64: 8803199094}
+  cann9.1-910b-vllm0.26.0rc1-r2: {linux/amd64: 7156574980, linux/arm64: 6937231576}
+  cann9.1-910b-vllm0.27.1rc1-r2: {linux/amd64: 8795234978, linux/arm64: 8519261843}
+  cann9.1-950-vllm-omni0.30.0-r3: {linux/amd64: 9195391224, linux/arm64: 9232946138}
+  cann9.1-950-vllm0.27.1rc1-r2: {linux/amd64: 9687605733, linux/arm64: 9415158075}
+  cann9.1-a3-sglang0.5.23-r1: {linux/amd64: 7153848941, linux/arm64: 6894015644}
+  cann9.1-a3-vllm-omni0.30.0-r3: {linux/amd64: 9100301855, linux/arm64: 8791302868}
+  cann9.1-a3-vllm0.26.0rc1-r2: {linux/amd64: 7144431576, linux/arm64: 6925359359}
+  cann9.1-a3-vllm0.27.1rc1-r2: {linux/amd64: 8757458371, linux/arm64: 8481477637}
+  cann9.2-310p-vllm0.30.0rc2-r1: {linux/amd64: 7362711649, linux/arm64: 7154734766}
+  cann9.2-910b-vllm0.30.0-r1: {linux/amd64: 9218164606, linux/arm64: 8965148002}
+  cann9.2-910b-vllm0.30.0rc2-r1: {linux/amd64: 9411505830, linux/arm64: 9093260742}
+  cann9.2-910b-vllm0.32.0rc1-r1: {linux/amd64: 9980152277, linux/arm64: 9722496746}
+  cann9.2-950-vllm0.30.0rc2-r1: {linux/amd64: 9796185489, linux/arm64: 9822421024}
+  cann9.2-a3-vllm0.30.0-r1: {linux/amd64: 9210786089, linux/arm64: 8957558920}
+  cann9.2-a3-vllm0.30.0rc2-r1: {linux/amd64: 9404443297, linux/arm64: 9086206042}
+  cann9.2-a3-vllm0.32.0rc1-r1: {linux/amd64: 9945283436, linux/arm64: 9687743124}
+  cuda12.9-sglang0.5.18-r2: {linux/amd64: 18382693457, linux/arm64: 16905175984}
+  cuda12.9-vllm0.31.0-r2: {linux/amd64: 11282706719, linux/arm64: 12097598549}
+  cuda13.0-sglang0.5.21-r2: {linux/amd64: 15237583061, linux/arm64: 14886492168}
+  cuda13.0-sglang0.5.23-r2: {linux/amd64: 16236673467, linux/arm64: 16161620396}
+  cuda13.0-vllm-omni0.30.0-r4: {linux/amd64: 9991604307, linux/arm64: 10747294292}
+  cuda13.0-vllm-omni0.32.0-r2: {linux/amd64: 10009153888, linux/arm64: 11118550773}
+  cuda13.0-vllm-omni0.34.0-r1: {linux/amd64: 11262042169}
+  cuda13.0-vllm0.30.0-r4: {linux/amd64: 9100237522, linux/arm64: 10055140754}
+  cuda13.0-vllm0.33.0-r1: {linux/amd64: 10059978449}
+  cuda13.0-vllm0.34.0-r1: {linux/amd64: 10358123871}
+  dtk26.04-sglang0.5.12-r2: {linux/amd64: 9129075661}
+  dtk26.04-vllm0.18.1-r2: {linux/amd64: 32486666812}
+  dtk26.04-vllm0.21.0-r4: {linux/amd64: 8474247684}
+  hggc13.0-sglang0.5.13-r3: {linux/amd64: 11969554510}
+  hggc13.0-vllm0.23.0-r2: {linux/amd64: 11969510327}
+  metal15.0-llama.cpp-b11617-r1: {darwin/arm64: 12158302}
+  metal15.0-llama.cpp-b12631-r1: {darwin/arm64: 16601621}
+  metal15.0-mlx-audio0.5.9-r1: {darwin/arm64: 299757988}
+  metal15.0-mlx-vlm0.7.8-r2: {darwin/arm64: 231149761}
+  metal15.0-mlx-vlm0.8.1.dev20261121-r1: {darwin/arm64: 215014159}
+  metal15.0-vllm0.31.0-r2: {darwin/arm64: 425340908}
+  rocm7.2.3-vllm0.30.0-r1: {linux/amd64: 11663055302}
+  xre5.0.21.46-vllm0.25.1-r1: {linux/amd64: 18544375312}
+
 items:
 
   # Kunlun P800: promote the digest-pinned artifact without rebuilding its layers.

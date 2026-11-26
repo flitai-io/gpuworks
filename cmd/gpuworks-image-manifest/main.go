@@ -11,8 +11,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -107,7 +109,8 @@ type options struct {
 }
 
 type matrixFile struct {
-	Defaults struct {
+	DownloadSizes map[string]map[string]int64 `yaml:"download_sizes"`
+	Defaults      struct {
 		Platforms []string `yaml:"platforms"`
 	} `yaml:"defaults"`
 	Items      []matrixItem `yaml:"items"`
@@ -171,12 +174,14 @@ func generate(data []byte, opt options) ([]byte, error) {
 	if registry == "" {
 		registry = DefaultRegistry
 	}
+	unmatched := maps.Clone(matrix.DownloadSizes)
 	seriesByName := map[string]*manifest.ManifestSeries{}
 	for _, item := range matrix.Items {
-		version, tag, err := versionFromItem(item, matrix.Defaults.Platforms, registry)
+		version, tag, err := matrix.versionFromItem(item, registry)
 		if err != nil {
 			return nil, err
 		}
+		delete(unmatched, version.Name)
 		if item.Catalog != nil && !*item.Catalog {
 			continue
 		}
@@ -187,6 +192,9 @@ func generate(data []byte, opt options) ([]byte, error) {
 			seriesByName[name] = series
 		}
 		series.Versions = append(series.Versions, version)
+	}
+	if len(unmatched) != 0 {
+		return nil, fmt.Errorf("download_sizes tags absent from matrix items: %s", strings.Join(slices.Sorted(maps.Keys(unmatched)), ", "))
 	}
 	series := make([]manifest.ManifestSeries, 0, len(seriesByName))
 	for _, value := range seriesByName {
@@ -199,7 +207,7 @@ func generate(data []byte, opt options) ([]byte, error) {
 		return nil, err
 	}
 	sum := sha256.Sum256(seriesJSON)
-	m := manifest.Manifest{SchemaVersion: 3, CatalogVersion: opt.Date + "." + hex.EncodeToString(sum[:])[:8], Series: series}
+	m := manifest.Manifest{SchemaVersion: 4, CatalogVersion: opt.Date + "." + hex.EncodeToString(sum[:])[:8], Series: series}
 	if err := m.Validate(); err != nil {
 		return nil, err
 	}
@@ -211,7 +219,7 @@ func generate(data []byte, opt options) ([]byte, error) {
 	return append(out, '\n'), nil
 }
 
-func versionFromItem(item matrixItem, defaultPlatforms []string, registry string) (manifest.ManifestVersion, parsedTag, error) {
+func (m *matrixFile) versionFromItem(item matrixItem, registry string) (manifest.ManifestVersion, parsedTag, error) {
 	id := strings.TrimSpace(item.ID)
 	tag, err := parseTag(id)
 	if err != nil {
@@ -241,7 +249,7 @@ func versionFromItem(item matrixItem, defaultPlatforms []string, registry string
 	}
 	platforms := item.Platforms
 	if len(platforms) == 0 {
-		platforms = defaultPlatforms
+		platforms = m.Defaults.Platforms
 	}
 	arch, err := archFromPlatforms(platforms)
 	if err != nil {
@@ -256,7 +264,22 @@ func versionFromItem(item matrixItem, defaultPlatforms []string, registry string
 	if err != nil {
 		return manifest.ManifestVersion{}, tag, fmt.Errorf("matrix id %q: %w", id, err)
 	}
+	// A catalog card describes one pull of the tag, even for a platform index.
+	var downloadBytes int64
+	if sizes, measured := m.DownloadSizes[immutable]; measured {
+		if len(platforms) != len(sizes) {
+			return manifest.ManifestVersion{}, tag, fmt.Errorf("%s: download_sizes must cover the declared platforms", immutable)
+		}
+		for _, platform := range platforms {
+			n := sizes[platform]
+			if n <= 0 {
+				return manifest.ManifestVersion{}, tag, fmt.Errorf("%s: missing or invalid download size for %s", immutable, platform)
+			}
+			downloadBytes = max(downloadBytes, n)
+		}
+	}
 	return manifest.ManifestVersion{
+		DownloadBytes:    downloadBytes,
 		Name:             immutable,
 		ImageRef:         ref,
 		EngineVersion:    tag.EngineVersion,

@@ -127,6 +127,15 @@ func (s *Store) UpsertImageSeries(series *ImageSeries) (*ImageSeries, error) {
 // UpsertImage updates catalog metadata by image_ref while preserving presence
 // rows. It is safe to call repeatedly during manifest synchronization.
 func (s *Store) UpsertImage(img *Image) (*Image, error) {
+	return s.upsertImage(img, false)
+}
+
+// UpsertLegacyCatalogImage imports a catalog that predates download measurements.
+func (s *Store) UpsertLegacyCatalogImage(img *Image) (*Image, error) {
+	return s.upsertImage(img, true)
+}
+
+func (s *Store) upsertImage(img *Image, legacyCatalog bool) (*Image, error) {
 	img.ImageRef = strings.TrimSpace(img.ImageRef)
 	if err := validateTaggedImageRef(img.ImageRef); err != nil {
 		return nil, err
@@ -182,7 +191,8 @@ func (s *Store) UpsertImage(img *Image) (*Image, error) {
 		return nil, fmt.Errorf("image %q already belongs to source %q; cannot change it to %q", img.ImageRef, existing.Source, img.Source)
 	}
 	img.ID = existing.ID
-	columns := []any{"series_id", "name", "engine", "engine_version", "framework", "framework_version", "variant", "arch", "source", "deprecated", "deprecated_since", "size_bytes", "notes", "offline_blob_sha256", "registry_sources", "rolling_tag", "upstream_gone", "enabled"}
+	columns := []any{"series_id", "name", "engine", "engine_version", "framework", "framework_version", "variant", "arch", "source", "deprecated", "deprecated_since", "size_bytes", "download_bytes", "notes", "offline_blob_sha256", "registry_sources", "rolling_tag", "upstream_gone", "enabled"}
+	update := s.db.Model(&existing)
 	if existing.Source == "official" {
 		// The catalog owns a system row's description and registry
 		// references. Two things on it belong to this cluster and survive every
@@ -192,8 +202,13 @@ func (s *Store) UpsertImage(img *Image) (*Image, error) {
 		// image from there).
 		columns = columns[:len(columns)-1]
 		img.RegistrySources = preserveClusterArchiveSources(img.RegistrySources, existing.RegistrySources)
+		// A legacy import has no measurement to replace one for the same
+		// immutable release and architecture.
+		if legacyCatalog && !img.RollingTag && !existing.RollingTag && img.Arch == existing.Arch {
+			update = update.Omit("download_bytes")
+		}
 	}
-	if err := s.db.Model(&existing).Select(columns[0], columns[1:]...).Updates(img).Error; err != nil {
+	if err := update.Select(columns[0], columns[1:]...).Updates(img).Error; err != nil {
 		return nil, err
 	}
 	if err := s.db.First(&existing, existing.ID).Error; err != nil {

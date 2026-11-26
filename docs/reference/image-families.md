@@ -104,7 +104,7 @@ image catalog synced catalog_version=2026-10-09.f085e40b created=0 updated=25 de
   `UPDATE_SOURCES_UNAVAILABLE`，索引可用但没有源提供与索引一致的目录文件时返回 502 `UPDATE_DOWNLOAD_FAILED`
   （`detail` 都列出每个源的原因），渠道没有发布镜像目录时返回 404 `UPDATE_NOT_PUBLISHED`，库都不动。
 - **上传 manifest**：`POST /api/v1/images/import`，请求体就是 manifest JSON 本身。服务器不能访问公网时用它：
-  在能联网的机器上从任一发布源下载当前渠道的 `<channel>/manifest.json`（如 `https://dl.gpuworks.ai/release/manifest.json`，与渠道索引里的镜像目录是同一文件）再上传。
+  先将 server 升级到支持 schema 4 的版本，再下载并导入 `<channel>/manifest.json`。schema 2、3 导入会保留同一固定标签及架构已有的下载量；schema 4 省略该字段会将其恢复为未知。操作见[离线更新目录](../how-to/deploy-offline.md)。
 
 两条路径都把本次的 `catalog_version` 记为当前目录版本，设置页「版本与更新」据此显示是否有更新。
 上传的目录与渠道目录不同时不算「有更新」，该行显示「已上传」。这时「检查更新」和「改用渠道目录」都先弹确认，确认后渠道目录才按下面的规则替换它，只在上传目录里的版本随之删除或转为旧版本；接口不带 `replace_uploaded=true` 时返回 409 `IMAGE_CATALOG_UPLOADED`。
@@ -133,15 +133,14 @@ image catalog synced catalog_version=2026-10-09.f085e40b created=0 updated=25 de
 
 ### manifest 格式
 
-内嵌种子与上游 `manifest.json` 是同一个文件。`schema_version` 必须是 `3`（兼容导入 `2`，其他值 400
-`IMAGE_MANIFEST_INVALID`）；`catalog_version` 必填，形如 `<日期>.<内容 hash 前 8 位>`，只用于展示与日志，
-不参与比较；可选的 `sha256` 是正文完整性哈希（按 `sha256` 字段置空后的规范 JSON 计算），存在时不匹配即拒绝。
+内嵌目录使用 schema 4。可选字段 `download_size_bytes` 是单个平台的压缩层字节之和，多架构标签取最大值。已知测量使用正整数；省略或填 0 表示未知。schema 2、3 不能携带非零的下载量。签名索引的 `image_catalog` 与 `<channel>/manifest.json` 指向同一份目录。服务端可导入 schema 2、3、4（其他值 400
+`IMAGE_MANIFEST_INVALID`）；`catalog_version` 必填，服务端通过比较本地与渠道的版本字符串来提示更新。完整目录的版本形如 `<日期>.<series 哈希前 8 位>`。
+可选的 `sha256` 是正文完整性哈希（按 `sha256` 字段置空后的规范 JSON 计算），存在时不匹配即拒绝。
 
 ```json
 {
-  "schema_version": 3,
-  "catalog_version": "2026-10-09.f085e40b",
-  "sha256": "<正文 sha256，可选>",
+  "schema_version": 4,
+  "catalog_version": "2026-11-26.87c35c95",
   "series": [
     {
       "name": "vLLM · CUDA",
@@ -150,16 +149,16 @@ image catalog synced catalog_version=2026-10-09.f085e40b created=0 updated=25 de
       "framework": "cuda",
       "versions": [
         {
-          "name": "cuda13.0-vllm0.30.0-r2",
-          "image_ref": "gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r2",
+          "name": "cuda13.0-vllm0.30.0-r4",
+          "image_ref": "gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4",
           "engine_version": "0.30.0",
           "framework_version": "13.0",
           "arch": "multi",
           "registry_sources": [
-            "quay.io/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r2",
-            "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r2"
+            "quay.io/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4",
+            "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4"
           ],
-          "notes": "..."
+          "download_size_bytes": 10055140754
         }
       ]
     }

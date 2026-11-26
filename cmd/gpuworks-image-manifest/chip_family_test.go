@@ -26,7 +26,7 @@ func TestMatrixTagsReadBackToTheirChipFamily(t *testing.T) {
 	ascendFamily := map[string]string{"910b": "910b", "a3": "910c", "310p": "310p", "950": "950"}
 	withModel := 0
 	for _, item := range matrix.Items {
-		version, tag, err := versionFromItem(item, matrix.Defaults.Platforms, DefaultRegistry)
+		version, tag, err := matrix.versionFromItem(item, DefaultRegistry)
 		if err != nil {
 			t.Fatal(err)
 		}

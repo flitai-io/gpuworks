@@ -60,7 +60,7 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generated manifest does not parse: %v", err)
 	}
-	if m.SchemaVersion != 3 || !strings.HasPrefix(m.CatalogVersion, "2026-10-08.") || len(m.CatalogVersion) != len("2026-10-08.")+8 {
+	if m.SchemaVersion != 4 || !strings.HasPrefix(m.CatalogVersion, "2026-10-08.") || len(m.CatalogVersion) != len("2026-10-08.")+8 {
 		t.Fatalf("schema/catalog version = %d %q", m.SchemaVersion, m.CatalogVersion)
 	}
 	versions := map[string]manifest.ManifestVersion{}
@@ -430,5 +430,43 @@ func TestExportedGrammarIsTheGenerators(t *testing.T) {
 	}
 	if string(got) != string(grammarFile()) {
 		t.Fatal("build/runner-images/tag-grammar.txt is stale; run `make image-manifest`")
+	}
+}
+
+func TestRevisionChangeRequiresNewDownloadMeasurement(t *testing.T) {
+	const matrix = `defaults:
+  platforms: [linux/amd64]
+download_sizes:
+  xre5.0.21.46-vllm0.25.1-r1: {linux/amd64: 18544375312}
+items:
+  - id: xre5.0.21.46-vllm0.25.1
+    revision: REVISION
+`
+	const measurement = "  xre5.0.21.46-vllm0.25.1-r1: {linux/amd64: 18544375312}\n"
+	for _, tc := range []struct {
+		revision string
+		input    string
+		want     int64
+	}{{"r1", matrix, 18544375312}, {"r2", strings.Replace(matrix, measurement, "", 1), 0}} {
+		data := []byte(strings.Replace(tc.input, "REVISION", tc.revision, 1))
+		out, err := generate(data, options{Date: "2026-11-26"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, err := manifest.Parse(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(m.Series) != 1 || len(m.Series[0].Versions) != 1 {
+			t.Fatal("expected one catalog version")
+		}
+		v := m.Series[0].Versions[0]
+		if v.Name != "xre5.0.21.46-vllm0.25.1-"+tc.revision || v.DownloadBytes != tc.want {
+			t.Errorf("revision %s: catalog tag %s has %d bytes, want %d", tc.revision, v.Name, v.DownloadBytes, tc.want)
+		}
+	}
+	stale := strings.Replace(matrix, "REVISION", "r2", 1)
+	if _, err := generate([]byte(stale), options{}); err == nil || !strings.Contains(err.Error(), "xre5.0.21.46-vllm0.25.1-r1") {
+		t.Fatalf("expected an error naming the orphaned measurement, got %v", err)
 	}
 }
