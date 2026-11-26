@@ -10,7 +10,7 @@
 # Adding one is a change to this file, reviewed like any other rule.
 
 contract	internal/proto/*.go
-contract	internal/server/api/errors.go
+contract	internal/server/api/errors*.go
 contract	cmd/gpuworks/*.go
 contract	internal/server/cli/*.go
 contract	internal/server/inferencecatalog/flat.go

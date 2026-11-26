@@ -330,14 +330,15 @@ for (const [index, source] of schedulerSources.entries()) {
 
 // Structured API product errors keep an English fallback on the wire, while
 // the UI resolves stable codes from the common namespace. Package messages
-// declares them, one file per area; api/errors.go adds its own and aliases
+// declares them, one file per area; api/errors*.go add their own and alias
 // the rest. Agent runtime failures travel through the same ProductMessage API,
 // with their wire codes owned by proto. Check outcome codes (ADR 0067) are
 // declared beside them as Check* constants and render the same way.
 const messagesDir = path.join(root, "internal/server/messages");
 const productErrorSourceFiles = [
   ...fs.readdirSync(messagesDir).filter((name) => name.endsWith(".go") && !name.endsWith("_test.go")).sort().map((name) => path.join(messagesDir, name)),
-  path.join(root, "internal/server/api/errors.go"),
+  // api declares its own codes in errors.go and errors_<area>.go.
+  ...fs.readdirSync(path.join(root, "internal/server/api")).filter((name) => /^errors(_[a-z]+)?\.go$/.test(name)).sort().map((name) => path.join(root, "internal/server/api", name)),
   path.join(root, "internal/server/proxy/api_errors.go"),
   // The plugin wire formats (a public module that cannot import messages)
   // declare the codes of their failures, which the console renders.
