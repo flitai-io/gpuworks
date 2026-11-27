@@ -372,7 +372,7 @@ func TestDefaultProbersPreserveExistingVendorOrder(t *testing.T) {
 	for i, prober := range probers {
 		vendors[i] = prober.Vendor()
 	}
-	want := []string{"hygon", "ascend", "ppu", "kunlunxin", "nvidia", "apple", "amd"}
+	want := []string{"hygon", "ascend", "ppu", "kunlunxin", "metax", "nvidia", "apple", "amd"}
 	if !reflect.DeepEqual(vendors, want) {
 		t.Fatalf("default prober vendors = %v, want %v", vendors, want)
 	}

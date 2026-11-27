@@ -14,6 +14,7 @@ const META: Record<string, { label?: string; labelKey?: string; color: string; m
   ppu: { labelKey: "vendor.ppu", color: "#1677ff", mark: "P" },
   hygon: { labelKey: "vendor.hygon", color: "#6b4fbb", mark: "H" },
   kunlunxin: { labelKey: "vendor.kunlunxin", color: "var(--brand)", mark: "K" },
+  metax: { labelKey: "vendor.metax", color: "var(--brand)", mark: "M" },
   apple: { labelKey: "vendor.apple", color: "#555555", mark: "M" },
   unknown: { labelKey: "vendor.unknown", color: "#8c8c8c", mark: "?" },
 };

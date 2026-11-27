@@ -77,7 +77,7 @@ func TestVendorKeyKeepsUnknownVendorsVerbatim(t *testing.T) {
 
 func TestKnownVendorsIsTheClosedSetNormalizeVendorProduces(t *testing.T) {
 	known := KnownVendors()
-	if !reflect.DeepEqual(known, []string{VendorNVIDIA, VendorAMD, VendorAscend, VendorPPU, VendorHygon, VendorApple, VendorKunlunxin}) {
+	if !reflect.DeepEqual(known, []string{VendorNVIDIA, VendorAMD, VendorAscend, VendorPPU, VendorHygon, VendorMetaX, VendorApple, VendorKunlunxin}) {
 		t.Fatalf("KnownVendors() = %v", known)
 	}
 	set := make(map[string]struct{}, len(known))

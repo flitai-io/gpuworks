@@ -340,7 +340,7 @@ func defaultProbers() []Prober {
 	// Keep the existing automatic-probe order stable. AMD is an explicit
 	// choice on mixed-vendor nodes; inserting it before NVIDIA would silently
 	// change which vendor the single-prober agent reports in auto mode.
-	return []Prober{&HygonProber{}, &AscendProber{}, &PPUProber{}, &KunlunProber{}, &SMIProber{}, &AppleProber{}, &AMDProber{}}
+	return []Prober{&HygonProber{}, &AscendProber{}, &PPUProber{}, &KunlunProber{}, &MetaXProber{}, &SMIProber{}, &AppleProber{}, &AMDProber{}}
 }
 
 func firstAvailable(probers []Prober) Prober {

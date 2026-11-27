@@ -1,4 +1,8 @@
 {
+  "terminalPage": {
+    "title": "终端 · {{label}} — {{product}}",
+    "loading": "正在加载终端…"
+  },
   "pullProxy": {
     "title": "拉取代理",
     "entry": "代理 #{{n}}",

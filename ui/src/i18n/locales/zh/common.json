@@ -5,15 +5,12 @@
     "proxies": "设置“{{setting}}”已移除；请在 设置 → 镜像与模型拉取 中配置代理和来源规则。",
     "credentials": "设置“{{setting}}”已移除；请在 设置 → 镜像与模型拉取 中配置主机凭据。"
   },
-  "terminalPage": {
-    "title": "终端 · {{label}} — {{product}}",
-    "loading": "正在加载终端…"
-  },
   "vendor": {
     "nvidia": "NVIDIA",
     "ascend": "昇腾",
     "ppu": "平头哥",
     "hygon": "海光",
+    "metax": "沐曦",
     "kunlunxin": "昆仑芯",
     "apple": "Apple",
     "unknown": "未知厂商",

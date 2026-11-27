@@ -5,15 +5,12 @@
     "proxies": "Setting “{{setting}}” has been removed; use Settings → Image & model pulls to configure proxies and source rules.",
     "credentials": "Setting “{{setting}}” has been removed; use Settings → Image & model pulls to configure host credentials."
   },
-  "terminalPage": {
-    "title": "Terminal · {{label}} — {{product}}",
-    "loading": "Loading terminal…"
-  },
   "vendor": {
     "nvidia": "NVIDIA",
     "ascend": "Ascend",
     "ppu": "T-Head",
     "hygon": "Hygon",
+    "metax": "MetaX",
     "kunlunxin": "Kunlunxin",
     "apple": "Apple",
     "unknown": "Unknown Vendor",

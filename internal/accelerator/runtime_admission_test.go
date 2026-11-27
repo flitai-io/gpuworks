@@ -20,6 +20,7 @@ func TestVendorRuntimeAdmission(t *testing.T) {
 		{VendorAscend, linux, containers},
 		{VendorPPU, linux, containers},
 		{VendorHygon, linux, containers},
+		{VendorMetaX, linux, nil},
 		{VendorKunlunxin, linux, []string{"docker", "nerdctl", "kube"}},
 		{VendorApple, mac, []string{"host"}},
 	} {
@@ -35,7 +36,7 @@ func TestVendorRuntimeAdmission(t *testing.T) {
 			}
 		}
 	}
-	if got := len(KnownVendors()); got != 7 {
-		t.Errorf("%d vendors are defined; the table above covers 7", got)
+	if got := len(KnownVendors()); got != 8 {
+		t.Errorf("%d vendors are defined; the table above covers 8", got)
 	}
 }

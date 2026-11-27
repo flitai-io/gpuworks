@@ -1,0 +1,847 @@
+mx-smi  version: 3.100.0
+
+=================== MetaX System Management Interface Log ===================
+Timestamp                                         : Fri Nov 20 12:21:24 2026
+
+Attached GPUs                                     : 8
+GPU#0  MXC550  0000:0f:00.0
+    Version
+        MACA                                      : 3.8.5.14
+        BIOS                                      : 1.38.4.0
+        KMD                                       : 3.100.0
+        SMP0                                      : 1.38.4.0
+        SMP1                                      : 1.38.4.0
+        CCX0                                      : 1.38.0.0
+        CCX1                                      : 1.38.0.0
+        CCX2                                      : 1.38.0.0
+        VR0                                       : 1.2.0.2
+        VR1                                       : 1.2.0.2
+
+    Serial Number
+        chip serial                               : REDACTED-0001
+        board serial                              : REDACTED-0002
+
+    Utilization
+        GPU                                       : 0 %
+        VPUE                                      : 0 %
+        VPUD                                      : 0 %
+
+    Chip Temperature
+        hotspot(sensor1)                          :  31.75 C
+    Board Temperature
+        DrMOS_soc                                 :  38.00 C
+        DrMOS_core                                :  35.00 C
+        tdiode                                    :  28.25 C
+        air-inlet                                 :  30.75 C
+        air-outlet                                :  32.00 C
+
+    Pmbus Voltage
+        soc                                       :  0.740 V
+        core                                      :  0.730 V
+        hbm                                       :  1.218 V
+        pcie                                      :  0.902 V
+    Pmbus Current
+        soc                                       : 23.000 A
+        core                                      :  4.000 A
+        hbm                                       :  0.000 A
+        pcie                                      : 24.000 A
+    Pmbus Power
+        soc                                       : 17.000 W
+        core                                      :  0.000 W
+        hbm                                       :  0.000 W
+        pcie                                      : 22.000 W
+
+    Board#0 Voltage
+        Way 0                                     :  54.044 V
+    Board#0 Current
+        Way 0                                     :   1.766 A
+    Board#0 Power
+        Way 0                                     :  95.446 W
+        Total                                     :  95.446 W
+        Limit                                     : 450.000 W
+
+    DPM current performance level
+        xcore                                     : 0
+        mc                                        : 3
+        soc                                       : 2
+        dnoc                                      : 1
+        vpue                                      : 0
+        vpud                                      : 0
+        ccx                                       : 0
+
+    Clocks
+        CSC
+            CSC_SMPCLK                            : 457 MHz
+            CSC_RNOCCLK                           : 457 MHz
+            GLB_RISCV_APBCLK                      : 160 MHz
+            GLB_REFCLK100                         : 100 MHz
+        XCORE
+            XCORE_CLK                             : 450 MHz
+        MC1
+            MC1_DFICLK                            : 1800 MHz
+            MC1_BYPASSCLK                         : 642 MHz
+        MC0
+            MC0_DFICLK                            : 1800 MHz
+            MC0_BYPASSCLK                         : 642 MHz
+        VPUE
+            VPU_ENCCLK                            : 535 MHz
+        VPUD
+            VPU_DECCLK0                           : 525 MHz
+            VPU_DECCLK1                           : 525 MHz
+            VPU_DECCLK2                           : 525 MHz
+            VPU_DECCLK3                           : 525 MHz
+        SOC
+            SOC_CLK                               : 1200 MHz
+        DNOC
+            DNOC_CLK                              : 1200 MHz
+        CCX
+            CCX_CLK                               : 535 MHz
+
+    Memory
+        vis_vram total                            : 67108864 KB
+        vis_vram used                             : 881084 KB
+        vis_vram usage                            : 1.3 %
+        vram total                                : 67108864 KB
+        vram used                                 : 881084 KB
+        vram usage                                : 1.3 %
+        xtt total                                 : 1585012266 KB
+        xtt used                                  : 300663972 KB
+        xtt usage                                 : 18.9 %
+        vram driver reserved                      : 881084 KB
+
+GPU#1  MXC550  0000:34:00.0
+    Version
+        MACA                                      : 3.8.5.14
+        BIOS                                      : 1.38.4.0
+        KMD                                       : 3.100.0
+        SMP0                                      : 1.38.4.0
+        SMP1                                      : 1.38.4.0
+        CCX0                                      : 1.38.0.0
+        CCX1                                      : 1.38.0.0
+        CCX2                                      : 1.38.0.0
+        VR0                                       : 1.2.0.2
+        VR1                                       : 1.2.0.2
+
+    Serial Number
+        chip serial                               : REDACTED-0003
+        board serial                              : REDACTED-0004
+
+    Utilization
+        GPU                                       : 0 %
+        VPUE                                      : 0 %
+        VPUD                                      : 0 %
+
+    Chip Temperature
+        hotspot(sensor0)                          :  35.25 C
+    Board Temperature
+        DrMOS_soc                                 :  39.00 C
+        DrMOS_core                                :  39.00 C
+        tdiode                                    :  32.12 C
+        air-inlet                                 :  36.37 C
+        air-outlet                                :  35.00 C
+
+    Pmbus Voltage
+        soc                                       :  0.738 V
+        core                                      :  0.730 V
+        hbm                                       :  1.220 V
+        pcie                                      :  0.898 V
+    Pmbus Current
+        soc                                       : 24.000 A
+        core                                      :  4.000 A
+        hbm                                       :  1.000 A
+        pcie                                      : 22.750 A
+    Pmbus Power
+        soc                                       : 17.000 W
+        core                                      :  0.000 W
+        hbm                                       :  2.000 W
+        pcie                                      : 20.500 W
+
+    Board#1 Voltage
+        Way 0                                     :  54.050 V
+    Board#1 Current
+        Way 0                                     :   1.766 A
+    Board#1 Power
+        Way 0                                     :  95.470 W
+        Total                                     :  95.470 W
+        Limit                                     : 450.000 W
+
+    DPM current performance level
+        xcore                                     : 0
+        mc                                        : 3
+        soc                                       : 2
+        dnoc                                      : 1
+        vpue                                      : 0
+        vpud                                      : 0
+        ccx                                       : 0
+
+    Clocks
+        CSC
+            CSC_SMPCLK                            : 457 MHz
+            CSC_RNOCCLK                           : 457 MHz
+            GLB_RISCV_APBCLK                      : 160 MHz
+            GLB_REFCLK100                         : 100 MHz
+        XCORE
+            XCORE_CLK                             : 450 MHz
+        MC1
+            MC1_DFICLK                            : 1800 MHz
+            MC1_BYPASSCLK                         : 642 MHz
+        MC0
+            MC0_DFICLK                            : 1800 MHz
+            MC0_BYPASSCLK                         : 642 MHz
+        VPUE
+            VPU_ENCCLK                            : 535 MHz
+        VPUD
+            VPU_DECCLK0                           : 525 MHz
+            VPU_DECCLK1                           : 525 MHz
+            VPU_DECCLK2                           : 525 MHz
+            VPU_DECCLK3                           : 525 MHz
+        SOC
+            SOC_CLK                               : 1200 MHz
+        DNOC
+            DNOC_CLK                              : 1200 MHz
+        CCX
+            CCX_CLK                               : 535 MHz
+
+    Memory
+        vis_vram total                            : 67108864 KB
+        vis_vram used                             : 881084 KB
+        vis_vram usage                            : 1.3 %
+        vram total                                : 67108864 KB
+        vram used                                 : 881084 KB
+        vram usage                                : 1.3 %
+        xtt total                                 : 1585012266 KB
+        xtt used                                  : 300663972 KB
+        xtt usage                                 : 18.9 %
+        vram driver reserved                      : 881084 KB
+
+GPU#2  MXC550  0000:48:00.0
+    Version
+        MACA                                      : 3.8.5.14
+        BIOS                                      : 1.38.4.0
+        KMD                                       : 3.100.0
+        SMP0                                      : 1.38.4.0
+        SMP1                                      : 1.38.4.0
+        CCX0                                      : 1.38.0.0
+        CCX1                                      : 1.38.0.0
+        CCX2                                      : 1.38.0.0
+        VR0                                       : 1.2.0.2
+        VR1                                       : 1.2.0.2
+
+    Serial Number
+        chip serial                               : REDACTED-0005
+        board serial                              : REDACTED-0006
+
+    Utilization
+        GPU                                       : 0 %
+        VPUE                                      : 0 %
+        VPUD                                      : 0 %
+
+    Chip Temperature
+        hotspot(sensor3)                          :  34.00 C
+    Board Temperature
+        DrMOS_soc                                 :  41.00 C
+        DrMOS_core                                :  40.00 C
+        tdiode                                    :  31.87 C
+        air-inlet                                 :  36.75 C
+        air-outlet                                :  37.00 C
+
+    Pmbus Voltage
+        soc                                       :  0.738 V
+        core                                      :  0.730 V
+        hbm                                       :  1.220 V
+        pcie                                      :  0.902 V
+    Pmbus Current
+        soc                                       : 24.000 A
+        core                                      :  2.000 A
+        hbm                                       :  0.000 A
+        pcie                                      : 23.875 A
+    Pmbus Power
+        soc                                       : 18.000 W
+        core                                      :  0.000 W
+        hbm                                       :  0.000 W
+        pcie                                      : 21.500 W
+
+    Board#2 Voltage
+        Way 0                                     :  54.047 V
+    Board#2 Current
+        Way 0                                     :   1.743 A
+    Board#2 Power
+        Way 0                                     :  94.242 W
+        Total                                     :  94.242 W
+        Limit                                     : 450.000 W
+
+    DPM current performance level
+        xcore                                     : 0
+        mc                                        : 3
+        soc                                       : 2
+        dnoc                                      : 1
+        vpue                                      : 0
+        vpud                                      : 0
+        ccx                                       : 0
+
+    Clocks
+        CSC
+            CSC_SMPCLK                            : 457 MHz
+            CSC_RNOCCLK                           : 457 MHz
+            GLB_RISCV_APBCLK                      : 160 MHz
+            GLB_REFCLK100                         : 100 MHz
+        XCORE
+            XCORE_CLK                             : 450 MHz
+        MC1
+            MC1_DFICLK                            : 1800 MHz
+            MC1_BYPASSCLK                         : 642 MHz
+        MC0
+            MC0_DFICLK                            : 1800 MHz
+            MC0_BYPASSCLK                         : 642 MHz
+        VPUE
+            VPU_ENCCLK                            : 535 MHz
+        VPUD
+            VPU_DECCLK0                           : 525 MHz
+            VPU_DECCLK1                           : 525 MHz
+            VPU_DECCLK2                           : 525 MHz
+            VPU_DECCLK3                           : 525 MHz
+        SOC
+            SOC_CLK                               : 1200 MHz
+        DNOC
+            DNOC_CLK                              : 1200 MHz
+        CCX
+            CCX_CLK                               : 535 MHz
+
+    Memory
+        vis_vram total                            : 67108864 KB
+        vis_vram used                             : 881084 KB
+        vis_vram usage                            : 1.3 %
+        vram total                                : 67108864 KB
+        vram used                                 : 881084 KB
+        vram usage                                : 1.3 %
+        xtt total                                 : 1585012266 KB
+        xtt used                                  : 300663972 KB
+        xtt usage                                 : 18.9 %
+        vram driver reserved                      : 881084 KB
+
+GPU#3  MXC550  0000:5a:00.0
+    Version
+        MACA                                      : 3.8.5.14
+        BIOS                                      : 1.38.4.0
+        KMD                                       : 3.100.0
+        SMP0                                      : 1.38.4.0
+        SMP1                                      : 1.38.4.0
+        CCX0                                      : 1.38.0.0
+        CCX1                                      : 1.38.0.0
+        CCX2                                      : 1.38.0.0
+        VR0                                       : 1.2.0.2
+        VR1                                       : 1.2.0.2
+
+    Serial Number
+        chip serial                               : REDACTED-0007
+        board serial                              : REDACTED-0008
+
+    Utilization
+        GPU                                       : 0 %
+        VPUE                                      : 0 %
+        VPUD                                      : 0 %
+
+    Chip Temperature
+        hotspot(sensor1)                          :  33.25 C
+    Board Temperature
+        DrMOS_soc                                 :  40.00 C
+        DrMOS_core                                :  39.00 C
+        tdiode                                    :  29.75 C
+        air-inlet                                 :  32.50 C
+        air-outlet                                :  34.00 C
+
+    Pmbus Voltage
+        soc                                       :  0.740 V
+        core                                      :  0.843 V
+        hbm                                       :  1.218 V
+        pcie                                      :  0.902 V
+    Pmbus Current
+        soc                                       : 23.000 A
+        core                                      : 16.000 A
+        hbm                                       :  1.000 A
+        pcie                                      : 23.625 A
+    Pmbus Power
+        soc                                       : 18.000 W
+        core                                      : 16.000 W
+        hbm                                       :  1.000 W
+        pcie                                      : 21.500 W
+
+    Board#3 Voltage
+        Way 0                                     :  54.033 V
+    Board#3 Current
+        Way 0                                     :   2.219 A
+    Board#3 Power
+        Way 0                                     : 119.900 W
+        Total                                     : 119.900 W
+        Limit                                     : 450.000 W
+
+    DPM current performance level
+        xcore                                     : 9
+        mc                                        : 3
+        soc                                       : 2
+        dnoc                                      : 1
+        vpue                                      : 0
+        vpud                                      : 0
+        ccx                                       : 0
+
+    Clocks
+        CSC
+            CSC_SMPCLK                            : 457 MHz
+            CSC_RNOCCLK                           : 457 MHz
+            GLB_RISCV_APBCLK                      : 160 MHz
+            GLB_REFCLK100                         : 100 MHz
+        XCORE
+            XCORE_CLK                             : 1371 MHz
+        MC1
+            MC1_DFICLK                            : 1800 MHz
+            MC1_BYPASSCLK                         : 642 MHz
+        MC0
+            MC0_DFICLK                            : 1800 MHz
+            MC0_BYPASSCLK                         : 642 MHz
+        VPUE
+            VPU_ENCCLK                            : 535 MHz
+        VPUD
+            VPU_DECCLK0                           : 525 MHz
+            VPU_DECCLK1                           : 525 MHz
+            VPU_DECCLK2                           : 525 MHz
+            VPU_DECCLK3                           : 525 MHz
+        SOC
+            SOC_CLK                               : 1200 MHz
+        DNOC
+            DNOC_CLK                              : 1200 MHz
+        CCX
+            CCX_CLK                               : 535 MHz
+
+    Memory
+        vis_vram total                            : 67108864 KB
+        vis_vram used                             : 32922232 KB
+        vis_vram usage                            : 49 %
+        vram total                                : 67108864 KB
+        vram used                                 : 32922232 KB
+        vram usage                                : 49 %
+        xtt total                                 : 1585012266 KB
+        xtt used                                  : 300663972 KB
+        xtt usage                                 : 18.9 %
+        vram driver reserved                      : 883320 KB
+
+GPU#4  MXC550  0000:87:00.0
+    Version
+        MACA                                      : 3.8.5.14
+        BIOS                                      : 1.38.4.0
+        KMD                                       : 3.100.0
+        SMP0                                      : 1.38.4.0
+        SMP1                                      : 1.38.4.0
+        CCX0                                      : 1.38.0.0
+        CCX1                                      : 1.38.0.0
+        CCX2                                      : 1.38.0.0
+        VR0                                       : 1.2.0.2
+        VR1                                       : 1.2.0.2
+
+    Serial Number
+        chip serial                               : REDACTED-0009
+        board serial                              : REDACTED-0010
+
+    Utilization
+        GPU                                       : 0 %
+        VPUE                                      : 0 %
+        VPUD                                      : 0 %
+
+    Chip Temperature
+        hotspot(sensor0)                          :  32.75 C
+    Board Temperature
+        DrMOS_soc                                 :  35.00 C
+        DrMOS_core                                :  38.00 C
+        tdiode                                    :  29.75 C
+        air-inlet                                 :  31.25 C
+        air-outlet                                :  34.00 C
+
+    Pmbus Voltage
+        soc                                       :  0.738 V
+        core                                      :  0.847 V
+        hbm                                       :  1.220 V
+        pcie                                      :  0.902 V
+    Pmbus Current
+        soc                                       : 25.000 A
+        core                                      : 18.000 A
+        hbm                                       :  0.000 A
+        pcie                                      : 23.625 A
+    Pmbus Power
+        soc                                       : 19.000 W
+        core                                      : 16.000 W
+        hbm                                       :  0.000 W
+        pcie                                      : 21.500 W
+
+    Board#4 Voltage
+        Way 0                                     :  54.035 V
+    Board#4 Current
+        Way 0                                     :   2.229 A
+    Board#4 Power
+        Way 0                                     : 120.469 W
+        Total                                     : 120.469 W
+        Limit                                     : 450.000 W
+
+    DPM current performance level
+        xcore                                     : 9
+        mc                                        : 3
+        soc                                       : 2
+        dnoc                                      : 1
+        vpue                                      : 0
+        vpud                                      : 0
+        ccx                                       : 0
+
+    Clocks
+        CSC
+            CSC_SMPCLK                            : 457 MHz
+            CSC_RNOCCLK                           : 457 MHz
+            GLB_RISCV_APBCLK                      : 160 MHz
+            GLB_REFCLK100                         : 100 MHz
+        XCORE
+            XCORE_CLK                             : 1371 MHz
+        MC1
+            MC1_DFICLK                            : 1800 MHz
+            MC1_BYPASSCLK                         : 642 MHz
+        MC0
+            MC0_DFICLK                            : 1800 MHz
+            MC0_BYPASSCLK                         : 642 MHz
+        VPUE
+            VPU_ENCCLK                            : 535 MHz
+        VPUD
+            VPU_DECCLK0                           : 525 MHz
+            VPU_DECCLK1                           : 525 MHz
+            VPU_DECCLK2                           : 525 MHz
+            VPU_DECCLK3                           : 525 MHz
+        SOC
+            SOC_CLK                               : 1200 MHz
+        DNOC
+            DNOC_CLK                              : 1200 MHz
+        CCX
+            CCX_CLK                               : 535 MHz
+
+    Memory
+        vis_vram total                            : 67108864 KB
+        vis_vram used                             : 55117924 KB
+        vis_vram usage                            : 82.1 %
+        vram total                                : 67108864 KB
+        vram used                                 : 55117924 KB
+        vram usage                                : 82.1 %
+        xtt total                                 : 1585012266 KB
+        xtt used                                  : 300663972 KB
+        xtt usage                                 : 18.9 %
+        vram driver reserved                      : 1175652 KB
+
+GPU#5  MXC550  0000:ae:00.0
+    Version
+        MACA                                      : 3.8.5.14
+        BIOS                                      : 1.38.4.0
+        KMD                                       : 3.100.0
+        SMP0                                      : 1.38.4.0
+        SMP1                                      : 1.38.4.0
+        CCX0                                      : 1.38.0.0
+        CCX1                                      : 1.38.0.0
+        CCX2                                      : 1.38.0.0
+        VR0                                       : 1.2.0.2
+        VR1                                       : 1.2.0.2
+
+    Serial Number
+        chip serial                               : REDACTED-0011
+        board serial                              : REDACTED-0012
+
+    Utilization
+        GPU                                       : 0 %
+        VPUE                                      : 0 %
+        VPUD                                      : 0 %
+
+    Chip Temperature
+        hotspot(sensor1)                          :  36.25 C
+    Board Temperature
+        DrMOS_soc                                 :  44.00 C
+        DrMOS_core                                :  41.00 C
+        tdiode                                    :  33.75 C
+        air-inlet                                 :  39.00 C
+        air-outlet                                :  37.00 C
+
+    Pmbus Voltage
+        soc                                       :  0.740 V
+        core                                      :  0.839 V
+        hbm                                       :  1.218 V
+        pcie                                      :  0.902 V
+    Pmbus Current
+        soc                                       : 23.000 A
+        core                                      : 14.000 A
+        hbm                                       :  2.000 A
+        pcie                                      : 23.625 A
+    Pmbus Power
+        soc                                       : 17.000 W
+        core                                      :  8.000 W
+        hbm                                       :  2.000 W
+        pcie                                      : 21.500 W
+
+    Board#5 Voltage
+        Way 0                                     :  54.042 V
+    Board#5 Current
+        Way 0                                     :   2.164 A
+    Board#5 Power
+        Way 0                                     : 116.990 W
+        Total                                     : 116.990 W
+        Limit                                     : 450.000 W
+
+    DPM current performance level
+        xcore                                     : 9
+        mc                                        : 3
+        soc                                       : 2
+        dnoc                                      : 1
+        vpue                                      : 0
+        vpud                                      : 0
+        ccx                                       : 0
+
+    Clocks
+        CSC
+            CSC_SMPCLK                            : 457 MHz
+            CSC_RNOCCLK                           : 457 MHz
+            GLB_RISCV_APBCLK                      : 160 MHz
+            GLB_REFCLK100                         : 100 MHz
+        XCORE
+            XCORE_CLK                             : 1371 MHz
+        MC1
+            MC1_DFICLK                            : 1800 MHz
+            MC1_BYPASSCLK                         : 642 MHz
+        MC0
+            MC0_DFICLK                            : 1800 MHz
+            MC0_BYPASSCLK                         : 642 MHz
+        VPUE
+            VPU_ENCCLK                            : 535 MHz
+        VPUD
+            VPU_DECCLK0                           : 525 MHz
+            VPU_DECCLK1                           : 525 MHz
+            VPU_DECCLK2                           : 525 MHz
+            VPU_DECCLK3                           : 525 MHz
+        SOC
+            SOC_CLK                               : 1200 MHz
+        DNOC
+            DNOC_CLK                              : 1200 MHz
+        CCX
+            CCX_CLK                               : 535 MHz
+
+    Memory
+        vis_vram total                            : 67108864 KB
+        vis_vram used                             : 54992996 KB
+        vis_vram usage                            : 81.9 %
+        vram total                                : 67108864 KB
+        vram used                                 : 54992996 KB
+        vram usage                                : 81.9 %
+        xtt total                                 : 1585012266 KB
+        xtt used                                  : 300663972 KB
+        xtt usage                                 : 18.9 %
+        vram driver reserved                      : 1175652 KB
+
+GPU#6  MXC550  0000:c2:00.0
+    Version
+        MACA                                      : 3.8.5.14
+        BIOS                                      : 1.38.4.0
+        KMD                                       : 3.100.0
+        SMP0                                      : 1.38.4.0
+        SMP1                                      : 1.38.4.0
+        CCX0                                      : 1.38.0.0
+        CCX1                                      : 1.38.0.0
+        CCX2                                      : 1.38.0.0
+        VR0                                       : 1.2.0.2
+        VR1                                       : 1.2.0.2
+
+    Serial Number
+        chip serial                               : REDACTED-0013
+        board serial                              : REDACTED-0014
+
+    Utilization
+        GPU                                       : 0 %
+        VPUE                                      : 0 %
+        VPUD                                      : 0 %
+
+    Chip Temperature
+        hotspot(sensor1)                          :  35.50 C
+    Board Temperature
+        DrMOS_soc                                 :  41.00 C
+        DrMOS_core                                :  39.00 C
+        tdiode                                    :  33.37 C
+        air-inlet                                 :  37.25 C
+        air-outlet                                :  35.00 C
+
+    Pmbus Voltage
+        soc                                       :  0.740 V
+        core                                      :  0.835 V
+        hbm                                       :  1.220 V
+        pcie                                      :  0.898 V
+    Pmbus Current
+        soc                                       : 23.000 A
+        core                                      : 16.000 A
+        hbm                                       :  2.000 A
+        pcie                                      : 24.375 A
+    Pmbus Power
+        soc                                       : 17.000 W
+        core                                      : 16.000 W
+        hbm                                       :  2.000 W
+        pcie                                      : 22.000 W
+
+    Board#6 Voltage
+        Way 0                                     :  54.044 V
+    Board#6 Current
+        Way 0                                     :   2.176 A
+    Board#6 Power
+        Way 0                                     : 117.619 W
+        Total                                     : 117.619 W
+        Limit                                     : 450.000 W
+
+    DPM current performance level
+        xcore                                     : 9
+        mc                                        : 3
+        soc                                       : 2
+        dnoc                                      : 1
+        vpue                                      : 0
+        vpud                                      : 0
+        ccx                                       : 0
+
+    Clocks
+        CSC
+            CSC_SMPCLK                            : 457 MHz
+            CSC_RNOCCLK                           : 457 MHz
+            GLB_RISCV_APBCLK                      : 160 MHz
+            GLB_REFCLK100                         : 100 MHz
+        XCORE
+            XCORE_CLK                             : 1371 MHz
+        MC1
+            MC1_DFICLK                            : 1800 MHz
+            MC1_BYPASSCLK                         : 642 MHz
+        MC0
+            MC0_DFICLK                            : 1800 MHz
+            MC0_BYPASSCLK                         : 642 MHz
+        VPUE
+            VPU_ENCCLK                            : 535 MHz
+        VPUD
+            VPU_DECCLK0                           : 525 MHz
+            VPU_DECCLK1                           : 525 MHz
+            VPU_DECCLK2                           : 525 MHz
+            VPU_DECCLK3                           : 525 MHz
+        SOC
+            SOC_CLK                               : 1200 MHz
+        DNOC
+            DNOC_CLK                              : 1200 MHz
+        CCX
+            CCX_CLK                               : 535 MHz
+
+    Memory
+        vis_vram total                            : 67108864 KB
+        vis_vram used                             : 54706272 KB
+        vis_vram usage                            : 81.5 %
+        vram total                                : 67108864 KB
+        vram used                                 : 54706272 KB
+        vram usage                                : 81.5 %
+        xtt total                                 : 1585012266 KB
+        xtt used                                  : 300663972 KB
+        xtt usage                                 : 18.9 %
+        vram driver reserved                      : 1175648 KB
+
+GPU#7  MXC550  0000:d7:00.0
+    Version
+        MACA                                      : 3.8.5.14
+        BIOS                                      : 1.38.4.0
+        KMD                                       : 3.100.0
+        SMP0                                      : 1.38.4.0
+        SMP1                                      : 1.38.4.0
+        CCX0                                      : 1.38.0.0
+        CCX1                                      : 1.38.0.0
+        CCX2                                      : 1.38.0.0
+        VR0                                       : 1.2.0.2
+        VR1                                       : 1.2.0.2
+
+    Serial Number
+        chip serial                               : REDACTED-0015
+        board serial                              : REDACTED-0016
+
+    Utilization
+        GPU                                       : 0 %
+        VPUE                                      : 0 %
+        VPUD                                      : 0 %
+
+    Chip Temperature
+        hotspot(sensor0)                          :  33.75 C
+    Board Temperature
+        DrMOS_soc                                 :  38.00 C
+        DrMOS_core                                :  39.00 C
+        tdiode                                    :  30.75 C
+        air-inlet                                 :  31.62 C
+        air-outlet                                :  34.00 C
+
+    Pmbus Voltage
+        soc                                       :  0.740 V
+        core                                      :  0.839 V
+        hbm                                       :  1.220 V
+        pcie                                      :  0.902 V
+    Pmbus Current
+        soc                                       : 25.000 A
+        core                                      : 16.000 A
+        hbm                                       :  0.000 A
+        pcie                                      : 24.500 A
+    Pmbus Power
+        soc                                       : 18.000 W
+        core                                      : 16.000 W
+        hbm                                       :  1.000 W
+        pcie                                      : 22.000 W
+
+    Board#7 Voltage
+        Way 0                                     :  54.042 V
+    Board#7 Current
+        Way 0                                     :   2.134 A
+    Board#7 Power
+        Way 0                                     : 115.334 W
+        Total                                     : 115.334 W
+        Limit                                     : 450.000 W
+
+    DPM current performance level
+        xcore                                     : 9
+        mc                                        : 3
+        soc                                       : 2
+        dnoc                                      : 1
+        vpue                                      : 0
+        vpud                                      : 0
+        ccx                                       : 0
+
+    Clocks
+        CSC
+            CSC_SMPCLK                            : 457 MHz
+            CSC_RNOCCLK                           : 457 MHz
+            GLB_RISCV_APBCLK                      : 160 MHz
+            GLB_REFCLK100                         : 100 MHz
+        XCORE
+            XCORE_CLK                             : 1371 MHz
+        MC1
+            MC1_DFICLK                            : 1800 MHz
+            MC1_BYPASSCLK                         : 642 MHz
+        MC0
+            MC0_DFICLK                            : 1800 MHz
+            MC0_BYPASSCLK                         : 642 MHz
+        VPUE
+            VPU_ENCCLK                            : 535 MHz
+        VPUD
+            VPU_DECCLK0                           : 525 MHz
+            VPU_DECCLK1                           : 525 MHz
+            VPU_DECCLK2                           : 525 MHz
+            VPU_DECCLK3                           : 525 MHz
+        SOC
+            SOC_CLK                               : 1200 MHz
+        DNOC
+            DNOC_CLK                              : 1200 MHz
+        CCX
+            CCX_CLK                               : 535 MHz
+
+    Memory
+        vis_vram total                            : 67108864 KB
+        vis_vram used                             : 54585444 KB
+        vis_vram usage                            : 81.3 %
+        vram total                                : 67108864 KB
+        vram used                                 : 54585444 KB
+        vram usage                                : 81.3 %
+        xtt total                                 : 1585012266 KB
+        xtt used                                  : 300663972 KB
+        xtt usage                                 : 18.9 %
+        vram driver reserved                      : 1175652 KB
+
+End of Log

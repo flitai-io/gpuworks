@@ -116,6 +116,16 @@
       "partition_backend": "hygon-dgpu"
     },
     {
+      "id": "metax",
+      "brand": "MetaX",
+      "frameworks": [
+        "maca",
+        "cu-bridge"
+      ],
+      "runtimes": [],
+      "features": []
+    },
+    {
       "id": "apple",
       "brand": "Apple",
       "frameworks": [
@@ -146,5 +156,5 @@
       ]
     }
   ],
-  "total": 7
+  "total": 8
 }

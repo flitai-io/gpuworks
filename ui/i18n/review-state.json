@@ -530,7 +530,7 @@
       "reviewed_at": "2026-08-25T08:53:03.665Z",
       "reviewer_model": "deepseek-v4-flash"
     },
-    "ui/zh/common::terminalPage.title": {
+    "ui/zh/nodes::terminalPage.title": {
       "source_hash": "e14450105a5e8012cc6b45a8ca1f4498f07f604166e9a11be55359b72c23c340",
       "translation_hash": "d57034a3e0a275933b26ce27ce3aecbf284f83d64e00e44fc90ae995ab6b32f2",
       "verdict": "pass",
@@ -541,7 +541,7 @@
       "reviewed_at": "2026-08-25T11:32:26.982Z",
       "reviewer_model": "deepseek-v4-flash"
     },
-    "ui/zh/common::terminalPage.loading": {
+    "ui/zh/nodes::terminalPage.loading": {
       "source_hash": "24c03faae40644eaa27b44640d29e4010858f87a534dbd461e55dedc55a37c04",
       "translation_hash": "1ea075390b7233a4773600c0531e122c151dd3f21395a3e8af7a1e69fd48eeaf",
       "verdict": "pass",

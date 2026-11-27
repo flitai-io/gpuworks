@@ -25,7 +25,7 @@ ui_copy_clauses_strings	24	max
 ui_copy_command_strings	12	max
 ui_copy_en_strings	56	max
 ui_copy_inline_help_refs	95	max
-ui_common_locale_keys	590	max
+ui_common_locale_keys	589	max
 ee_ui_internal_imports	0	max
 setting_key_literal	0	max
 vendor_normalize_funcs	1	max

@@ -593,9 +593,9 @@ test("three vendors are all listed without a fold; a vendor without a logo is na
   const rows = [...models.querySelectorAll(".dashboard-model-row")];
   assert.equal(rows.length, 3);
   ok(!rows.some((row) => row.classList.contains("is-more")), "no fold at three vendors");
-  assert.deepEqual(rows.map((row) => row.querySelector("img")?.getAttribute("alt") ?? row.querySelector(".dashboard-vendor-mark")?.textContent), ["AMD", "Kunlunxin", "Unknown Vendor"]);
+  assert.deepEqual(rows.map((row) => row.querySelector("img")?.getAttribute("alt") ?? row.querySelector(".dashboard-vendor-mark")?.textContent), ["AMD", "Kunlunxin", "MetaX"]);
   assert.deepEqual(rows.slice(0, 2).map((row) => row.querySelector("img")?.parentElement?.className), ["vendor-mark vendor-mark-ink-dark", "vendor-mark vendor-mark-ink-light"], "dashboard marks carry the ink class for the original artwork");
-  assert.equal(rows[2].querySelector("img"), null, "an unknown vendor has no logo, only its name");
+  assert.equal(rows[2].querySelector("img"), null, "MetaX has no artwork, so its localized name is shown");
   assert.equal(rows[2].querySelector(".dashboard-model-name")?.textContent, "Unidentified", "a card without a name is grouped as unidentified");
 });
 

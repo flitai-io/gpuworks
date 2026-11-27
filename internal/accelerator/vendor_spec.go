@@ -172,6 +172,7 @@ var vendorSpecs = []vendorSpec{
 	ascendVendor,
 	ppuVendor,
 	hygonVendor,
+	metaxVendor,
 	appleVendor,
 	kunlunVendor,
 }

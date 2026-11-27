@@ -14,7 +14,7 @@ const NodeTerminal = lazy(() => import("../components/NodeTerminal"));
 // own tab so a session survives navigation in the main console, and so an
 // operator can read the terminal beside the GPU and log pages.
 export default function TerminalPage() {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation("nodes");
   const { productName } = useBranding();
   const { uuid = "" } = useParams();
   const [params] = useSearchParams();

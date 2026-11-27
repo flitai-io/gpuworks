@@ -261,7 +261,8 @@ func TestEveryDomesticModelIsVerifiedAndBelongsToASupportedVendor(t *testing.T) 
 			t.Errorf("%04x:%04x needs a name and the hardware it was read off", m.Vendor, m.Device)
 		}
 		if accelerator.VendorForPCI(m.Vendor, m.Device, 0x120000, "") == "" &&
-			accelerator.VendorForPCI(m.Vendor, m.Device, 0x030200, "") == "" {
+			accelerator.VendorForPCI(m.Vendor, m.Device, 0x030200, "") == "" &&
+			accelerator.VendorForPCI(m.Vendor, m.Device, 0x038000, "") == "" {
 			t.Errorf("%04x is not a vendor any rule identifies as an accelerator vendor", m.Vendor)
 		}
 	}

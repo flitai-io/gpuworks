@@ -1,4 +1,8 @@
 {
+  "terminalPage": {
+    "title": "Terminal · {{label}} — {{product}}",
+    "loading": "Loading terminal…"
+  },
   "pullProxy": {
     "title": "Pull proxy",
     "entry": "Proxy #{{n}}",

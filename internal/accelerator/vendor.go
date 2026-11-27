@@ -13,6 +13,7 @@ const (
 	VendorHygon     = "hygon"
 	VendorApple     = "apple"
 	VendorKunlunxin = "kunlunxin"
+	VendorMetaX     = "metax"
 )
 
 // FrameworkVendor returns the canonical vendor that owns a framework's
