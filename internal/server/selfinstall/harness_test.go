@@ -249,11 +249,6 @@ type harness struct {
 
 func newHarness(t *testing.T, dir string) *harness {
 	t.Helper()
-	return newHarnessWithPortProbe(t, dir, func(string) error { return nil })
-}
-
-func newHarnessWithPortProbe(t *testing.T, dir string, probe func(string) error) *harness {
-	t.Helper()
 	// Temporary roots may be aliases (macOS /var/folders or a symlink TMPDIR).
 	// Ordinary fixtures use canonical paths; symlink tests override them explicitly.
 	layout := NewLayout(dir, "", "")
@@ -310,8 +305,6 @@ func newHarnessWithPortProbe(t *testing.T, dir string, probe func(string) error)
 		// A fresh install binds the address of the default route; a fixed one
 		// keeps the suite independent of the host.
 		Host: serverconfig.Host{RouteIP: func() (net.IP, error) { return net.ParseIP("192.0.2.10"), nil }},
-
-		probeStoppedAddr: probe,
 	}
 	h.io = &IO{
 		In:         &scriptedInput{h: h},
@@ -418,8 +411,9 @@ func (h *harness) writeExistingInstall(releaseID string) existingInstall {
 	writeFile(h.t, h.layout.Binary(), "old binary", 0o755)
 	writeFile(h.t, filepath.Join(h.layout.DataDir, "gpuworks.db"), "old database", 0o600)
 	writeFile(h.t, filepath.Join(h.layout.DataDir, "master.key"), "old key", 0o600)
-	// A non-default port makes a lost console setting visible on read or restore.
-	existing := existingInstall{ReleaseID: releaseID, Addr: "127.0.0.1:19123"}
+	// Upgrade really binds the address after stopping the service, so a fixed
+	// port would make the suite depend on what the host runs.
+	existing := existingInstall{ReleaseID: releaseID, Addr: h.freeAddr()}
 	h.writeConfig(serverconfig.File{
 		Listen:  serverconfig.Listen{Console: []string{existing.Addr}},
 		DataDir: h.layout.DataDir,

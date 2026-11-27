@@ -20,8 +20,8 @@ func (h *harness) upgradeReq() UpgradeRequest {
 
 func TestUpgradeReplacesTheBinaryAndKeepsABackup(t *testing.T) {
 	h := newHarness(t, t.TempDir())
-	existing := h.writeExistingInstall("v1.0.0")
 	site := h.useSite("v2.0.0", []byte("new binary"))
+	existing := h.writeExistingInstall("v1.0.0")
 
 	report, err := h.installer.Upgrade(context.Background(), h.upgradeReq())
 	if err != nil {
@@ -440,6 +440,7 @@ func TestUpgradePrunesByTimeNotReleaseID(t *testing.T) {
 	// The snapshot this run takes lands a few seconds after the two already on
 	// disk, and it carries the release id that sorts first of all three.
 	h.now = time.Date(2026, 10, 24, 9, 24, 15, 0, time.UTC)
+	h.useSite("zzz-next-release", []byte("new binary"))
 	// The installation upgraded away from aaa-keep20000 first, so the two older
 	// snapshots are already there when this run takes its own.
 	h.writeExistingInstall("aaa-keep20000")
@@ -449,7 +450,6 @@ func TestUpgradePrunesByTimeNotReleaseID(t *testing.T) {
 	} {
 		writeFile(t, filepath.Join(h.layout.BackupsDir, name), "old snapshot", 0o600)
 	}
-	h.useSite("zzz-next-release", []byte("new binary"))
 	req := h.upgradeReq()
 	req.Keep = 2
 
