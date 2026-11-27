@@ -161,9 +161,14 @@ func TestManualCommandWithoutPortWarns(t *testing.T) {
 		{"JSON argv is not a script", single, `["vllm","serve","/model"]`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, warnings, err := ResolveLaunchWithWarnings(manualInput(tc.params, tc.script))
+			launch, warnings, err := ResolveLaunchWithWarnings(manualInput(tc.params, tc.script))
 			if err != nil {
 				t.Fatal(err)
+			}
+			// The agent explains a start that never answers by the same
+			// rule the deployer was warned by.
+			if launch.APIPortUnstated != tc.warn {
+				t.Fatalf("launch APIPortUnstated = %t, want %t", launch.APIPortUnstated, tc.warn)
 			}
 			var port *messages.Warning
 			for index := range warnings {

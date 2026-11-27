@@ -85,6 +85,13 @@ type ResolvedLaunch struct {
 	// Peers is the document the agent writes and mounts at
 	// PeersFileMountPath for a rank of a multi-node group; nil otherwise.
 	Peers *PeersFile `json:"peers,omitempty"`
+
+	// APIPortUnstated says the launch runs a manual command that states no
+	// API port: its engine listens on its own default port, not on the one
+	// the platform assigned. The server decides it by the manual command
+	// contract; the agent names it as the likely cause when nothing answers
+	// on the API port. An agent that predates the field ignores it.
+	APIPortUnstated bool `json:"api_port_unstated,omitempty"`
 }
 
 // InstanceDesiredState is the desired state for one concrete inference instance. The

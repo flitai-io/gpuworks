@@ -114,6 +114,7 @@ func (e *Engine) probeAndReportStartup(ctx context.Context, spec proto.InstanceD
 				return false
 			}
 			if failed {
+				failure, message = unstatedPortFailure(spec, lastResult, failure, message)
 				e.log.Warn("engine start failed before its timeout", "uuid", spec.UUID, "code", failure.Code, "detail", failure.Detail)
 				// No startup observation: its budget did not run out.
 				e.failAfterContainer(ctx, spec, failure, message)
@@ -139,7 +140,7 @@ func (e *Engine) probeAndReportStartup(ctx context.Context, spec proto.InstanceD
 			// the text would make each one look like a new milestone. The UI
 			// derives "how long" from the event and instance timestamps.
 			if elapsed := time.Since(healthStarted); elapsed >= nextHealthReport {
-				e.reportStateProgress(spec, proto.InstStarting, id, "", "waiting for engine health: "+healthDiagnosticDetail(lastTarget, lastResult), proto.PhaseHealthCheck, 0, 0, 0, 0)
+				e.reportStateProgress(spec, proto.InstStarting, id, "", healthWaitMessage(spec, lastTarget, lastResult), proto.PhaseHealthCheck, 0, 0, 0, 0)
 				nextHealthReport += 10 * time.Second
 			}
 		}
@@ -247,6 +248,7 @@ func (e *Engine) failHealthTimeout(ctx context.Context, spec proto.InstanceDesir
 			failure.Detail = strings.TrimPrefix(failure.Detail+"; "+processes, "; ")
 		}
 	}
+	failure, message = unstatedPortFailure(spec, lastResult, failure, message)
 	if ctx.Err() != nil {
 		return
 	}

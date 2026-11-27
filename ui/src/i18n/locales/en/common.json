@@ -927,6 +927,7 @@
     "CONTAINER_REMOVAL_PENDING": "The container {{resource}} could not be removed yet: {{detail}}",
     "ENGINE_HEALTH_ENDPOINT_INVALID": "The engine's health endpoint is not a valid address.",
     "ENGINE_HEALTH_TIMEOUT": "The engine did not become healthy before the start timeout.",
+    "ENGINE_PORT_UNSTATED": "Nothing listens on the assigned port {{port}}: the manual command states no API port, so the engine likely uses its own default port. Edit the deployment and state the API port in the command.",
     "ENGINE_START_STALLED": "The engine's start made no progress for a long time while its container kept running: {{detail}}",
     "ENGINE_START_ABORTED": "During its start the engine reported that one of its processes failed, and its container kept running without becoming healthy.",
     "WORKER_READINESS_TIMEOUT": "The headless worker did not stay up before the start timeout.",

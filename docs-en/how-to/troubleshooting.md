@@ -1164,7 +1164,7 @@ For the order of the four (cluster default → template → raised to the engine
 The budget applies while waiting for health checks after instance startup. Its value is determined when the instance is created; changes affect only instances started afterward.
 Exceeding the budget fails the startup attempt and triggers recreation according to the rules below.
 
-When the engine log shows it serving but the instance message stays `waiting for engine health: … result=connection_refused`, the manual command most likely states no `--port`: the engine listens on its own default port while the health check dials the port the platform assigned, and a larger budget does not help. Add `--port ${GPUWORKS_API_PORT}` to the command and deploy again; see [Ports and Platform Variables in a Manual Command](../explanation/launch-config.md#手工命令的端口与平台变量).
+When the engine log shows it serving but the instance message stays `waiting for engine health: … result=connection_refused`, the manual command most likely states no `--port`: the engine listens on its own default port while the health check dials the port the platform assigned, and a larger budget does not help. When the platform can tell that the manual command states no API port, the instance message says so, and the start fails with `ENGINE_PORT_UNSTATED` rather than a timeout or a stall. Add `--port ${GPUWORKS_API_PORT}` to the command and deploy again; see [Ports and Platform Variables in a Manual Command](../explanation/launch-config.md#手工命令的端口与平台变量).
 
 **Start stalled: `engine start stalled`**
 
@@ -1624,7 +1624,7 @@ When filing an issue or asking for help, attach a [diagnostics archive](#无法�
 <!-- translation-source-sha256: b6d85798c7347370b799710bd36ca3bd36fc4830973089961d74d506bc75980b ## Instance Startup Failure, Repeated Restarts, or OOM -->
 <!-- translation-source-sha256: 71da95ca5ab9db8518ad2524787a82835f8ca14f9d5ce4d4724e240444103463 ### Find the Cause of This Failure -->
 <!-- translation-source-sha256: 2767b9a17fd44ed4e114c17cf95320e87486bc057a517077bf2be5a2b2a58bfc ### Insufficient GPU Memory or an Incorrect Startup Command -->
-<!-- translation-source-sha256: 81decddc5fe96b88875b257ebba3fd413d9756bb3e7cb5811312dba3e2e54551 ### Distinguish the Two Startup Timeouts -->
+<!-- translation-source-sha256: 29b39160ec92c3f3d14b7054f3017365c1182710bc4442cffb190b1b6c5da517 ### Distinguish the Two Startup Timeouts -->
 <!-- translation-source-sha256: 9fc0546899e8801217945461926cdfddbf92aeaebba15b22768f0392951830e5 ### Container Exits After Reaching Running -->
 <!-- translation-source-sha256: 9b440725e326934e1723979abbdb7feca7f9a96cf5fac88ee19b1482db1500e2 ### Engine Stops Responding After Reaching Running -->
 <!-- translation-source-sha256: add832ec4ab268d576c36b2fc99eba23a41a9ba25040cceb7b68ff0583f0f8ab ### Retry After Fixing the Cause -->

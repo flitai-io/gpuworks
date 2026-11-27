@@ -927,6 +927,7 @@
     "CONTAINER_REMOVAL_PENDING": "容器 {{resource}} 暂时未能删除：{{detail}}",
     "ENGINE_HEALTH_ENDPOINT_INVALID": "引擎健康检查地址无效。",
     "ENGINE_HEALTH_TIMEOUT": "引擎在启动超时前未就绪。",
+    "ENGINE_PORT_UNSTATED": "平台分配的端口 {{port}} 上没有引擎在监听：手写命令没有设置 API 端口，引擎很可能在用自己的默认端口。请编辑部署，在命令里写上 API 端口。",
     "ENGINE_START_STALLED": "引擎启动长时间没有任何进展，容器仍在运行：{{detail}}",
     "ENGINE_START_ABORTED": "引擎在启动过程中报告其某个进程失败，容器仍在运行但始终未就绪。",
     "WORKER_READINESS_TIMEOUT": "无头工作进程在启动超时前未能稳定运行。",

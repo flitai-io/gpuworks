@@ -391,6 +391,7 @@ func ResolveLaunchWithWarnings(input ResolveLaunchInput) (ResolvedLaunch, []mess
 		warnings = append(warnings, warning)
 	}
 	if manualScript != "" && !params.Headless && !manualCommandStatesPort(overrides.CmdDisplay) {
+		launch.APIPortUnstated = true
 		warnings = append(warnings, messages.NewWarning(messages.WarningManualCommandPortUnstated, manualCommandPortFix()))
 	}
 	if err := resolveStartupBudget(input, &launch); err != nil {
