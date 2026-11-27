@@ -1,11 +1,15 @@
 package accelerator
 
+// KunlunSDKBinDir is the XRE SDK's CLI directory on the host.
+const KunlunSDKBinDir = "/usr/local/xpu/bin"
+
 const kunlunControlDevice = "/dev/xpuctrl"
 
 // KunlunPrecheckCommand lists cards on an SSH target before agent installation.
 // Intel also ships xpu-smi, so require the Kunlun driver's character device.
 const KunlunPrecheckCommand = `test -c ` + kunlunControlDevice + ` &&
-  cards="$(xpu-smi -L 2>/dev/null)" &&
+  smi="$(command -v xpu-smi || echo ` + KunlunSDKBinDir + `/xpu-smi)" &&
+  cards="$("$smi" -L 2>/dev/null)" &&
   printf '%s\n' "$cards" | grep -E '^[[:space:]]*XPU[[:space:]]+[0-9]+:[[:space:]]+[^[:space:]]'`
 
 // kunlunVendor is Kunlunxin. PCI identity measured 2026-10-28: P800

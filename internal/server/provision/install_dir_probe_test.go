@@ -99,7 +99,7 @@ func scenarioHandler(t *testing.T, sc dirScenario, dir string) fakeSSHHandler {
 	// PATH holds only the fakes and the plain utilities the scripts use, so a
 	// host with a real findmnt behaves as one without unless the scenario
 	// supplies it.
-	for _, tool := range []string{"sh", "awk", "dirname", "head", "tr", "rm", "uname", "cat", "test", "true", "mktemp"} {
+	for _, tool := range []string{"sh", "awk", "dirname", "grep", "head", "tr", "rm", "uname", "cat", "test", "true", "mktemp"} {
 		if real, err := exec.LookPath(tool); err == nil {
 			if err := os.Symlink(real, filepath.Join(bin, tool)); err != nil {
 				t.Fatal(err)

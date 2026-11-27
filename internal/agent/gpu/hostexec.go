@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+
+	"gpuworks.ai/gpuworks/internal/accelerator"
 )
 
 // An agent running in a container (a Kubernetes DaemonSet) runs the vendor's
@@ -33,7 +35,7 @@ var hostCLIDirs = []string{"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/u
 	"/usr/local/Ascend/driver/tools", "/opt/hyhal/bin", "/opt/dtk/bin",
 	// Kunlun's XRE SDK installs under /usr/local/xpu (its version.txt sits
 	// there); xpu-smi is also commonly linked into /usr/bin.
-	"/usr/local/xpu/bin"}
+	accelerator.KunlunSDKBinDir}
 
 // RunCLIsOnHost makes every vendor CLI the probes run execute in the host's
 // mount namespace (the agent must share the host's PID namespace).

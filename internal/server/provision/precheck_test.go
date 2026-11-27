@@ -193,6 +193,14 @@ exit "$CLI_STATUS"`)
 			}
 		})
 	}
+	t.Run("NVIDIA still takes precedence", func(t *testing.T) {
+		writeExecutable(t, filepath.Join(bin, "nvidia-smi"), `[ "$*" = "-L" ] && echo 'GPU 0: NVIDIA'`)
+		cmd := exec.Command("/bin/sh", "-c", strings.ReplaceAll(gpuProbeCommand(), "/dev/xpuctrl", "/dev/null"))
+		cmd.Env = []string{"PATH=" + bin, "CARDS=" + cards, "CLI_STATUS=0"}
+		if out, err := cmd.CombinedOutput(); err != nil || string(out) != "GPU 0: NVIDIA\n" {
+			t.Fatalf("mixed host probe = %q, %v", out, err)
+		}
+	})
 }
 
 func TestParseTargetRequiresUserAndHost(t *testing.T) {
