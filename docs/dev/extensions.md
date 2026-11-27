@@ -70,26 +70,28 @@ type Service interface{ Run(ctx context.Context) error }
 | `LimitPlatform(src)` | 整台 server 的可用性来源（见“可用性”）；全部模块中至多一个 |
 | `AnswerMembers(fn)` / `AskMember(ctx, member, question)` | 控制面集群里，本模块回答其他成员的提问，以及向另一个成员上的本模块提问。走成员之间已有的通道（成员证书双向 TLS），所以答案确实来自被问的成员，别人也问不了；提问和回答各不超过 64 KiB。被问的成员不必是主节点。单机上 `AskMember` 返回 `ErrNotClusterMember`；集群成员在自己通往其他成员的通道建好之前返回 `ErrMemberRouteNotReady`（模块的 `Init` 先于通道，所以在 `Init` 里问一定得到它，表示“没问成”，不代表对方没回答）；成员不在线或其构建没有注册回答函数时返回 `ErrMemberUnreachable`。`AskMember` 在运行期间调用 |
 | `HoldScheduling(h)` | 调度保持者，按来源名区分，来源重复即拒绝 |
-| `ReapplySchedulingHolds()` | 保持者的答案变了：请求对全部节点重新应用一次保持，不等各节点的下次状态上报 |
-| `ReapplySchedulingHoldsFor(ids)` | 同上，但只对答案变了的那些节点（按节点 id）重新应用 |
+| `HoldCardScheduling(h)` | 按卡的保持者（`store.CardSchedulingHolder`），按来源名区分，来源重复即拒绝；同一模块可以用同一个来源名同时保持节点和卡，见[按卡的保持者](#按卡的保持者) |
+| `ReapplySchedulingHolds()` | 保持者的答案变了：请求对全部节点（及其卡）重新应用一次保持，不等各节点的下次状态上报 |
+| `ReapplySchedulingHoldsFor(ids)` | 同上，但只对答案变了的那些节点（按节点 id）及其卡重新应用 |
 | `NodeFleet(ctx)` | 全部节点的保持事实（`store.NodeHoldFacts`），按 id（加入顺序）排序，读池上一次查询 |
+| `CardFleet(ctx)` | 全部卡的保持事实（`store.CardHoldFacts`），按节点 id、再按卡的身份排序，读池上一次查询 |
 | `NodeIdentity(ctx, ids, salt)` | 指定节点的加盐硬件身份（`store.NodeIdentity`），原始序列号不出核心，见[节点身份与节点清单](#节点身份与节点清单) |
 | `NodeInventory(ctx, cursor, limit)` | 按加入顺序分页的节点清单（`store.NodeInventoryPage`）：名称、加入时间、自己的卡（序号、型号、有无序列号） |
 | `NodeNamesByID(ctx, ids)` | 指定节点的显示名，以 id 为键（`map[uint]string`），读池上一次查询 |
 | `ClusterObservation(ctx, timeout)` | 本 server 所在控制面集群的一次观测（`app.ClusterObservation`）：成员、角色、谁在回应、能否再失去一个成员；与 `cluster-status` 报告同源。单机或不含集群运行时的构建回答 `Clustered: false`。只读，可在 `Init` 之后、服务请求时调用；每个探测以 `timeout` 为限并依次进行 |
 | `HostIdentity(salt)` | 管理 server 所在机器的加盐身份（`hostidentity.Salted`），见[管理 server 的主机身份](#管理-server-的主机身份) |
 
-`Host` 不交出 `*store.Store`，也不交出数据库句柄。`Init` 返回之后再注册会被拒绝（`ReapplySchedulingHolds`、`ReapplySchedulingHoldsFor`、`NodeFleet`、`NodeIdentity`、`NodeInventory` 、`NodeNamesByID` 与 `HostIdentity` 不是注册，任何时候都可调用）：有返回值的方法返回 `app.ErrHostClosed`，其他方法 panic。`Init` 出错时 `New` 失败并关闭数据库，同一数据目录可以立即再次启动。
+`Host` 不交出 `*store.Store`，也不交出数据库句柄。`Init` 返回之后再注册会被拒绝（`ReapplySchedulingHolds`、`ReapplySchedulingHoldsFor`、`NodeFleet`、`CardFleet`、`NodeIdentity`、`NodeInventory` 、`NodeNamesByID` 与 `HostIdentity` 不是注册，任何时候都可调用）：有返回值的方法返回 `app.ErrHostClosed`，其他方法 panic。`Init` 出错时 `New` 失败并关闭数据库，同一数据目录可以立即再次启动。
 
 扩展路由挂在 `/api/v1/x/<名>/` 下：`api.RouteSpec.Pattern` 相对 `/api/v1`，是 `/x/<名>` 或以 `/x/<名>/` 开头，且是规整的路径（没有 `.`、`..`、`//` 与结尾的 `/`）；越出自己的命名空间、路径不规整，或同一方法下两个模式只差参数名（`{id}` 与 `{name}`），都在路由构建时 panic。核心不在 `/api/v1/x/` 下注册任何路由，所以模块名可以与核心路径段同名（如 `nodes`），也不会与核心将来新增的路径冲突。
 
-所有 `Init` 结束后，server 先释放本构建没有任何模块认领的扩展停止调度（换了构建或去掉了模块时，它们不会一直留着），有保持者时再对全部节点应用一次保持，然后构建功能门（`featuregate.New`）并交给 API。
+所有 `Init` 结束后，server 先释放本构建没有任何模块认领的扩展停止调度与卡的保持（换了构建或去掉了模块时，它们不会一直留着），有保持者（节点或卡）时再对全部节点及其卡应用一次保持，然后构建功能门（`featuregate.New`）并交给 API。
 
 ## 保持者的重新应用与节点集合
 
 保持者的答案平时在每次状态上报时被问到，所以答案变了的节点最多要等一分钟才被停止或恢复调度。答案变了（例如快照重建后被保持的集合不同了）的模块调用 `ReapplySchedulingHolds()`，server 对全部节点再执行一次 `ApplySchedulingHolds`：
 
-- 不阻塞、不分配内存，可以在任何 goroutine 调用，**唯独不能在钩子里**（`SchedulingHolder.Hold`、插入守卫）：一次重新应用会再问一遍所有保持者，在 `Hold` 里请求就会让全部节点不停地重新应用。钩子里同样不请求任何其他重算。
+- 不阻塞、不分配内存，可以在任何 goroutine 调用，**唯独不能在钩子里**（`SchedulingHolder.Hold`、`CardSchedulingHolder.HoldCard`、插入守卫）：一次重新应用会再问一遍所有保持者，在 `Hold`（或 `HoldCard`）里请求就会让全部节点不停地重新应用。钩子里同样不请求任何其他重算。
 - 请求会合并：一次重新应用等待或执行期间的任意多次请求，最多再引起一次；两次之间至少隔 2 秒，所以答案来回抖动的保持者每 2 秒最多花一次全表写事务，不会变成每个事件一次。
 - 知道答案对哪些节点变了的模块调用 `ReapplySchedulingHoldsFor(ids)`：这次重新应用只读写这些节点（`ApplySchedulingHoldsFor`，`WHERE id IN`），频繁改动少数节点的保持者因此不会每次都花一遍全表事务。它与其他请求一样合并；两次重新应用之间点名的节点超过 `holdpass.MaxScoped`（512）个时改为全部节点，有人请求全部节点时也是全部节点。推送状态（插件推送的节点保持表）走这条路，只有容量上限变了才请求全部节点。
 - 重新应用在模块的 `Service` 所在的同一个 `services()` 循环里执行，不占调用方的 goroutine，随 server 停止；失败时记错误日志，从 2 秒起加倍退避（最长一分钟）重试。没有注册保持者时什么也不做。
@@ -97,7 +99,20 @@ type Service interface{ Run(ctx context.Context) error }
 答案取决于整个节点集合的保持者（例如按加入顺序挑选节点），用下面两样了解集合，而不是在 `Hold` 里记下见过的节点：
 
 - `NodeFleet(ctx)`：全部节点的保持事实，读池上一次查询。只用于启动时和节点集合变化之后合并执行的重算，不在每次上报或每个事件里调用，也不在钩子里调用。先订阅下面的主题再第一次读取，二者之间的变化就不会漏掉。
-- 总线主题 `store.NodeFleetTopic`：节点插入（三条插入路径）、删除，以及改变了保持事实（卡数或厂商；id、UUID、加入时间与所属 Kubernetes 集群不会变）的状态上报，各发一个事件，以节点 id 为键；用 `store.NodeFleetChangeOf(ev)` 读出 `{NodeID, Kind}`（`NodeInserted`、`NodeDeleted`、`NodeFactsChanged`），不要解析 `node` 主题的原因文本。没有改变保持事实的例行上报不发事件，所以发布方的开销不变。和所有总线主题一样，跟不上的订阅者只收到每个节点最新的一个事件，所以订阅者把任何事件都当作「这个节点、因而集合变了」，合并后从 `NodeFleet` 重算，不数事件。节点 id 删除后不再复用。
+- 总线主题 `store.NodeFleetTopic`：节点插入（三条插入路径）、删除，以及改变了保持事实（卡数或厂商；id、UUID、加入时间与所属 Kubernetes 集群不会变；或某张卡的保持事实：卡的增减，卡的序号、厂商或归属变化）的状态上报，各发一个事件，以节点 id 为键；用 `store.NodeFleetChangeOf(ev)` 读出 `{NodeID, Kind}`（`NodeInserted`、`NodeDeleted`、`NodeFactsChanged`），不要解析 `node` 主题的原因文本。没有改变保持事实的例行上报不发事件，所以发布方的开销不变。和所有总线主题一样，跟不上的订阅者只收到每个节点最新的一个事件，所以订阅者把任何事件都当作「这个节点、因而集合变了」，合并后从 `NodeFleet` 重算，不数事件。节点 id 删除后不再复用。
+
+## 按卡的保持者
+
+`store.CardSchedulingHolder`（`Source()`、`HoldCard(store.CardHoldFacts) store.CardHold`）是按单张卡的保持者，规则与 `SchedulingHolder` 相同，只是对象是卡：
+
+- 事实 `CardHoldFacts`：卡所在节点的 id、UUID、加入时间，卡的身份 `Ident`（存卡的键，`accelerator.CardIdent`；探测给不出身份时为 `index:<n>`）、序号 `Index`（厂商 CLI 不列出时为 -1，卡组变化时会重新编号，只用于显示）、厂商 `Vendor` 与归属 `Ownership`（空表示本节点可用）。
+- 答复 `CardHold{Code, Fallback, Params}`：零值表示不保持；保持时以产品消息展示给运维，没有给 code 时为 `CARD_SCHEDULING_HELD`。多个保持者时先注册、先保持的说了算。
+- 被保持的卡 `GPU.CanTakeWork` 为假：调度器不在它上面放任何新工作（整卡、按显存共用、与平台外进程共用都不行，手工选卡也不行），拒绝原因是 `gpus_held`（参数 `gpus`、`count`、`node`）。节点本身不停止调度，卡上已运行的实例照常服务、从不驱逐。
+- 保持的效果落在卡行上：`gpus.scheduling_held_by` 记保持者的来源名（不保持时为空），按 SQL 聚合卡数的读者（`OnlineGPUGroups`）从这一列读；保持本身不落库。每次写卡的状态上报（探测成功或只读到 PCI 时）在同一写事务里对每张卡再问一遍，`ApplySchedulingHolds` / `ApplySchedulingHoldsFor`（也就是 `ReapplySchedulingHolds`、`ReapplySchedulingHoldsFor` 请求的那一次）在同一个事务里先过卡、再过节点；卡的保持变了的节点作为调度变更发布，但不计入返回的节点列表。
+- 运维：保持高于管理员的启用、低于管理员的禁用。保持期间 `SetCardScheduling` 设为可调度返回 `store.ErrCardHeld`（包着保持者的 `*messages.ProductError`，API 为 409，带保持者的码），设为停止照常生效；卡的 `scheduling_actions` 不给 `schedulable`。保持结束后卡回到管理员的决定或平台的判定。
+- 卡的视图（`GET /nodes/{uuid}` 与 `GET /gpus`）带 `scheduling_held_by` 与 `scheduling_hold`（保持者现在给出的消息；行上还记着、保持者已不再保持而下一次应用还没到时，为通用的 `CARD_SCHEDULING_HELD`）。
+- 答案取决于全部卡的保持者从 `CardFleet(ctx)` 读全部卡的保持事实，在 `store.NodeFleetTopic` 的事件之后合并重算（卡的增减与保持事实的变化都发 `NodeFactsChanged`），不在 `HoldCard` 里记下见过的卡。
+- `HoldCard` 在每次上报里对每张卡各调用一次，纯函数规则（见下）同样适用：不保持时零分配，保持时返回预先构造好的答复。`store.Store.CardHoldFor(facts)` 就是写事务里问的那一次，不读任何东西，契约测试用它证明零分配。
 
 `Service.Run` 由 `App.Run` 的同一个 `services()` 循环启动，与健康检查、卡故障记录、用量报告、通知刷新并列，在控制器启动之后运行；`ctx` 结束时返回，返回的错误只记日志、不重启。同一个 App 可以多次 `Run`（原地重启），所以 `Run` 必须能被再次调用。
 
@@ -156,15 +171,16 @@ type Service interface{ Run(ctx context.Context) error }
 |---|---|---|
 | `NodeEnrollmentGuard` | 三条节点插入路径（`CreateNodePending`、`EnrollKubeNode`、`RegisterNode`）的写事务内 | 每次插入新节点 |
 | `SchedulingHolder.Hold` | 每次状态上报与调度变更的写事务内；启动时与每次 `ApplySchedulingHolds`（含模块请求的重新应用）时对全部节点，`ApplySchedulingHoldsFor` 时对点名的节点 | 每节点每次上报 |
+| `CardSchedulingHolder.HoldCard` | 每次写卡的状态上报的写事务内，对每张卡；启动时与每次 `ApplySchedulingHolds` 时对全部卡，`ApplySchedulingHoldsFor` 时对点名节点的卡 | 每张卡每次上报 |
 | `featuregate.Source.Availability` | 扩展路由的每个请求、每次控制台清单请求 | 每请求 |
 | `BannerSource.Banners` | 每次控制台清单请求 | 每请求 |
 | `Service.Run` | 后台循环 | 常驻 |
 
-插入守卫拒绝时，API 以 403 返回守卫的码；租机与 provider 安装路径会先做一次不占写锁的预检查，不会先租机再拒绝。保持者保持的节点停止调度、从不驱逐，运维不能恢复调度（409，带保持者的码），但仍可停止调度或驱逐。
+插入守卫拒绝时，API 以 403 返回守卫的码；租机与 provider 安装路径会先做一次不占写锁的预检查，不会先租机再拒绝。保持者保持的节点停止调度、从不驱逐，运维不能恢复调度（409，带保持者的码），但仍可停止调度或驱逐；按卡的保持者保持的卡同样不接新工作、从不驱逐，运维不能把它设为可调度（409，带保持者的码），但仍可停用它。
 
 ## 纯函数规则
 
-写连接只有一个（`store/database_open.go` 里 `SetMaxOpenConns(1)`）。在写事务里被调用的钩子（插入守卫、调度保持者）如果调用 Store、`Tables()` 或任何等待它们的东西，就会等自己持有的连接，形成死锁。所以这些钩子必须：
+写连接只有一个（`store/database_open.go` 里 `SetMaxOpenConns(1)`）。在写事务里被调用的钩子（插入守卫、调度保持者、按卡的保持者）如果调用 Store、`Tables()` 或任何等待它们的东西，就会等自己持有的连接，形成死锁。所以这些钩子必须：
 
 - 不调用 Store、`Tables()`，不做任何 I/O，不取有竞争的锁；
 - O(1)：一次原子读加一次 map 查找；不保持时不分配内存；

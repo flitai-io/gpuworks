@@ -66,7 +66,8 @@ func (p *Proxy) serveReplayingPreemption(w http.ResponseWriter, r *http.Request,
 		r.Body = body
 		var rejection *refusal
 		var asleep bool
-		dep, tgt, rejection, asleep = p.selectForRequest(r.Context(), modelName, affinity)
+		// The request was taken once: its replay is never refused as busy.
+		dep, tgt, rejection, asleep = p.selectForRequest(withBusyDeclaration(r.Context(), false), modelName, affinity)
 		if rejection != nil && asleep {
 			dep, tgt, rejection, asleep = p.holdForWake(r.Context(), w, modelName, affinity, dep)
 		}

@@ -85,7 +85,7 @@
 - `chipmatch` / `hardwarecatalog` / `placement` / `partitioncap`：spec GPU 谓词与上报硬件事实匹配、假想规划用静态加速卡目录、spec 内嵌 Starlark 拓扑 resolver（确定性、无 I/O、硬限额）、dGPU 能力推导（status/reason 文本唯一产地）。
 - `messages`：语言中立 ProductError（稳定 code + 插值参数 + 英文 fallback），人类可读文本归客户端 locale。
 - `webterm`：web 终端会话策略（kill switch、并发上限、空闲超时、审计）。
-- `agentbin`：内嵌各平台 agent 二进制（zstd 压缩存放，`make cross-agents` 优先用 zstd CLI `-19`，没有时退回 `scripts/zstdpack`），经 `/dl/` 下发时流式解压并给出原始长度。
+- `agentbin`：构建时将所选平台的原始 agent 保存在 `bin/dl/`，首个平台作为 zstd 基准，其余平台存为差分。Server 启动时按发布清单校验并准备完整文件，缓存按清单隔离。节点下载和升级继续读取完整 agent。同一构建的完整 Agent 可放入 `<data>/dl/` 恢复损坏的平台；自定义覆盖包的升级仍需随附清单。
 - `webui`：`go:embed` 内嵌前端构建产物（`internal/server/webui/dist`），文本资源在首次被请求时 gzip 一次并缓存在内存，构建产物不再附带 `.gz` 副本。`HandlerFS` 服务任意同布局的构建，单独构建的服务端经 `app.Extensions.UI` 换上自己的控制台。
 - `extpkg`：插件包（`.gwpkg`）的处理，不拉起进程：`extpkg` 按协议的校验顺序校验包并在数据目录里安装、重新校验与移除（`Host`）；`extpkg/archive` 带上限地读取包；`extpkg/trust` 解析根密钥、主机信任的签发者、吊销与最低版本并导入信任更新与吊销列表；`extpkg/layout` 管 `<data>/plugins/` 的暂存、原子切换与文件哈希缓存；`extpkg/catalog` 导入包索引并选择可装的版本；`extpkg/compat` 是核心降级的版本标记检查。持久化在 store 的 `plugin_*` 表里，经窄接口访问，不依赖 store。
 - `pushstate`：插件推送表在核心里的部分：校验、按 tick 一个写事务持久化（`store/pstate` 的带类型行）、启动时读入、零分配的执行钩子、extclock、掉线宽限、覆盖与卸载；`fleetcap` 是按接入顺序的核心容量选择规则。不依赖 store、进程或 HTTP。

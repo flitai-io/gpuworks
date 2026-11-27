@@ -68,12 +68,20 @@ func (a *apiHandlers) serverVersionChoices(w http.ResponseWriter, r *http.Reques
 	if !a.matchChannel(w, channel) {
 		return
 	}
+	// A build the channel never published has no order against its releases,
+	// so all of them can be chosen. Its database may then be newer than a
+	// release's schema, which the choice says (downgrades_schema): the
+	// number is not an install requirement, but a release that cannot open
+	// the database refuses to start and the upgrade rolls back.
+	unpublished := fetched.Index.Unpublished(version.Channel, version.Version, version.BuildDate)
+	schema, _ := a.d.Store.CurrentMigration()
 	for index, release := range fetched.Index.Servers() {
 		installed := release.ReleaseID == version.Version
-		if !installed && !release.NewerThan(version.Version, version.BuildDate) {
+		if !installed && !unpublished && !release.NewerThan(version.Version, version.BuildDate) {
 			continue
 		}
-		choice := dto.ServerVersionChoice{Version: release.ReleaseID, Commit: release.Commit, BuiltAt: release.BuiltAt, Latest: index == 0}
+		choice := dto.ServerVersionChoice{Version: release.ReleaseID, Commit: release.Commit, BuiltAt: release.BuiltAt, Latest: index == 0,
+			DowngradesSchema: release.DatabaseMigration > 0 && schema > 0 && release.DatabaseMigration < schema}
 		asset, err := release.Asset(runtime.GOOS, runtime.GOARCH)
 		switch {
 		case installed:

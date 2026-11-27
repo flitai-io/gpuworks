@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/parallelism"
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 // Placement is the placement hint a deployment carries: what a confirmed plan
@@ -45,6 +47,25 @@ func (p Placement) OperatorPinned() bool { return p.operatorChose && len(p.GPUIn
 func (p Placement) WithoutOperatorChoice() Placement {
 	p.operatorChose = false
 	return p
+}
+
+// CardsOnNode refuses a placement naming a card node does not report. An index
+// names a card on one machine, so the request is refused, not rewritten.
+func CardsOnNode(p Placement, node *store.Node) error {
+	if node == nil {
+		return nil
+	}
+	for _, index := range p.GPUIndexes {
+		if _, ok := node.GPUByIndex(index); ok {
+			continue
+		}
+		name := node.DisplayName()
+		cards := len(node.OwnedGPUs())
+		return messages.NewProductError(messages.ErrorPlacementGPUNotOnNode,
+			fmt.Sprintf("node %s has no GPU with index %d; usable GPUs on it: %d", name, index, cards),
+			map[string]any{"node": name, "gpu_index": index, "node_gpus": cards})
+	}
+	return nil
 }
 
 // ParallelismSpec is package parallelism's spec, named here for the same

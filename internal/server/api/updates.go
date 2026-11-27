@@ -115,7 +115,7 @@ func (a *apiHandlers) getUpdates(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	status.ImageCatalog = dto.CatalogUpdate{Current: state.ImageCatalogVersion, Compatible: true, Skipped: state.ImageCatalogSkipped}
+	status.ImageCatalog = dto.CatalogUpdate{Current: state.ImageCatalogVersion, Uploaded: state.ImageCatalogUploaded, Compatible: true}
 	currentDigest, err := a.d.Store.UpstreamInferencePackageDigest()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -180,15 +180,22 @@ func (a *apiHandlers) getUpdates(w http.ResponseWriter, r *http.Request) {
 	status.Server.UpdateAvailable = index.Server.NewerThan(version.Version, version.BuildDate)
 	_, assetErr := index.Server.Asset(runtime.GOOS, runtime.GOARCH)
 	status.Server.Installable = assetErr == nil
+	status.Server.UnpublishedBuild = index.Unpublished(version.Channel, version.Version, version.BuildDate)
 	// Catalog versions are never ordered (ADR 0040); the build they come from
 	// is. A channel whose release predates this server (a nightly server
-	// switched to release, a build ahead of the channel) offers catalogs older
-	// than the embedded ones, which are not updates. They can still be applied
-	// by uploading them.
-	catalogsBehind := index.Server.OlderThan(version.Version, version.BuildDate)
-	if catalog := index.ImageCatalog; catalog != nil {
+	// switched to release) offers catalogs older than the embedded ones,
+	// which are not updates. They can still be applied by uploading them. A
+	// build the channel never published has no such order, so the channel's
+	// catalogs stay on offer.
+	catalogsBehind := index.Server.OlderThan(version.Version, version.BuildDate) && !status.Server.UnpublishedBuild
+	if catalog := index.CurrentImageCatalog(); catalog != nil {
 		status.ImageCatalog.Latest = catalog.Version
-		status.ImageCatalog.UpdateAvailable = catalog.Version != state.ImageCatalogVersion && !catalogsBehind
+		// An uploaded catalog differs from the channel's because someone chose
+		// it: the channel's is not offered as its update, and applying it is a
+		// replacement the sync refuses unless asked for (syncImagesManifest).
+		differs := catalog.Version != state.ImageCatalogVersion
+		status.ImageCatalog.UpdateAvailable = differs && !catalogsBehind && !state.ImageCatalogUploaded
+		status.ImageCatalog.ReplacesUpload = differs && state.ImageCatalogUploaded
 	}
 	if catalog := index.TemplateCatalog; catalog != nil {
 		status.TemplateCatalog.Latest = catalog.Version
@@ -338,7 +345,10 @@ func (a *apiHandlers) upgradeServerFromChannel(w http.ResponseWriter, r *http.Re
 		writeProductError(w, http.StatusConflict, ErrorServerAlreadyAtRelease, "this server already runs "+release.ReleaseID, map[string]any{"release": release.ReleaseID})
 		return
 	}
-	if !release.NewerThan(version.Version, version.BuildDate) {
+	// A build the channel never published has no order against its releases:
+	// one of them replaces it when the request names it, never as "the latest".
+	chosenOverUnpublished := target.Version != "" && fetched.Index.Unpublished(version.Channel, version.Version, version.BuildDate)
+	if !release.NewerThan(version.Version, version.BuildDate) && !chosenOverUnpublished {
 		writeProductError(w, http.StatusConflict, ErrorServerNewerThanRelease, "this server runs "+version.Version+", which is newer than "+release.ReleaseID,
 			map[string]any{"current": version.Version, "release": release.ReleaseID})
 		return

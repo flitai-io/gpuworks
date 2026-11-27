@@ -38,6 +38,20 @@ func requestPlacement(req *dto.DeployRequest) (planning.Placement, error) {
 	return placement, nil
 }
 
+// RequestCardsOnNode refuses a manually placed single-node request whose
+// cards node does not report (planning.CardsOnNode). An automatic request's
+// cards are the scheduler's, and a placement that does not parse is reported
+// by the step that parses it.
+func RequestCardsOnNode(req *dto.DeployRequest, node *store.Node) error {
+	if IsAutomaticPlacement(req) || req.NNodes > 1 {
+		return nil
+	}
+	if placement, err := planning.ParsePlacement(req.Placement); err == nil && placement.PD == nil {
+		return planning.CardsOnNode(placement, node)
+	}
+	return nil
+}
+
 // requestRequirements is where the request says the deployment may run, as
 // the requirements the deployment stores: node_requirements as stated,
 // target_vendor as the vendor requirement, and a manually placed single-node

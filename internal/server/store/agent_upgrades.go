@@ -283,6 +283,12 @@ func (s *Store) RecoverAgentUpgrades(target string) error {
 		if err := tx.Model(&AgentUpgradeItem{}).Where("phase IN ?", []string{"transferring", "waiting_registration"}).Update("phase", "observing_recovery").Error; err != nil {
 			return err
 		}
+		// Older servers paused a batch whenever one node's attempt went
+		// unconfirmed, and left it for an administrator. An unconfirmed
+		// attempt no longer pauses anything, so those batches go on.
+		if err := tx.Model(&AgentUpgradeRun{}).Where("pause_reason = ?", "confirmation_required").Update("pause_reason", "").Error; err != nil {
+			return err
+		}
 		unfinished := tx.Model(&AgentUpgradeItem{}).Select("run_id").Where("phase IN ? OR (phase = ? AND verified_at IS NULL)", []string{"queued", "observing_recovery"}, "unconfirmed")
 		return tx.Model(&AgentUpgradeRun{}).Where("target_version <> ? AND id IN (?)", target, unfinished).Update("interrupted_reason", "target_changed").Error
 	})

@@ -149,7 +149,7 @@ func (f *fakeAPI) has(path string) bool {
 
 // serve starts f over TLS and returns a kubeconfig for it with the user
 // written by user (a YAML "user:" body).
-func serve(t *testing.T, f *fakeAPI, user string) []byte {
+func serve(t *testing.T, f http.Handler, user string) []byte {
 	t.Helper()
 	srv := httptest.NewTLSServer(f)
 	t.Cleanup(srv.Close)

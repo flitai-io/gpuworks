@@ -69,6 +69,7 @@ func kubeClusterDTO(c store.KubeCluster, v kubeEntryView) dto.KubeCluster {
 	out.CanApply, out.CanRemove, out.OperationBlocked = kubeClusterOperations(c, v.privateAPI)
 	if v.admin && c.RevokedAt == nil {
 		out.ApplyCommand = "kubectl apply -f '" + kubeManifestURL(c) + "'"
+		out.VerifyCommand = kubeVerifyCommand(c)
 	}
 	if v.admin {
 		out.RemoveCommands = kubemanifest.RemoveCommands(c.Namespace)
@@ -126,7 +127,8 @@ func kubeManifestParams(c store.KubeCluster, pools []store.KubeClusterPool) (kub
 		ClusterName: c.Name, Namespace: c.Namespace, ServerURL: c.ServerURL, Token: c.Token,
 		AgentImage: kubeAgentImage(c), NodeSelector: sel,
 		ImagePullSecret: c.ImagePullSecret, ContainerdSocket: c.ContainerdSocket, StateDir: c.StateDir, APIServer: c.APIServer,
-		Priority: c.Priority, AllowPreemption: c.AllowPreemption,
+		MountRoot: store.DefaultStorageDirs().MountRoot,
+		Priority:  c.Priority, AllowPreemption: c.AllowPreemption,
 	}, nil
 }
 
@@ -324,16 +326,24 @@ func (a *apiHandlers) kubeClusterManifest(w http.ResponseWriter, r *http.Request
 // token, which is what lets `kubectl apply -f <url>` fetch it without a
 // login. The token is the manifest's own secret, so it reveals nothing more.
 func (a *apiHandlers) kubeManifestByToken(w http.ResponseWriter, r *http.Request) {
+	if c, ok := a.kubeClusterOfToken(w, r); ok {
+		a.writeKubeManifest(w, *c)
+	}
+}
+
+// kubeClusterOfToken is the entry the request's ?token= enrolls into, or
+// writes why there is none.
+func (a *apiHandlers) kubeClusterOfToken(w http.ResponseWriter, r *http.Request) (*store.KubeCluster, bool) {
 	c, err := a.d.Store.KubeClusterByToken(r.URL.Query().Get("token"))
 	if err != nil {
 		if errors.Is(err, store.ErrKubeTokenUnknown) {
 			writeErr(w, http.StatusNotFound, err)
-			return
+			return nil, false
 		}
 		writeErr(w, http.StatusInternalServerError, err)
-		return
+		return nil, false
 	}
-	a.writeKubeManifest(w, *c)
+	return c, true
 }
 
 // kubeEnroll trades an enrollment token for the calling node's node token.

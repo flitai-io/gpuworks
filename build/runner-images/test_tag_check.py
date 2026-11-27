@@ -17,7 +17,7 @@ items:
     revision: r4
     tag: not-a-published-tag
     legacy_reason: items are not the inventory
-published:
+legacy_tags:
   - id: cuda13.0-vllm0.34.0
     tag: cuda13.0-vllm0.34.0-amd64-slot3
     legacy_reason: Existing tag.

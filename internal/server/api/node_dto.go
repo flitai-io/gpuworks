@@ -16,12 +16,36 @@ const bytesPerGiB = 1024 * 1024 * 1024
 // holders' answer for it.
 func (a *apiHandlers) nodeView(n *store.Node) dto.Node {
 	view := a.nodeConnectionView(*n)
-	return nodeDTO(&view, false, a.nodeHold(n))
+	return a.withCardHolds(n, nodeDTO(&view, false, a.nodeHold(n)))
 }
 
 func (a *apiHandlers) nodeViewWithToken(n *store.Node) dto.Node {
 	view := a.nodeConnectionView(*n)
-	return nodeDTO(&view, true, a.nodeHold(n))
+	return a.withCardHolds(n, nodeDTO(&view, true, a.nodeHold(n)))
+}
+
+// withCardHolds adds to d, n's view, why the card holders hold each card
+// its row says they hold (store.Store.CardHoldOf).
+func (a *apiHandlers) withCardHolds(n *store.Node, d dto.Node) dto.Node {
+	for i := range d.GPUs {
+		if i < len(n.GPUs) {
+			d.GPUs[i].SchedulingHold = a.cardHoldMessage(n, n.GPUs[i])
+		}
+	}
+	return d
+}
+
+// cardHoldMessage is why a card holder keeps g out of scheduling; nil when
+// none does.
+func (a *apiHandlers) cardHoldMessage(n *store.Node, g store.GPU) *dto.ProductMessage {
+	if a.d.Store == nil || !g.HeldByHolder() {
+		return nil
+	}
+	pe := a.d.Store.CardHoldOf(n, g)
+	if pe == nil {
+		return nil
+	}
+	return &dto.ProductMessage{Code: pe.Code(), Params: pe.Params(), Message: pe.Error()}
 }
 
 func (a *apiHandlers) nodeHold(n *store.Node) store.NodeHold {
@@ -141,6 +165,7 @@ func nodeDTO(n *store.Node, includeToken bool, hold store.NodeHold) dto.Node {
 			SchedulingStopped:     g.SchedulingStopped,
 			SchedulingAllowed:     g.SchedulingAllowedAt != nil,
 			SchedulingActions:     g.SchedulingActions(),
+			SchedulingHeldBy:      string(g.SchedulingHeldBy),
 			Schedulable:           g.CanTakeWork(),
 			HealthStatus:          g.HealthStatus,
 			HealthCode:            g.HealthCode,

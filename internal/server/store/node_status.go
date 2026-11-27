@@ -23,7 +23,8 @@ func (s *Store) UpdateNodeStatus(uuid string, st proto.NodeStatus) error {
 	var heldBy SchedulingSource
 	placementChanged := false
 	var displayNameChanged bool
-	var factsChangedOf uint // the node's id when the report changed its hold facts
+	var factsChangedOf uint // the node's id when the report changed its or its cards' hold facts
+	cardHoldsChanged := false
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var n Node
 		if err := tx.Where("uuid = ?", uuid).First(&n).Error; err != nil {
@@ -135,11 +136,21 @@ func (s *Store) UpdateNodeStatus(uuid string, st proto.NodeStatus) error {
 			return err
 		}
 		if adopt != adoptNothing {
-			cardsChanged, err := reconcileAcceleratorReport(tx, n.ID, st, adopt)
+			// The card holders answer on the facts this report writes,
+			// as the node's holders do above.
+			var holdOf func(*GPU) SchedulingSource
+			if len(s.admission.cardSchedulingHolders()) > 0 {
+				holdOf = func(g *GPU) SchedulingSource { return s.admission.cardHoldSource(facts, g) }
+			}
+			cards, err := reconcileAcceleratorReport(tx, n.ID, st, adopt, holdOf)
 			if err != nil {
 				return err
 			}
-			placementChanged = placementChanged || cardsChanged
+			placementChanged = placementChanged || cards.changed
+			if cards.factsChanged {
+				factsChangedOf = n.ID
+			}
+			cardHoldsChanged = cards.holdsChanged
 		}
 		return reconcileImagePresence(tx, n.ID, st.Images)
 	})
@@ -181,6 +192,11 @@ func (s *Store) UpdateNodeStatus(uuid string, st proto.NodeStatus) error {
 	if uncordoned {
 		slog.Info("node schedulable again: the reason for cordoning it is gone",
 			"node", uuid, "runtime", st.Sys.RuntimeDriver)
+		s.publishNode(uuid, NodeChangeScheduling)
+	}
+	if cardHoldsChanged && !cordoned && !uncordoned {
+		// A card holder held or released a card: placing work reads the
+		// cards through the node, as after an operator's card decision.
 		s.publishNode(uuid, NodeChangeScheduling)
 	}
 	return nil

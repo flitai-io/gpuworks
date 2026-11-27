@@ -11,7 +11,9 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
-func TestDeploymentImageOptionsOnlyConstrainEngineForTemplate(t *testing.T) {
+// A template holds the options to its engine. Without one the other engines'
+// images follow the target engine's and say which engine they select.
+func TestDeploymentImageOptionsMarkAnotherEnginesImages(t *testing.T) {
 	st, err := store.Open("file:deployment_image_options_engine_test?mode=memory&cache=shared", bus.New())
 	if err != nil {
 		t.Fatal(err)
@@ -27,6 +29,23 @@ func TestDeploymentImageOptionsOnlyConstrainEngineForTemplate(t *testing.T) {
 	}
 
 	withoutTemplate := h.deploymentImageOptions(target, templateSelection{}, "", nil)
+	seenOther := false
+	for _, option := range withoutTemplate {
+		if option.Engine == "vllm-omni" {
+			t.Fatalf("option %q is an image family no draft can switch to", option.Image)
+		}
+		own := option.Engine == "vllm"
+		if own != (option.SelectsEngine == "") {
+			t.Fatalf("option %q of engine %q selects %q", option.Image, option.Engine, option.SelectsEngine)
+		}
+		if !own && option.SelectsEngine != option.Engine {
+			t.Fatalf("option %q of engine %q selects %q", option.Image, option.Engine, option.SelectsEngine)
+		}
+		if own && seenOther {
+			t.Fatalf("option %q of the target engine follows another engine's: %+v", option.Image, withoutTemplate)
+		}
+		seenOther = seenOther || !own
+	}
 	if !hasImageOptionContaining(withoutTemplate, "vllm") || !hasImageOptionContaining(withoutTemplate, "sglang") {
 		t.Fatalf("options without template did not include both engines: %+v", withoutTemplate)
 	}
@@ -35,8 +54,10 @@ func TestDeploymentImageOptionsOnlyConstrainEngineForTemplate(t *testing.T) {
 	if !hasImageOptionContaining(withTemplate, "vllm") {
 		t.Fatalf("template options omitted its engine: %+v", withTemplate)
 	}
-	if hasImageOptionContaining(withTemplate, "sglang") {
-		t.Fatalf("template options crossed the template engine: %+v", withTemplate)
+	for _, option := range withTemplate {
+		if strings.Contains(strings.ToLower(option.Image), "sglang") || option.SelectsEngine != "" {
+			t.Fatalf("template options crossed the template engine: %+v", option)
+		}
 	}
 }
 
@@ -73,48 +94,5 @@ func TestDeploymentImageTargetCarriesEveryNodeFact(t *testing.T) {
 	selected := deploymentImageTargetForGPU("vllm", "", node, &node.GPUs[1])
 	if selected.Vendor != "ascend" || selected.PlatformArch != node.Arch || selected.DriverVersion != node.GPUDriver {
 		t.Fatalf("selected-profile target = %+v", selected)
-	}
-}
-
-func TestManualOmniImageUsesVLLMEngine(t *testing.T) {
-	st, err := store.Open("file:manual_omni?mode=memory&cache=shared", bus.New())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
-	if _, err = imagecatalog.SyncSeed(st); err != nil {
-		t.Fatal(err)
-	}
-	const ref = "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-910b-vllm-omni0.32.0-r2-linux-amd64"
-	row, err := st.ImageByRef(ref)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = st.SetImageEnabled(row.ID, true); err != nil {
-		t.Fatal(err)
-	}
-	s := New(Deps{Store: st})
-	target := deploy.ImageTarget{Engine: "vllm", Vendor: "ascend", Framework: "cann", PlatformArch: "amd64", PlatformOS: "linux"}
-	for _, selection := range []templateSelection{{}, {Spec: &store.InferenceSpecRow{Engine: "vllm"}}} {
-		found := false
-		for _, o := range s.deploymentImageOptions(target, selection, "", nil) {
-			if o.Image == ref && o.Compatible {
-				found = true
-			}
-		}
-		if !found {
-			t.Fatalf("Omni unavailable with template=%t", selection.Spec != nil)
-		}
-	}
-	if auto := imagecatalog.Resolve(st, target); auto.Image == ref {
-		t.Fatal("auto-selected manual Omni image")
-	}
-	target.Override = ref
-	if pick := imagecatalog.Resolve(st, target); pick.Blocking || len(pick.Warnings) != 0 {
-		t.Fatalf("Omni override: %+v", pick)
-	}
-	target.PlatformArch = "arm64"
-	if pick := imagecatalog.Resolve(st, target); !pick.Blocking {
-		t.Fatal("accepted amd64 image on arm64")
 	}
 }

@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "rea
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
-import { api, type KubeCluster, type KubeClusterEdit, type KubeSelectionDrops } from "../../api";
+import { api, type KubeCluster, type KubeClusterEdit, type KubePrecheckRequest, type KubeSelectionDrops } from "../../api";
 import { APIError, apiErrorText } from "../../apiError";
 import { useKubeDefaults } from "../../kubeClusters";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../components/ui/accordion";
@@ -19,9 +19,11 @@ import ApplyCommand from "./ApplyCommand";
 import KubePoolPicker from "./KubePoolPicker";
 import KubeClusterOperationModal from "./KubeClusterOperationModal";
 import KubeEditSaved from "./KubeEditSaved";
+import KubePrecheckModal from "./KubePrecheckModal";
+import KubeVerifyCommand from "./KubeVerifyCommand";
 import KubeSelectionDropsDialog from "./KubeSelectionDropsDialog";
 import { selectionDropsOf } from "./kubeSelectionDrops";
-import { ADVANCED_FIELDS, FIELD_OF, defaultsOf, formImageSource, formSchema, requestOf, updateOf, type FormValues, type KubeClusterPrefill } from "./kubeClusterForm";
+import { ADVANCED_FIELDS, FIELD_OF, defaultsOf, formImageSource, formSchema, precheckRequestOf, requestOf, updateOf, type FormValues, type KubeClusterPrefill } from "./kubeClusterForm";
 
 export type { KubeClusterPrefill };
 
@@ -73,6 +75,8 @@ export function useKubeClusterForm({ open, onCreated, onEdited, onClose, prefill
   const [poolIds, setPoolIds] = useState<string[]>(prefill?.pool_ids ?? []);
   const [applying, setApplying] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // The pre-check for the fields as they were when it was asked for.
+  const [precheck, setPrecheck] = useState<KubePrecheckRequest | null>(null);
   // Set when the server refused an edit that leaves out nodes still running instances: asked about, then resent.
   const [dropping, setDropping] = useState<{ drops: KubeSelectionDrops; values: FormValues } | null>(null);
   const initializedFor = useRef<string | null>(null);
@@ -94,6 +98,7 @@ export function useKubeClusterForm({ open, onCreated, onEdited, onClose, prefill
     setApplying(false);
     setAdvancedOpen(false);
     setDropping(null);
+    setPrecheck(null);
     // The container takes focus itself when it opens; hand it to the first field once it has.
     const timer = setTimeout(() => nameInput.current?.focus(), 0);
     return () => clearTimeout(timer);
@@ -135,6 +140,11 @@ export function useKubeClusterForm({ open, onCreated, onEdited, onClose, prefill
     } finally {
       setSaving(false);
     }
+  };
+
+  // Only the server address must be there: the script checks that every node reaches it.
+  const openPrecheck = async () => {
+    if (await form.trigger("server_url")) setPrecheck(precheckRequestOf(form.getValues()));
   };
 
   const advanced = (
@@ -206,6 +216,7 @@ export function useKubeClusterForm({ open, onCreated, onEdited, onClose, prefill
         <Notice tone="warning" title={t("created.applyBlocked")}>{t(`blocked.${created.operation_blocked}`)}</Notice>
       )}
       {created.apply_command && <ApplyCommand command={created.apply_command} />}
+      {created.verify_command && <KubeVerifyCommand command={created.verify_command} />}
       <span className="text-fg-muted">{t("created.secret")}</span>
       {applying && <KubeClusterOperationModal cluster={created} op="apply" onClose={() => setApplying(false)} onDone={onCreated} />}
     </div>
@@ -234,6 +245,7 @@ export function useKubeClusterForm({ open, onCreated, onEdited, onClose, prefill
         description={edit?.source ? t("drawer.nodeSelectorCloud") : t("drawer.nodeSelectorHelp")}>
         {(binding) => <Input {...binding} placeholder={t("drawer.nodeSelectorPlaceholder")} disabled={Boolean(edit?.source)} />}
       </FormField>}
+      {precheck && <KubePrecheckModal request={precheck} codes={defaults?.check_codes.precheck ?? []} onClose={() => setPrecheck(null)} />}
       {dropping && <KubeSelectionDropsDialog drops={dropping.drops} busy={saving} onCancel={() => setDropping(null)} onConfirm={() => void submit(dropping.values, true)} />}
       <Accordion type="single" collapsible value={advancedOpen ? "advanced" : ""} onValueChange={(next: string) => setAdvancedOpen(next === "advanced")}>
         <AccordionItem value="advanced">
@@ -249,6 +261,8 @@ export function useKubeClusterForm({ open, onCreated, onEdited, onClose, prefill
   ) : (
     <>
       <Button variant="ghost" onClick={close} disabled={saving}>{t("drawer.cancel")}</Button>
+      {/* Recommended before connecting, never required; a cloud entry's node pools are not part of it. */}
+      {!edit && !prefill && <Button variant="neutral" onClick={() => void openPrecheck()} disabled={saving}>{t("precheck.open")}</Button>}
       {/* A cloud cluster is connected with the node pools chosen in the form. */}
       <Button type="submit" form={formId} variant="primary" loading={saving} disabled={!edit && !!prefill && poolIds.length === 0}>{edit ? t("drawer.save") : t("drawer.submit")}</Button>
     </>

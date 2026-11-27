@@ -79,6 +79,9 @@
     "deployments": "使用它的部署",
     "noDeployments": "无"
   },
+  "storageReason": {
+    "not_shared_with_node": "agent 运行在 Pod 里，与节点不共用这个目录。请把挂载点放在默认挂载目录下并重新应用集群的 manifest，或在节点上自行挂载后选择使用已有挂载。"
+  },
   "nodes": {
     "search": "搜索节点",
     "empty": "没有符合条件的节点",

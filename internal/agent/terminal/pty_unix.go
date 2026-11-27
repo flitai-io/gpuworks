@@ -3,6 +3,7 @@
 package terminal
 
 import (
+	"fmt"
 	"os"
 	"syscall"
 
@@ -46,6 +47,24 @@ func (p *pty) closeSlave() {
 		_ = p.slave.Close()
 		p.slave = nil
 	}
+}
+
+// pinTTY opens another reference to the slave at path, or returns nil. While
+// it is open the kernel cannot give the pts number to a new terminal, even
+// after the master closes. Close needs that: it looks for the session's
+// leftovers by slave path once the master is gone, and without the pin a
+// terminal opened in the meantime (another session, an SSH login, a docker pull
+// the agent is running) could take the number and be killed as one of them.
+func pinTTY(ref ttyRef) *os.File {
+	path := fmt.Sprint(ref)
+	if path == "" {
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_RDWR|syscall.O_NOCTTY, 0)
+	if err != nil {
+		return nil
+	}
+	return f
 }
 
 func (p *pty) close() {

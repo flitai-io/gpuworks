@@ -44,6 +44,8 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 	// Kubernetes manifest, fetched by `kubectl apply -f` with the cluster's
 	// enrollment token in place of a login.
 	r.Get("/kube/manifest.yaml", a.kubeManifestByToken)
+	// The check after an apply, fetched by `curl … | bash` the same way.
+	r.Get("/kube/check.sh", a.kubeCheckByToken)
 
 	// Slurm health-check scripts, fetched by `curl … | sudo sh` and by the
 	// controller's setup, with the cluster's enrollment token in place of a login.
@@ -99,7 +101,9 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 			r.Get("/kube/clusters", a.listKubeClusters)
 			r.Get("/kube/defaults", a.kubeDefaults)
 			r.With(a.managementAdmin).Post("/kube/clusters", a.createKubeCluster)
+			r.With(a.managementAdmin).Post("/kube/precheck", a.kubePrecheck)
 			r.With(a.managementAdmin).Get("/kube/clusters/{uuid}/manifest", a.kubeClusterManifest)
+			r.With(a.managementAdmin).Get("/kube/clusters/{uuid}/rollout", a.kubeClusterRollout)
 			r.With(a.managementAdmin).Post("/kube/clusters/{uuid}/revoke", a.revokeKubeCluster)
 			r.With(a.managementAdmin).Put("/kube/clusters/{uuid}", a.updateKubeCluster)
 			r.With(a.managementAdmin).Put("/kube/clusters/{uuid}/pools", a.setKubeClusterPools)
@@ -247,6 +251,7 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 			r.Get("/inference-templates/schema", a.inferenceTemplateSchema)
 			r.Get("/inference-templates/summary", a.summarizeInferenceTemplates)
 			r.Get("/inference-templates/weight-models", a.listTemplateWeightModels)
+			r.Get("/inference-templates/weight-source-probe", a.probeTemplateWeightSource)
 			r.With(a.managementAdmin).Get("/inference-templates/export/{digest}", a.exportInferenceTemplatePackage)
 			r.Get("/inference-templates/model/*", a.getInferenceTemplate)
 			r.Get("/inference-templates/yaml", a.inferenceTemplateYAML)

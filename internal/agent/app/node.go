@@ -291,13 +291,14 @@ func newNodeRuntime(log *slog.Logger, driver runtime.Driver, modelsDir, forceDri
 	}
 	n := &NodeRuntime{log: log, modelsDir: modelsDir, stateDir: stateDir, prober: prober, downloading: map[string]*modelDownload{}, modelSyncs: map[string]*activeModelSync{}, netBench: newNetBenchManager(), progress: newProgressGate()}
 	var mountRunner storagemount.Runner
+	nodeRoot := ""
 	if forceDriver == kube.DriverName {
 		// The agent's pod mounts NFS on the host, with the host's
 		// mount.nfs, where instance pods see it.
-		mountRunner = kube.HostExec
+		mountRunner, nodeRoot = kube.HostExec, kube.HostRoot
 	}
 	n.occupancy.load(filepath.Join(stateDir, cardOccupancyFile))
-	n.storage = newStorageRuntime(stateDir, n.mountBusy, storageUsers(n), mountRunner)
+	n.storage = newStorageRuntime(stateDir, n.mountBusy, storageUsers(n), mountRunner, nodeRoot)
 	n.servingForward = newServingForwarder(log, n.currentNodeToken, n.instanceAPIPort)
 	n.perftest = perftest.Host(stateDir)
 	if accelerator.HasRuntimeAssetBundles(prober.Vendor()) {

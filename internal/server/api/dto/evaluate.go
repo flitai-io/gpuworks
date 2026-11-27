@@ -369,7 +369,9 @@ type AcquisitionResult struct {
 // and the target nodes read that copy; FollowsPrimary says the request named
 // no storage and Storage is the one the primary sits on) or "node_download"
 // (each target node without it downloads it into its own storage). Nodes
-// counts the target nodes, ReadyNodes those that read it now.
+// counts the target nodes, ReadyNodes those that read it now. A rank-scoped
+// component has one entry per rank's artifact, counted on that rank's node,
+// and Model names the artifact's subfolder ("repo/rank1").
 type AcquisitionComponent struct {
 	Name           string `json:"name"`
 	Role           string `json:"role"`
@@ -444,6 +446,13 @@ type ImageOption struct {
 	Image      string `json:"image"`
 	Reason     string `json:"reason"`
 	Compatible bool   `json:"compatible"`
+	// Engine and EngineVersion are the image catalog's record of what the
+	// image runs; both are absent for an image the catalog does not hold.
+	Engine        string `json:"engine,omitempty"`
+	EngineVersion string `json:"engine_version,omitempty"`
+	// SelectsEngine is the deploy engine choosing this image selects, stated
+	// only when it is not the engine the request was evaluated with.
+	SelectsEngine string `json:"selects_engine,omitempty"`
 }
 
 type EnvLayers struct {

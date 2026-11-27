@@ -37,6 +37,7 @@ const DEFAULTS: KubeDefaults = {
     { id: "quay", image: "quay.io/gpuworks/gpuworks-agent:v1" },
   ],
   priority: 10000, priority_max: 1000000000, allow_preemption: false,
+  check_codes: { precheck: ["OK", "IMAGE_PULL_FAILED", "SERVER_UNREACHABLE", "PULL_SECRET_MISSING", "NO_NODE_SELECTED", "NOT_SCHEDULED", "POD_CREATE_FAILED", "CONTAINER_FAILED", "STILL_STARTING", "APPLY_FAILED", "KUBECTL_MISSING", "KUBECTL_FAILED"], verify: ["OK", "IMAGE_PULL_FAILED", "NO_NODE_SELECTED", "NOT_SCHEDULED", "POD_CREATE_FAILED", "CONTAINER_FAILED", "STILL_STARTING", "DAEMONSET_MISSING", "KUBECTL_MISSING", "KUBECTL_FAILED"] },
 };
 
 const k = locale.kubernetes;

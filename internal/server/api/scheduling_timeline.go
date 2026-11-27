@@ -210,10 +210,10 @@ func (a *apiHandlers) fillTimeline(out dto.SchedulingTimeline, nodeUUIDs []strin
 		return out, err
 	}
 	for _, d := range all {
-		name := names[d.inst.DeploymentID].Name
+		info := names[d.inst.DeploymentID]
 		for _, seg := range d.segs {
 			wire := dto.TimelineSegment{
-				DeploymentID: seg.DeploymentID, Deployment: name, Instance: seg.Instance, State: string(seg.State),
+				DeploymentID: seg.DeploymentID, Deployment: info.Name, DeploymentDeleted: info.Deleted, Instance: seg.Instance, State: string(seg.State),
 				Level: seg.Level, From: seg.From.UTC(), To: seg.To.UTC(),
 			}
 			for _, index := range d.inst.GPUs {

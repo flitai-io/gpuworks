@@ -1,0 +1,156 @@
+# DeepSeek-V4.1-Flash-1017 on two DGX Spark (GB10): jayleaton's TensorFold
+# native (Zig) TP2 recipe with the flash17 EXL3 2.8bpw pack, hosted by the
+# callable engine (ADR 0036). One rank per node over RoCE.
+# Recipe: github.com/jayleaton/deepseek-v41-tensorfold-spark at 13db91e
+# (TensorFold f212eeab).
+model_id: jayleaton/deepseek-v4.1-flash-1017-exl3-2.8bpw
+source: upstream
+display_title: DeepSeek-V4.1-Flash-1017 (EXL3 2.8bpw)
+parameter_count: DeepSeek-V4.1-Flash-1017, EXL3 2.8 bpw backbone + original Engram tables
+architecture: moe
+input_modalities:
+- text
+- image
+context_length: 1048576
+release_date: '2026-10-17'
+specs:
+- name: ds41-flash17-tensorfold-exl3-gb10-tp2
+  display_name_zh_cn: DGX Spark (GB10) · EXL3 2.8bpw · 双机 TP2 · 投机解码
+  display_name_en: DGX Spark (GB10) · EXL3 2.8bpw · Two-node TP2 · Speculative
+  scenario: balanced
+  engine: callable
+  # The same manifest is published on Docker Hub, quay.io and SWR. The image
+  # carries what is the same on every pair of nodes: the runtime assets (RoPE
+  # table, token map, signatures, 144 AOT kernel variants for sm_121), the
+  # engine profile those assets were compiled for, and the launch adapter
+  # (serve.sh). The AOT set is fixed by the profile's context, slot, prefill
+  # and drafting settings, so assets and profile ship together; the template's
+  # env only holds switches that leave the AOT set alone.
+  image: gpuworks/tensorfold-dsv41-flash17:f212eeab-r1
+  image_sources:
+  - swr.cn-southwest-2.myhuaweicloud.com/gpuworks/tensorfold-dsv41-flash17:f212eeab-r1
+  - quay.io/gpuworks/tensorfold-dsv41-flash17:f212eeab-r1
+  weights:
+    quantization: exl3-2.8bpw
+    sources:
+    - huggingface:
+        repo_id: jayleaton/DeepSeek-V4.1-Flash-1017-EXL3-2.8bpw
+        revision: 859396591c340195526aaf61f94b4ad5323a5e18
+  weight_bytes: 203793388493
+  runtime_weight_bytes: 203793388493
+  gpus:
+    vendor: nvidia
+    cc: '>=12.0'
+    name: (^|[^A-Za-z0-9])(?:DGX[ _-]?Spark|GB10)([^A-Za-z0-9]|$)
+  placement:
+    language: starlark
+    resolver: |
+      # TP2 over RoCE: one GB10 per node and two nodes (serve.sh refuses any
+      # other node count). Each rank holds its half of the backbone, the KV
+      # pool, graphs and workspaces in unified memory: about 105 GiB measured
+      # on a GB10 pair; its Engram part stays on disk.
+      def resolve(gpu):
+          if gpu.count != 1:
+              return reject("this recipe runs one TensorFold rank per DGX Spark (1 GB10 per node, two nodes)")
+          return accept(gpu_memory_mib_per_device=107520, variables={"TP_SIZE": 1, "SP_DEGREE": 1})
+  # The first start converts the pack into this rank's prepared forms (about
+  # 96 GiB) and times the draft windows; later starts read the prepared forms.
+  start_timeout_sec: 3600
+  memlock_unlimited: true
+  docker_args:
+  - --ipc=host
+  - --init
+  dirs:
+  # Prepared weight forms, written on the first start and reused
+  # (TF_DSV41_PREPARED_WRITE=1 in the image profile).
+  - name: tf-prepared
+    mount_path: /prepared
+    limit_bytes: 137438953472
+  # Calibration tables, the request log and the session disk tier
+  # (TF_DSV41_SESSION_DISK_GIB=128 in the image profile).
+  - name: tf-state
+    mount_path: /state
+    limit_bytes: 161061273600
+  # tf-compat-entry picks the CUDA forward-compatibility driver, then runs the
+  # adapter through the image's interpreter (runtime assets are finalized
+  # read-only, so scripts lose their executable bit).
+  entrypoint:
+  - /opt/tensorfold/bin/tf-compat-entry
+  - bash
+  - /opt/gpuworks/ds41/serve.sh
+  # The callable engine appends nothing: the adapter turns these launch facts
+  # into rank 0's `tensorfold-dsv41 serve` or rank 1's `tf-dsv41 follow`.
+  args:
+  - --model
+  - ${GPUWORKS_MODEL_PATH}
+  - --host
+  - ${GPUWORKS_API_HOST}
+  - --port
+  - ${GPUWORKS_API_PORT}
+  - --rank
+  - ${GPUWORKS_NODE_RANK}
+  - --nnodes
+  - ${GPUWORKS_NNODES}
+  - --headless
+  - ${GPUWORKS_HEADLESS}
+  - --name
+  - ${GPUWORKS_SERVED_MODEL_NAME}
+  - --reasoning-effort
+  - high
+  env:
+    TF_TP_MASTER: ${GPUWORKS_MASTER_ADDR}
+    TF_TP_PORT: ${GPUWORKS_MASTER_PORT}
+    # The Engram component is split per rank: each node holds only its own
+    # rank<r>/ (rank-scoped component sources, docs/reference/inference-catalog-spec.md).
+    TF_DSV41_ENGRAM_DIR: /engram/rank${GPUWORKS_NODE_RANK}
+    TF_DSV41_BIAS_VL: ${GPUWORKS_MODEL_PATH}
+    # The image's profile keeps the in-thinking runner and the default compute
+    # lane off (TF_DSV41_RUNNER=0, TF_DSV41_COMPUTE_LANE_DEFAULT=0): the runner
+    # writes its cell markup (<expr>...</expr>, "Result: ...") into the visible
+    # answer. The AOT check with that profile found no missing variant.
+  components:
+  - name: primary
+    role: primary
+    weights:
+      quantization: exl3-2.8bpw
+      sources:
+      - huggingface:
+          repo_id: jayleaton/DeepSeek-V4.1-Flash-1017-EXL3-2.8bpw
+          revision: 859396591c340195526aaf61f94b4ad5323a5e18
+    weight_bytes: 203793388493
+    mount_path: /model
+  # The 1017 Engram tables packed for TP2 by the recipe's scripts/pack_engram.py
+  # from deepseek-ai/DeepSeek-V4.1-Flash-1017@1bae0e1088993b9b82de08f59de5be5a34e42170,
+  # laid out as rank0/engram-l{1,14}-r0of2.bin and rank1/engram-l{1,14}-r1of2.bin.
+  # weight_bytes is one rank's part (the larger, rank 1).
+  - name: engram
+    role: auxiliary
+    weights:
+      quantization: bf16
+      sources:
+      - modelscope:
+          repo_id: gpuworks/DeepSeek-V4.1-Flash-1017-Engram-TP2
+          # The commit holding both rank0/ and rank1/ (sha256 of each shard checked
+          # against the files the recipe packed).
+          revision: f9860afbca10b75fa07af24cea00ad4204bd4e86
+          subfolder: rank${GPUWORKS_NODE_RANK}
+    weight_bytes: 101379729008
+    mount_path: /engram
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.chat
+      endpoint: /v1/chat/completions
+      mode: stream
+    # Names scraped from this engine's /metrics on a GB10 pair. kv_cache_usage_ratio
+    # is per pool (three series), not one usage ratio, so it stays unmapped.
+    metrics:
+      map:
+        'tensorfold:requests_running': requests_running
+        'tensorfold:requests_waiting': requests_waiting
+        'tensorfold:prompt_tokens_total': prompt_tokens_total
+        'tensorfold:generation_tokens_total': generation_tokens_total
+        'tensorfold:mtp_drafted_total': spec_draft_tokens_total
+        'tensorfold:mtp_accepted_total': spec_accepted_tokens_total
+        'tensorfold:time_to_first_token_seconds': ttft_seconds
+        'tensorfold:e2e_request_latency_seconds': e2e_seconds

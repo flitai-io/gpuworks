@@ -9,6 +9,12 @@ import { resolve } from "path";
 // somewhere else, so its bundle never lands in the community server's embed
 // directory (`make ui` refuses an overlay without it). A relative path is
 // taken from the repository root, as scripts/check_ui_bundle_size.sh reads it.
+//
+// The embed directory keeps a tracked .gitkeep so a checkout with no UI build
+// still compiles (go:embed all:dist needs one file). emptyOutDir removes it
+// with everything else, so public/.gitkeep puts it back on every build: the
+// build then leaves the tracked file as it found it, and a commit made after
+// `make ui` cannot delete it.
 const outDir = resolve(__dirname, "..", process.env.GPUWORKS_UI_OUT_DIR || "internal/server/webui/dist");
 
 export default defineConfig({

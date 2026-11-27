@@ -56,6 +56,12 @@ func ValidateStartTimeout(req *dto.DeployRequest) error {
 // again when the node it picked was taken before the create re-checked it.
 const AutomaticPickAttempts = 3
 
+// CreatedDeployment contains the persisted row and its create-time warnings.
+type CreatedDeployment struct {
+	*store.Deployment
+	Warnings []messages.Warning
+}
+
 // Create creates a deployment from a create request. An automatic
 // single-node create that names no node leaves the pick to the server, so
 // when that pick is taken between the evaluation and the create's own
@@ -63,7 +69,7 @@ const AutomaticPickAttempts = 3
 // earlier), the server picks again instead of refusing with
 // AUTOMATIC_PLACEMENT_STALE: there is no client choice to report as stale. A
 // create that names its node keeps the conflict.
-func (s *Service) Create(ctx context.Context, req dto.DeployRequest) (*store.Deployment, error) {
+func (s *Service) Create(ctx context.Context, req dto.DeployRequest) (*CreatedDeployment, error) {
 	if !leavesNodeToServer(&req) {
 		return s.createOnce(ctx, req)
 	}
@@ -105,7 +111,7 @@ func CreateRowError(err error) error {
 
 // createOnce is one attempt at Create: its steps in order, the first error
 // ending it. No deployment row is written before persist.
-func (s *Service) createOnce(ctx context.Context, req dto.DeployRequest) (*store.Deployment, error) {
+func (s *Service) createOnce(ctx context.Context, req dto.DeployRequest) (*CreatedDeployment, error) {
 	c := &createState{s: s, ctx: ctx, req: &req}
 	for _, step := range []func() error{
 		c.checkRequest,
@@ -123,7 +129,7 @@ func (s *Service) createOnce(ctx context.Context, req dto.DeployRequest) (*store
 			return nil, err
 		}
 	}
-	return c.created, nil
+	return &CreatedDeployment{Deployment: c.created, Warnings: c.warnings}, nil
 }
 
 // createState is what the steps of one Create attempt share: what the steps
@@ -173,7 +179,8 @@ type createState struct {
 	components     []templateComponent
 	componentPlans []componentPlan
 
-	created *store.Deployment
+	created  *store.Deployment
+	warnings []messages.Warning
 }
 
 // persist writes the deployment row.

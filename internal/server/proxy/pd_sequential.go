@@ -120,7 +120,7 @@ func (p *Proxy) runPrefill(ctx context.Context, route *pdRoute, affinity, decode
 	// bootstrap server that never had every rank registered, or a connection.
 	unreachable := pdFallbackUnreachable
 	for attempt := 0; attempt < retryMaxAttempts; attempt++ {
-		l := p.pickPrefill(route, affinity, decodeNode, excluded)
+		l := p.pickPrefill(route, affinity, decodeNode, excluded, admissionFrom(ctx))
 		if l == nil {
 			if attempt == 0 {
 				return prefillOutcome{fallback: pdFallbackNoPrefill}

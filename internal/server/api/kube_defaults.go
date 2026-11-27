@@ -40,6 +40,7 @@ func (a *apiHandlers) kubeDefaults(w http.ResponseWriter, r *http.Request) {
 		StalledAfterSeconds: int(kubeStalledAfter / time.Second),
 		AgentImageSource:    kubemanifest.DefaultAgentImageSource, AgentImageSources: kubeAgentImageSourceList(),
 		Priority: store.KubeDefaultPriority, PriorityMax: kubemanifest.PriorityMax, AllowPreemption: false,
+		CheckCodes: kubeCheckCodes(),
 	})
 }
 

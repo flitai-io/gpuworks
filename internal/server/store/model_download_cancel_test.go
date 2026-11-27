@@ -90,3 +90,51 @@ func TestManualAdoptionFencesServiceDeletion(t *testing.T) {
 		t.Fatalf("stale ownership write changed user task: %+v", got)
 	}
 }
+
+// A service's withdrawal keeps the owner on the canceled row, which is what
+// lets a later deployment start it again; an operator's cancel clears it.
+// The resume names a new transfer and refuses a row that changed since it was
+// read.
+func TestOnlyADownloadWithdrawnWithItsServiceResumes(t *testing.T) {
+	st, _, _, ref := downloadTransferFixture(t)
+	row, err := st.PrepareModelDownload(ref, "Qwen/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetDownloadDeployment(row.ID, row.TransferID, 17); err != nil {
+		t.Fatal(err)
+	}
+	withdrawn, err := st.CancelModelDownload(row.ID, row.TransferID, "service deleted", 17)
+	if err != nil || !withdrawn.WithdrawnWithService() {
+		t.Fatalf("withdrawn = %+v, %v", withdrawn, err)
+	}
+	resumed, err := st.ResumeWithdrawnDownload(withdrawn, 18)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumed.State != proto.MFPending || resumed.Acquisition != proto.ModelAcquireAuto || resumed.DownloadDeploymentID != 18 ||
+		resumed.TransferID != "" || resumed.Message != "" || resumed.Path != withdrawn.Path {
+		t.Fatalf("resumed = %+v", resumed)
+	}
+	if _, err := st.ResumeWithdrawnDownload(withdrawn, 19); err != ErrModelDownloadInactive {
+		t.Fatalf("a second resume of the same canceled row: %v", err)
+	}
+
+	again, err := st.PrepareModelDownload(ref, "Qwen/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetDownloadDeployment(again.ID, again.TransferID, 18); err != nil {
+		t.Fatal(err)
+	}
+	byOperator, err := st.CancelModelDownload(again.ID, again.TransferID, "Download canceled by user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byOperator.DownloadDeploymentID != 0 || byOperator.WithdrawnWithService() {
+		t.Fatalf("an operator's cancel kept the service as owner: %+v", byOperator)
+	}
+	if _, err := st.ResumeWithdrawnDownload(byOperator, 18); err != ErrModelDownloadInactive {
+		t.Fatalf("resume of an operator's cancel: %v", err)
+	}
+}

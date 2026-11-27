@@ -239,6 +239,37 @@ func TestServerReleaseOlderThan(t *testing.T) {
 	}
 }
 
+// A build the channel never published is told apart from one that is ahead
+// on the channel's own line only by the channel's list, never by build time.
+func TestIndexUnpublished(t *testing.T) {
+	nightly := Index{Channel: ChannelNightly,
+		Server:          ServerRelease{ReleaseID: "cccc3333", BuiltAt: "2026-11-25T12:52:50Z"},
+		PreviousServers: []ServerRelease{{ReleaseID: "bbbb2222", BuiltAt: "2026-11-24T10:00:00Z"}}}
+	release := Index{Channel: ChannelRelease, Server: ServerRelease{ReleaseID: "v26.11.4", BuiltAt: "2026-11-20T00:00:00Z"}}
+	for _, tc := range []struct {
+		name               string
+		index              Index
+		channel, id, built string
+		want               bool
+	}{
+		{"a branch build made after the head", nightly, "nightly", "b5137981c", "2026-11-25T13:04:08Z", true},
+		{"the head itself", nightly, "nightly", "cccc3333", "2026-11-25T12:52:50Z", false},
+		{"the head rebuilt later keeps its place", nightly, "nightly", "cccc3333", "2026-11-25T14:00:00Z", false},
+		{"an earlier listed build", nightly, "nightly", "bbbb2222", "2026-11-24T10:00:00Z", false},
+		{"an unlisted build made before the head is behind", nightly, "nightly", "aaaa1111", "2026-11-01T00:00:00Z", false},
+		{"a build made at the head's instant", nightly, "nightly", "dddd4444", "2026-11-25T12:52:50Z", false},
+		{"a local build with no build time", nightly, "nightly", "dev", "unknown", false},
+		{"a release server following nightly", nightly, "release", "v26.11.4", "2026-11-26T00:00:00Z", false},
+		{"a nightly server following release", release, "nightly", "b5137981c", "2026-11-25T13:04:08Z", false},
+		{"a later version tag the index does not list yet", release, "release", "v26.11.5", "2026-11-26T00:00:00Z", false},
+		{"a branch build made for the release channel", release, "release", "v26.11.4-3-gabc1234", "2026-11-26T00:00:00Z", true},
+	} {
+		if got := tc.index.Unpublished(tc.channel, tc.id, tc.built); got != tc.want {
+			t.Errorf("%s: Unpublished = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 // Two version tags order by version, not build time: a patch to an older
 // release line is built after the newer line's release but is still older.
 func TestServerReleaseOrdersVersionTagsByVersion(t *testing.T) {

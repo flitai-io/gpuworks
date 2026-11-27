@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/agentbin"
 	serverapp "gpuworks.ai/gpuworks/internal/server/app"
 	"gpuworks.ai/gpuworks/internal/server/experiencelaunch"
 	"gpuworks.ai/gpuworks/internal/server/serverconfig"
@@ -69,7 +70,11 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 	if err := os.MkdirAll(serverDir, 0o700); err != nil {
 		return err
 	}
-	agent, err := extractAgent(cfg.DataDir)
+	agents, err := agentbin.PrepareForServer(serverDir, log)
+	if err != nil {
+		return err
+	}
+	agent, err := extractAgent(cfg.DataDir, agents)
 	if err != nil {
 		return err
 	}

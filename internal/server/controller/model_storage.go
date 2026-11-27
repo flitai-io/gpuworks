@@ -18,6 +18,8 @@ var errCacheEvictionBusy = errors.New("cache is being prepared for a launch")
 type deploymentModels struct {
 	Primary    store.ModelLocation
 	Components map[uint]store.ModelLocation
+	// Rank is the rank of the deployment the models were made ready for.
+	Rank int
 }
 
 // paths is where the files are on the node, as the launch mounts them; nil
@@ -26,7 +28,7 @@ func (f *deploymentModels) paths() *planning.ModelPaths {
 	if f == nil {
 		return nil
 	}
-	out := &planning.ModelPaths{Primary: f.Primary.HostPath, Components: make(map[uint]string, len(f.Components))}
+	out := &planning.ModelPaths{Primary: f.Primary.HostPath, Components: make(map[uint]string, len(f.Components)), Rank: f.Rank}
 	for id, loc := range f.Components {
 		out.Components[id] = loc.HostPath
 	}
@@ -77,6 +79,17 @@ func (c *Controller) acquireLocalModel(ctx context.Context, node *store.Node, de
 			return err
 		}
 		mf = created
+	}
+	if mf.WithdrawnWithService() {
+		resumed, err := c.store.ResumeWithdrawnDownload(mf, dep.ID)
+		if errors.Is(err, store.ErrModelDownloadInactive) {
+			return nil // changed under this pass; its event brings the next one
+		}
+		if err != nil {
+			return err
+		}
+		c.log.Info("restarting a download withdrawn with its service", "dep", dep.ID, "model", model.ID, "node", node.UUID)
+		mf = resumed
 	}
 	handled, refused := c.syncModelWithin(ctx, node, model, mf, pinned)
 	if !handled {
@@ -211,9 +224,9 @@ func (c *Controller) evictCacheRow(ctx context.Context, node *store.Node, id uin
 // ensureDeploymentModelsPresent makes what rank of the deployment reads
 // readable on the node, each from wherever the node can read it: the primary
 // model (the rank's own artifact for rank-scoped weights) and every template
-// component.
+// component (the rank's own artifact of a rank-scoped one).
 func (c *Controller) ensureDeploymentModelsPresent(ctx context.Context, node *store.Node, dep *store.Deployment, primary *store.Model, rank int) (deploymentModels, bool, error) {
-	out := deploymentModels{Components: map[uint]store.ModelLocation{}}
+	out := deploymentModels{Components: map[uint]store.ModelLocation{}, Rank: max(rank, 0)}
 	models, err := c.deploymentModels(dep, primary, rank)
 	if err != nil {
 		return out, false, err

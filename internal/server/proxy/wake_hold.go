@@ -222,8 +222,11 @@ func (p *Proxy) wakesOnRequest(dep *store.Deployment) bool {
 // holdForWake holds a request for a sleeping deployment until the deployment
 // can serve it, then selects again. It returns the selection's result; a
 // request still not served when its time is up gets the asleep refusal with
-// a Retry-After.
+// a Retry-After. A request held for a wake is never refused for being busy:
+// the declaration does not apply to a sleeping deployment, which would
+// otherwise not get the requests that wake it.
 func (p *Proxy) holdForWake(ctx context.Context, w http.ResponseWriter, modelName, affinity string, dep *store.Deployment) (*store.Deployment, target, *refusal, bool) {
+	ctx = withBusyDeclaration(ctx, false)
 	asleep := func() (*store.Deployment, target, *refusal, bool) {
 		return dep, target{}, asleepRefusal(dep), true
 	}

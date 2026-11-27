@@ -117,11 +117,38 @@ func processTree(root int) []procIdentity {
 	return result
 }
 
+// ttyRef names a session's pty slave. The device identity is taken while the
+// slave is open: once the master closes, the /dev/pts node is gone and a
+// process still holding the slave shows "/dev/pts/N (deleted)" in /proc.
+type ttyRef struct {
+	path string
+	id   deviceID
+}
+
+// deviceID is a device node's identity: the filesystem it lives on (one per
+// devpts instance) and the device it stands for.
+type deviceID struct{ dev, rdev uint64 }
+
+func ttyRefOf(slave *os.File) ttyRef {
+	var st syscall.Stat_t
+	if err := syscall.Fstat(int(slave.Fd()), &st); err != nil {
+		return ttyRef{}
+	}
+	return ttyRef{path: slave.Name(), id: deviceID{dev: uint64(st.Dev), rdev: uint64(st.Rdev)}}
+}
+
+func (r ttyRef) String() string { return r.path }
+
 // processesUsingTTY finds processes that still hold the PTY slave on stdin,
 // stdout, or stderr. It covers wrappers such as setsid/runuser that can fork,
 // reparent, and leave the original process tree before teardown begins.
-func processesUsingTTY(path string) []procIdentity {
-	if path == "" {
+//
+// A match is by device identity, not by path. The fd link names the slave by
+// its path inside the holder's own mount namespace, so a shell in a container
+// with its own /dev/pts also reads "/dev/pts/0"; it differs only in dev (one
+// devpts instance per container). The path is a cheap first filter.
+func processesUsingTTY(ref ttyRef) []procIdentity {
+	if ref.path == "" || ref.id == (deviceID{}) {
 		return nil
 	}
 	entries, err := os.ReadDir("/proc")
@@ -137,8 +164,12 @@ func processesUsingTTY(path string) []procIdentity {
 		}
 		usesTTY := false
 		for _, fd := range []string{"0", "1", "2"} {
-			target, linkErr := os.Readlink("/proc/" + entry.Name() + "/fd/" + fd)
-			if linkErr == nil && target == path {
+			link := "/proc/" + entry.Name() + "/fd/" + fd
+			target, linkErr := os.Readlink(link)
+			if linkErr != nil || (target != ref.path && target != ref.path+" (deleted)") {
+				continue
+			}
+			if got, ok := deviceOf(link); ok && got == ref.id {
 				usesTTY = true
 				break
 			}
@@ -150,6 +181,15 @@ func processesUsingTTY(path string) []procIdentity {
 		}
 	}
 	return result
+}
+
+// deviceOf stats path, following a /proc fd link to the file it holds.
+func deviceOf(path string) (deviceID, bool) {
+	var st syscall.Stat_t
+	if err := syscall.Stat(path, &st); err != nil {
+		return deviceID{}, false
+	}
+	return deviceID{dev: uint64(st.Dev), rdev: uint64(st.Rdev)}, true
 }
 
 // sessionAlive reports whether any process remains in the session.

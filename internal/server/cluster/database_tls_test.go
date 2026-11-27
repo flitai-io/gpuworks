@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/cluster/identity"
+	"gpuworks.ai/gpuworks/internal/testenv/testport"
 )
 
 // testTransport is one cluster authority with a policy file. The database
@@ -144,14 +145,7 @@ func databaseTestTLS(t *testing.T) (*tls.Config, *tls.Config) {
 
 func databaseTLSConfig(t *testing.T, server, client *tls.Config) DatabaseConfig {
 	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	address := l.Addr().String()
-	if err := l.Close(); err != nil {
-		t.Fatal(err)
-	}
+	address := testport.Address(t)
 	cfg := DatabaseConfig{Dir: t.TempDir(), Address: address, Name: "gpuworks.db", ListenTLS: server, DialTLS: client}
 	if server != nil && len(server.Certificates) != 0 {
 		if member, ok := testTransportMembers.Load(string(server.Certificates[0].Certificate[0])); ok {

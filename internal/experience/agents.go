@@ -25,9 +25,9 @@ type member struct {
 
 // extractAgent writes the release's own agent for this host out of the
 // server binary, where the simulated nodes run it from.
-func extractAgent(dataDir string) (string, error) {
+func extractAgent(dataDir string, agents agentbin.Files) (string, error) {
 	name := "gpuworks-agent-" + goruntime.GOOS + "-" + goruntime.GOARCH
-	raw, err := agentbin.Read("", name)
+	raw, err := agents.Read("", name)
 	if err != nil {
 		return "", fmt.Errorf("this build carries no agent for %s/%s: %w", goruntime.GOOS, goruntime.GOARCH, err)
 	}

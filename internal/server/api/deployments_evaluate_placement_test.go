@@ -421,13 +421,14 @@ func TestAutomaticPlacementCreateRejectsWhenVRAMWasTaken(t *testing.T) {
 	}
 }
 
-// Generic launch-assembly failures carry no field: they are page-level errors,
-// never a message beside a parameter control.
-func TestEvaluateReportsPlanFailuresAsPageLevelErrors(t *testing.T) {
+// A GPU index the node does not have is the card control's error, not a
+// launch-assembly failure: it names placement.gpus with
+// PLACEMENT_GPU_NOT_ON_NODE (GWKS-522). Generic launch-assembly failures stay
+// page-level (empty field), pinned by
+// TestCreateAndEvaluateRefuseAManualScriptThatLeavesAssignedGPUsIdle.
+func TestEvaluateReportsACardTheNodeLacksOnTheCardField(t *testing.T) {
 	h, st := automaticPlacementFixture(t)
 	modelID := automaticPlacementModel(t, st)
-	// A GPU index the node does not have: the placement hint is unusable, the
-	// answer names no field.
 	rec := httptest.NewRecorder()
 	h.evaluate(rec, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", strings.NewReader(fmt.Sprintf(`{"model_id":%d,"engine":"vllm","image":"example/vllm:test","node_uuid":"auto-big","placement":{"gpus":[7]},"placement_mode":"manual"}`, modelID))))
 	if rec.Code != http.StatusOK {
@@ -440,13 +441,11 @@ func TestEvaluateReportsPlanFailuresAsPageLevelErrors(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if response.OK {
-		t.Fatalf("a rejected GPU hint must answer ok=false: %s", rec.Body.String())
+	if response.OK || len(response.Errors) != 1 {
+		t.Fatalf("a card the node lacks must answer ok=false with one error: %s", rec.Body.String())
 	}
-	for _, fieldError := range response.Errors {
-		if fieldError.Field != "" {
-			t.Fatalf("launch-assembly failures must be page-level (empty field), got %q", fieldError.Field)
-		}
+	if got := response.Errors[0]; got.Field != "placement.gpus" || got.Code != ErrorPlacementGPUNotOnNode || got.Params["gpu_index"] != float64(7) {
+		t.Fatalf("error = %+v, want placement.gpus %s for index 7", got, ErrorPlacementGPUNotOnNode)
 	}
 }
 

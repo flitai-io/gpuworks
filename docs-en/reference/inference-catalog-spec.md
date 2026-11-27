@@ -118,7 +118,7 @@ models:                       # FlatCatalog: a single top-level models list
 | `memlock_unlimited` | Optional Boolean, default `false`; non-Boolean values (numbers, strings, and so on) are rejected | When `true`, the deployment's container uses `--ulimit memlock=-1:-1` (removing the locked-memory limit only for this container), for engines that lock large amounts of host memory into RAM (for example, DeepInfer uses `cudaHostRegister` to lock about 197 GB). If the deployment's own `docker_args` already specifies `memlock`, that setting takes precedence and no duplicate is appended; this is merged with the `memlock` injected for host RDMA networking into a single entry. See [Locked Memory](deployment-launch-sources.md#锁定内存memlock) |
 | `start_timeout_sec` | Optional integer, seconds; 60–86400 (the same bounds as the deployment's own `start_timeout_sec`), otherwise the stable error code `CATALOG_START_TIMEOUT_INVALID` is reported; an explicit `0` is equivalent to omitting it | Startup health check budget for instances of this spec, for recipes whose first start converts weights or warms caches for tens of minutes. It is the template step of the startup wait limit (source `template`): cluster default → template → raised to the engine deadline → the deployment's `start_timeout_sec`; for the order and rules see [Startup Wait Limit](deployment-launch-sources.md#启动等待上限). Saved with the spec snapshot, so later template changes do not affect existing deployments |
 | `docker_args` | Optional string array; each item nonempty after trimming; validated exactly like the deployment's own `container_overrides.docker_args` (`deploy.ValidateDockerArgs`): options the platform already manages (`--name`, `--network`, `--gpus`, `--shm-size`, `-e`, `-v`, `--mount`, `--entrypoint`, and so on) are rejected; `--ipc=host` together with this same spec's own `shm_bytes` is also rejected; `--privileged` and `--pid` are allowed, and the deployment evaluation warns about them | Extra `docker run` options the engine needs (for example `--cap-add=SYS_PTRACE`), the template layer of the deployment's own `docker_args`: the template's own args apply first, then the deployment's own, then the platform's (RDMA, memlock). If the deployment itself does not state `--ipc=host` but the selected template does, the deployment's own `shm_bytes` is rejected rather than silently having no effect, because it would never apply. See [the three-layer order of docker run arguments](deployment-launch-sources.md#docker-run-参数的三层顺序) |
-| `dirs[]` | Optional, at most 8 entries; `name` is 1–32 lower-case letters, digits or `-` (not starting or ending with `-`), unique within the spec; `mount_path` is an absolute, clean container path other than `/` that overlaps no other container path of the spec ([one container path space](#模板与平台的分工)); `limit_bytes` is a byte count, > 0 and ≤ 64 TiB (`1<<46`); `retain` may only be `deployment`, written back on import when omitted | Writable host directories the platform keeps for the deployment on every node it runs on; see [dirs: Managed Writable Directories](#dirs-managed-writable-directories) |
+| `dirs[]` | Optional, at most 8 entries; `name` is 1–32 lower-case letters, digits or `-` (not starting or ending with `-`), unique within the spec; `mount_path` is an absolute, clean container path other than `/` that overlaps no other container path of the spec ([one container path space](#模板与平台的分工)); `limit_bytes` is a byte count, > 0 and ≤ 64 TiB (`1<<46`); `retain` may only be `deployment`, written back on import when omitted | Writable host directories the platform keeps for the deployment on every node it runs on; see [dirs: Managed Writable Directories](#dirs托管的可写目录) |
 | `gpus` | Required | See below |
 | `args` | String array | Included in the engine command line; supports `${VAR}` [variable expansion](#变量展开); split using the parameter dictionary at deployment time (see below) |
 | `env` | Nonempty keys | Container environment variables; values support `${VAR}` expansion |
@@ -131,7 +131,7 @@ models:                       # FlatCatalog: a single top-level models list
 | `placement` | See below | Topology derivation |
 | `api` | See below | External HTTP contract |
 | `components[]` | See below | Combinations of multiple sets of weights (speculative decoding, and so on) |
-| `performance_tradeoffs[]` | See below; each entry's `param` must be a performance-costing setting the spec's launch actually sets | States why the spec keeps settings that cost performance (such as `--enforce-eager`); see [performance_tradeoffs](#performance_tradeoffs-reasons-for-performance-costing-settings) |
+| `performance_tradeoffs[]` | See below; each entry's `param` must be a performance-costing setting the spec's launch actually sets | States why the spec keeps settings that cost performance (such as `--enforce-eager`); see [performance_tradeoffs](#performance_tradeoffs降速参数的理由) |
 
 ### args: Decode Known Parameters Into Fields and Pass Unknown Tokens Through Verbatim
 
@@ -188,7 +188,9 @@ sources:
 
 #### Rank-scoped weights
 
-When a multi-node recipe pre-splits its weights into one part per rank, kept in subfolders of one repository, the spec's own `weights.sources` may name the rank variable `${GPUWORKS_NODE_RANK}` in `subfolder` (as in template fields, the older unprefixed `${NODE_RANK}` is its alias):
+When a multi-node recipe pre-splits its weights into one part per rank, kept in subfolders of one repository, the spec's own `weights.sources`
+or a [component](#components多权重组合)'s `weights.sources`
+may name the rank variable `${GPUWORKS_NODE_RANK}` in `subfolder` (as in template fields, the older unprefixed `${NODE_RANK}` is its alias):
 
 ```yaml
 weight_bytes: 137438953472          # one rank's size
@@ -206,7 +208,32 @@ Each rank of a multi-node deployment then downloads and mounts only its own part
 - Each node's download task, model marker and local model identity are its rank's subfolder. Admission, disk budgeting and preparation progress are per rank too: rank `r`'s node reserves disk only for rank `r`'s artifact, and a node that already holds that subfolder counts no download.
 - The mount keeps the repository-relative paths: in rank `r`'s container the weights are under `${GPUWORKS_MODEL_PATH}/rank<r>/…`, so the command writes `${GPUWORKS_MODEL_PATH}/rank${GPUWORKS_NODE_RANK}/…`.
 - `weight_bytes` (and `runtime_weight_bytes`) state one rank's size; the memory estimate multiplies it back to the group's weights.
-- A subfolder may name only the rank variable; either every source of the spec names it or none does; it cannot be combined with `components` or `pd_mode`, nor deployed as PD (`RANK_WEIGHTS_PD_UNSUPPORTED`). A request that names `model_id` must name rank 0's artifact (`RANK_WEIGHTS_MODEL_NOT_RANK_ZERO`). On a single-node deployment `${GPUWORKS_NODE_RANK}` is `0` (as the variable table states), so it reads rank 0's part only; how many parts exist is the recipe's to decide, and the platform does not check the deployment's node count against it.
+- A subfolder may name only the rank variable; either every source of one weights block (the spec's own or a component's) names it or none does; it cannot be combined with `pd_mode`, nor deployed as PD (`RANK_WEIGHTS_PD_UNSUPPORTED`). A request that names `model_id` must name rank 0's artifact (`RANK_WEIGHTS_MODEL_NOT_RANK_ZERO`). On a single-node deployment `${GPUWORKS_NODE_RANK}` is `0` (as the variable table states), so it reads rank 0's part only; how many parts exist is the recipe's to decide, and the platform does not check the deployment's node count against it.
+
+Components can be rank-scoped too, each weights block deciding on its own. The typical shape is a primary model the same on every rank beside an auxiliary component split per rank (for example a TensorFold TP2 recipe on two GB10 nodes: the EXL3 pack is the same on both, and the Engram tables have one part each under `rank0/` and `rank1/`):
+
+```yaml
+components:
+- name: primary
+  role: primary
+  weights: {...}                          # the same as the spec's own weights, shared by every rank
+  weight_bytes: 203793388493
+  mount_path: /model
+- name: engram
+  role: auxiliary
+  weights:
+    quantization: bf16
+    sources:
+    - modelscope:
+        repo_id: org/engram-tp2
+        subfolder: rank${GPUWORKS_NODE_RANK}
+  weight_bytes: 101379024392              # one rank's size
+  mount_path: /engram                     # rank r's container sees /engram/rank<r>/…
+```
+
+- Each rank of the component follows the rules above: at create it is resolved into one artifact per rank (same provider, repository and revision, the revision being identity), the bindings are kept in that component's `rank_weights` in the deployment snapshot, and the component's `store_model_id` is rank 0's artifact. Rank `r`'s node downloads and mounts only its own part; the mount point is still the component's `mount_path`, with the repository-relative paths below it, so the command writes `/engram/rank${GPUWORKS_NODE_RANK}`.
+- A component's `weight_bytes` states one rank's size: disk admission counts one rank, and the memory estimate multiplies it back to the group, as for the primary weights. The deploy evaluation's `acquisition.components` lists such a component once per rank.
+- The primary component is the spec's own weights: either both are rank-scoped or neither is. When both are, it is the same as rank-scoped weights without `components` (the rank bindings are the deployment's own `rank_weights`).
 
 Multiple sources in the same spec mean that any one can be pulled. The deployment's `model_source.provider` selects which provider's weights to run; [pull settings](../how-to/configure-pull-settings.md) determine how the node obtains them (already present, copied within a sync group, read from shared storage, or downloaded).
 
@@ -356,7 +383,7 @@ A template declares only what it needs, and the platform provides it on every la
 | Metrics port | `api.metrics.port: separate`, and a reference to `${GPUWORKS_METRICS_PORT}` in the launch fields, see [api.metrics](#apimetrics引擎指标映射) | The local port the launcher listens on (`${GPUWORKS_METRICS_PORT}`); the template does not choose the number | The platform (reserved together with the API port) | Fixed when the instance is created, kept with the instance |
 | System-layer environment variables | Nothing; a key of the same name in `env` overrides it | The compute network's `NCCL_*` / `GLOO_SOCKET_IFNAME` / `UCX_NET_DEVICES`, see [Environment Variable Layers](deployment-launch-sources.md#环境变量分层); a multi-node rank with a peers file also gets `GPUWORKS_PEERS_FILE` (the same value as the launch variable, for programs the recipe starts to read directly) | The platform | Every launch |
 | Primary weights | `weights`; `subfolder` may say `rank${GPUWORKS_NODE_RANK}`, see [Rank-Scoped Weights](#按-rank-拆分的权重) | Read-only at `${GPUWORKS_MODEL_PATH}` (default `/model`, or the primary component's `mount_path`); with rank-scoped weights each rank holds only its own subfolder | The platform (model storage) | With the model |
-| Component weights | `components[].mount_path` | Read-only at that path | The platform (model storage) | With the model |
+| Component weights | `components[].mount_path`; `subfolder` may say `rank${GPUWORKS_NODE_RANK}` too | Read-only at that path; with rank-scoped weights each rank holds only its own subfolder | The platform (model storage) | With the model |
 | Assets | `assets[].unpack_to` | Read-only, unpacked to that path | The platform (template package) | With the template version |
 | Writable directories | `dirs[]` (`name`, `mount_path`, `limit_bytes`, `retain`); see [dirs](#dirs托管的可写目录) | Read-write at `mount_path`; one per node | The platform (node-managed directory; needs the agent capability `mount.managed_dirs`) | With the deployment; never pruned |
 | KV disk tier | Cannot (a deployment parameter) | Read-write, at a path the platform picks | The platform (node-managed directory) | While an instance runs on the node; pruned to its limit |
@@ -678,6 +705,8 @@ components:
 CAMPPlus, and the BigVGAN vocoder for IndexTTS 2.5). This is not a standalone model in the catalog. You can omit `model_id`; when omitted, it resolves
 against the model owning the spec, just like primary.
 
+A component's weight sources may also name the rank variable in `subfolder`, so that each rank of a multi-node deployment downloads and mounts only its own part; see [Rank-scoped weights](#按-rank-拆分的权重).
+
 A non-primary component's `mount_path` must be referenced in the startup contract text (args / entrypoint /
 pre_start / env), or validation fails—unused mounts and mistyped paths are caught during import.
 Models referenced as components can have no spec of their own (draft weights appear in a separate row and cannot be deployed independently).
@@ -784,7 +813,7 @@ Warnings do not block import. A successful import response includes the same `wa
 | `CATALOG_HEALTH_ENDPOINT_UNDECLARED` | `engine: callable` without `api.health_endpoint` | Readiness probes use the default `/health`; no warning is shown for `vllm` / `sglang`, whose engines provide `/health` natively |
 | `CATALOG_ARG_PASSED_THROUGH` | A dictionary parameter in `args` carries a value the dictionary cannot read (`params.flag` / `value` / `key`) | Passed to the engine verbatim; the deploy form and the memory estimate do not see the value |
 | `CATALOG_DISPLAY_PROFILE_RETIRED` | The spec still sets `display_profile` or `gpus.display_target` | Both are ignored; the UI shows `display_name_zh_cn` / `display_name_en` (or `name` when there is neither) |
-| `CATALOG_PERFORMANCE_TRADEOFFS_NOT_KEPT` | The spec sets `performance_tradeoffs` | Validated but not kept: the platform reads these reasons only from the built-in catalog (see [performance_tradeoffs](#performance_tradeoffs-reasons-for-performance-costing-settings)) |
+| `CATALOG_PERFORMANCE_TRADEOFFS_NOT_KEPT` | The spec sets `performance_tradeoffs` | Validated but not kept: the platform reads these reasons only from the built-in catalog (see [performance_tradeoffs](#performance_tradeoffs降速参数的理由)) |
 | `CATALOG_CALLABLE_SERVED_NAME_FIXED` | In an `engine: callable` spec, the `--served-model-name` value in `args` / `entrypoint` does not use `${SERVED_MODEL_NAME}` (`params.name` is the literal) | An engine that checks the model accepts only that literal, so requests and health checks return 404 whenever the deployment's served name differs; ignore it if the adapter ignores the model or the name is pinned on purpose |
 
 ## Validation Entry Points and Tools
@@ -804,13 +833,13 @@ Warnings do not block import. A successful import response includes the same `wa
 <!-- translation-source-sha256: d1cab9aa487c9a1159b67fd447e19bf5893c615e86468538eb50068dd1c9d3b7 ## Model-Level Fields -->
 <!-- translation-source-sha256: e6706c6959237b1746a59ac8b76ec4f509051bc6c8e72113f5eaed4b7f0cc215 ## Spec-Level Fields -->
 <!-- translation-source-sha256: 5514abf483ab7da4e47e650340bc5fa104c07f131905307d15db4b9eceb665bc ### args: Decode Known Parameters Into Fields and Pass Unknown Tokens Through Verbatim -->
-<!-- translation-source-sha256: 8e5e8b20bd4d4c8cc7a64d9993eaebfb6a9139b8d8f7471a62c84c07e140bfec ### weights.sources: Compact Single-Key Form -->
+<!-- translation-source-sha256: da0b0a8be2391dca43fb283b931a3583caec9c661ce1118fe70a91643b7bda93 ### weights.sources: Compact Single-Key Form -->
 <!-- translation-source-sha256: bee9f386d67fd025872be87fc0d6417ca7ea768faa95f1e839f32af63e0822f4 ### image_sources: Image Sources Declared by the Template -->
 <!-- translation-source-sha256: ad7eaab32f35f7cd46870557a94a23d13cc8e4863699c8207732d7291eac22d4 ### GPU Selectors (gpus / unsupported[].gpus) -->
 <!-- translation-source-sha256: 10f8e878fe47c8726cfd234b9ccbd6beffa018e6242632cb689e45ea41bff5fe ### Display Names -->
 <!-- translation-source-sha256: e3430d7e59546f9f0e233c4f700ce07ec690a95a04bb7273d626354f5d919d1f ### assets[] -->
 <!-- translation-source-sha256: 83b305081ab8f015fcc842b0f7d0a0d03a0c7e75846702aff54692db07c1894d ### PD Layout and Manual Command -->
-<!-- translation-source-sha256: 976fe75b4bf21fd820f6239ae639396f075b0966d7b988fe601b905a08885f96 ## What the Template Declares and What the Platform Provides -->
+<!-- translation-source-sha256: 976c5f757c4398eddc3f8ce19c60b6a6b6db748335931649b2dd0f6939be82a3 ## What the Template Declares and What the Platform Provides -->
 <!-- translation-source-sha256: ca8ad9d228ec55ff4037230581f5a1230b2b5fed81b4a0103dfa73df72cd835d ## entrypoint: The Sole Declaration Point for Entrypoint Overrides -->
 <!-- translation-source-sha256: 8aa019b6e8ab20f918555f11275840ef6da3032607bd6140c43350c2e156f044 ## placement: Starlark Topology Derivation -->
 <!-- translation-source-sha256: 8730a225b2be22fb1a6ce28a3795c8c6ef8697f0af90adfad1c78236c1eb3dd1 ### Variable Expansion -->
@@ -820,7 +849,7 @@ Warnings do not block import. A successful import response includes the same `wa
 <!-- translation-source-sha256: 4070ee0770711185358f42c24fdc671a935929a1849ef47543173cae553e89a3 ### api.tokenizer_ref: Independent Tokenizer Source -->
 <!-- translation-source-sha256: 7a250e5a02165b91282a0bc517187d409ca0a3991ff66ccde34262b5bda86067 ### api.metrics: Engine Metric Mapping -->
 <!-- translation-source-sha256: c43a7f1c915e00849d832b88aa1423056a03dc492634a4d24793ca3c94807e8d ### api.request_stats: Per-Request Statistics in Responses -->
-<!-- translation-source-sha256: f2dcc459ab368caf6601fff2c116fb06cdf6f4c7e4b03395844423906e1a87c6 ## components: Multiple Weight Sets -->
+<!-- translation-source-sha256: 9203eaf09250b38d293f241e7f2aee52baa7d892ee3c1ebfa30c885089dc3235 ## components: Multiple Weight Sets -->
 <!-- translation-source-sha256: 5ffa7b32ad221104b1942267515674a5d244169f2e115e30796d882f6ccf52d0 ## dirs: Managed Writable Directories -->
 <!-- translation-source-sha256: 7620f9348a37aef34bcf86161854f38f331c06682ad4a107b572bec32258b27f ## performance_tradeoffs: Reasons for Performance-Costing Settings -->
 <!-- translation-source-sha256: 2ebe9bf5d43fdc1e745261f42679fd5503d1e94c1c37aaa7ffffdc4a46edbf40 ## Pre-Import Checks and Warnings -->
@@ -828,6 +857,7 @@ Warnings do not block import. A successful import response includes the same `wa
 <!-- translation-localized-code-block: a580200df2b28bc011bb736a64288086932955375e5ae8897762ee97bd667e26 8e0792250b6c0eb3ec0dad5bfca28308dc0b1afeb27e9c33bb24ddb21e20ba07 -->
 <!-- translation-localized-code-block: 9a54a7271e193f98f78581cbb5fb446f8d5d1aa46c942d8f4fb3536f5f81b115 22ec1397368cfc809b65ad278feb838b5690c611dd587bc022c6e151b5596d99 Translate YAML comments and illustrative user-facing reason text. -->
 <!-- translation-localized-code-block: 4cf9267c119973bda779b8e29a9ad818c097c803df34a09ac14492502ab9dce2 e78acb98a7a082fdad6d2080ea7754cc18152f1bec68f60c312e46e33f3bfd59 -->
+<!-- translation-localized-code-block: e28686136fbe7b0d12c9c674730602018dfcabbdcc80267b7c135df4b687c67b 6d4450e6bdb0328e860e63ffa596f48efb38a084deedd3530509a23dae9149ec -->
 <!-- translation-localized-code-block: 06db934de28e923689ee3d7a5291cfb9c5c39413ce9a4c3a87dfc3b0d6dc051d 213afdd99d9dc95fee88560f64a09e012578484b424f46c160ffd92f44b8bd72 Translate YAML comments and illustrative user-facing reason text. -->
 <!-- translation-localized-code-block: 0db7a21f5d58dc3f0536ef0b3909ce67ba6415f6c0e158dbee9122f79b1f2209 8da5a4455c5d0ab53369e8e0b4455543b9acd70a2615f7faf4b34b620d9cd204 Translate the inline shell comment. -->
 <!-- translation-localized-code-block: a611f2e8254725bdcf88ae19eb23c532ef8c679903131a8881bbd61f09aafdb2 33859cded67f664966175739bc36d429175e7fe4c8f3d71422f40719d24be6e6 Translate YAML comments and illustrative user-facing reason text. -->

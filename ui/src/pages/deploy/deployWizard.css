@@ -560,3 +560,14 @@
 .deploy-units-placement-error .ant-form-item-control-input {
   min-height: 0;
 }
+
+.deploy-image-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.deploy-image-option-engine {
+  flex: none;
+  opacity: 0.65;
+}

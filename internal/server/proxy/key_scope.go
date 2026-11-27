@@ -27,7 +27,10 @@ func keyScopeFrom(ctx context.Context) *store.APIKeyIdentity {
 }
 
 // selectForRequest selects a deployment instance within the request's key
-// scope.
+// scope, leased for the request's class (admissionFrom), and refuses it when
+// busy if it asked to be (busyDeclared).
 func (p *Proxy) selectForRequest(ctx context.Context, modelName, affinity string) (*store.Deployment, target, *refusal, bool) {
-	return p.selectScopedDeploymentInstance(keyScopeFrom(ctx), modelName, affinity)
+	adm := admissionFrom(ctx)
+	adm.rejectBusy = busyDeclared(ctx)
+	return p.selectScopedDeploymentInstance(keyScopeFrom(ctx), modelName, affinity, adm)
 }

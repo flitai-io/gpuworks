@@ -64,7 +64,9 @@ func (a *apiHandlers) createDeployment(w http.ResponseWriter, r *http.Request) {
 		writeUseCaseErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, a.deploymentDTO(created, true))
+	result := a.deploymentDTO(created.Deployment, true)
+	result.Warnings = created.Warnings
+	writeJSON(w, http.StatusCreated, result)
 }
 
 // evaluate previews a create request for the deploy form

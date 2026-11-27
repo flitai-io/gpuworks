@@ -14,7 +14,7 @@ const closeChannels = trackMessageChannels();
 const { i18n, locale } = await createI18n(["scheduling", "deployments", "deploy"]);
 const { cleanup, render, screen, waitFor, within, fireEvent } = await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
-const { MemoryRouter } = await import("react-router-dom");
+const { MemoryRouter, useLocation } = await import("react-router-dom");
 const { schedulingApi } = await import("../src/schedulingApi.ts");
 const { default: ResidencyTimeline } = await import("../src/pages/scheduling/ResidencyTimeline.tsx");
 const { blockOf, ticksOf, tickLabel, cardIntervals, lanesOf, CHART_WIDTH } = await import("../src/pages/scheduling/timelineChart.ts");
@@ -533,4 +533,22 @@ test("the picker follows the answered window: 15 minutes, then a custom range, s
   assert.ok(labels.length >= 2 && labels.every((text) => /^\d\d:\d\d$/.test(text)), labels.join(","));
   await pickCustom(user, CUSTOM_START, CUSTOM_END);
   await waitFor(() => assert.ok(within(rangeBox().closest(".ant-select") as HTMLElement).getByTitle(timeRange("custom"))));
+});
+
+for (const summarized of [false, true]) test(`deleted non-sharing deployments stay on scheduling (${summarized ? "summary" : "raw"})`, async () => {
+  const deleted = { deployment_id: 21, deployment: "quiet-deleted", deployment_deleted: true };
+  schedulingApi.timeline = async () => timeline({ deployments: [], nodes: [{ uuid: "node-a", name: "gpu-a", gpus: [{
+    index: 0, truncated: summarized,
+    segments: summarized ? [] : [{ ...deleted, instance: "gone", state: "awake", from: FROM, to: TO }],
+    summary: summarized ? [{ kind: "summary", from: FROM, to: TO, switches: 0, deployments: [{ ...deleted, awake_seconds: 21600, asleep_seconds: 0, switching_seconds: 0, starting_seconds: 0, state: "awake" }] }] : [],
+  }] }] });
+  function Location() { const location = useLocation(); return <output aria-label="location">{location.pathname + location.search}</output>; }
+  render(<I18nextProvider i18n={i18n}><MemoryRouter initialEntries={["/scheduling?node=node-a"]}><Location/><ResidencyTimeline nodes={nodes}/></MemoryRouter></I18nextProvider>);
+  const user = userEvent.setup();
+  const label = await screen.findByText(i18n.t("scheduling:history.deleted", { name: "quiet-deleted" }));
+  assert.equal(label.closest("a,button"), null);
+  assert.equal(screen.queryByRole("link", { name: /quiet-deleted/ }), null);
+  await user.click(label);
+  await user.keyboard("{Enter}");
+  assert.equal(screen.getByLabelText("location").textContent, "/scheduling?node=node-a");
 });

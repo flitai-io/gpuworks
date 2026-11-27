@@ -553,6 +553,8 @@ function DeployForm({ opened }: { opened?: OpenedDeployment }) {
         useModel={weightSource.useModel}
         onUseModel={weightSource.setUseModel}
         onChoice={weightSource.setChoice}
+        sourceTest={weightSource.sourceTest}
+        onRetest={weightSource.retestSource}
         onCancel={() => weightSource.setModalOpen(false)}
         onConfirm={weightSource.confirm}
       />

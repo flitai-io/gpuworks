@@ -8,7 +8,8 @@ import "time"
 type CardHealthChecks struct {
 	NodeUUID string `json:"node_uuid"`
 	Online   bool   `json:"online"`
-	// Reports is false for an agent too old to report card checks.
+	// Reports says the current snapshot contains checks for host-owned cards.
+	// False alone says nothing about the agent's capabilities.
 	Reports bool `json:"reports"`
 	// Stale: the last report is too old to say what the checks say now.
 	Stale      bool               `json:"stale"`
@@ -16,7 +17,20 @@ type CardHealthChecks struct {
 	Checks     []CardHealthColumn `json:"checks"`
 	Cards      []CardHealthCard   `json:"cards"`
 	// Summary counts the cells in each check status.
-	Summary map[string]int `json:"summary"`
+	Summary map[string]int    `json:"summary"`
+	Notice  *CardHealthNotice `json:"notice,omitempty"`
+}
+
+// CardHealthNoticeInfo and CardHealthNoticeWarning are the notice's wire levels.
+const (
+	CardHealthNoticeInfo    = "info"
+	CardHealthNoticeWarning = "warning"
+)
+
+// CardHealthNotice explains why current checks are unavailable.
+type CardHealthNotice struct {
+	Code  string `json:"code"`
+	Level string `json:"level"`
 }
 
 // CardHealthColumn is one check shown as a column, with how often it runs.

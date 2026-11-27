@@ -25,7 +25,7 @@ A revision belongs to the selected source platform; a Hugging Face commit may no
 
 When you register a Hugging Face / ModelScope model, a metadata read failure may produce only a notice; registration does not mean the weights have been downloaded. **Download to…** explicitly downloads from the registered source. To use complete files on another node, use **Copy to…**.
 
-In the model details, click **Cancel download** on a storage or node row to stop an active public download. The state becomes `canceled`; downloaded data is kept for a resumable retry. Deleting or stopping an inference service cancels downloads that service started when no other active service needs them. Downloads started separately from the models page continue. If the writer is offline, cancellation is saved and applied on reconnect. Changing a shared download writer requires the previous writer to acknowledge that it has stopped writing.
+In the model details, click **Cancel download** on a storage or node row to stop an active public download. The state becomes `canceled`; downloaded data is kept for a resumable retry. Deleting or stopping an inference service cancels downloads that service started when no other active service needs them. Downloads started separately from the models page continue. A local-storage download canceled this way starts again, and resumes, when a later deployment needs the model on that node; a download canceled by hand on the models page is not restarted by a deployment and needs **Download to…** again. A download already canceled before this version cannot be told apart from the operator’s, so it is kept canceled and needs **Download to…** too. If the writer is offline, cancellation is saved and applied on reconnect. Changing a shared download writer requires the previous writer to acknowledge that it has stopped writing.
 
 Downloads support resume, multiple connections, and rate limiting. A copy is reported as `present` only when all files exist, their sizes match, and the directory structure is valid.
 There is no task-level download deadline. Each HTTP request lasts at most 15 minutes. After a timeout, the download attempts to resume from the downloaded portion; retry counts and address-switching conditions are described below.
@@ -102,7 +102,7 @@ Failed peer sync operations can be retried, and ongoing sync operations can be c
 `DELETE /api/v1/models/{id}/nodes/{uuid}`; a model used by an active deployment returns 409.
 
 <!-- translation-source-sha256: be802f17d54419589d946b41d34d6f6efa28dbd46629ab0618951e517f53ab15 # Download, Cache, and Sync Models Between Nodes -->
-<!-- translation-source-sha256: b4bb6daf1101da7f2991534c5cde775de3541061b80d50596bc7747e4e2e68ae ## Register and Download a Model -->
+<!-- translation-source-sha256: 873a02a8dbdaf15ad936a84b78289f100a1512b0d7234502f5706e1349680e1d ## Register and Download a Model -->
 <!-- translation-source-sha256: 397b32440860c469f5888dcb6011a0b1c69b027939806a0c4b774ca8ade916ab ## Register an Existing Directory on a Node -->
 <!-- translation-source-sha256: 28b1888ec62c94266959f5c23d9e648b5668be41b23905e7a30f134f55ad20af ## How Deployments Obtain Models and Images -->
 <!-- translation-source-sha256: 660859b5dcc2384df47e115e52fb5c8d9dafd666fd7506738302da05c7603fe3 ## Peer Sync -->

@@ -20,7 +20,7 @@ Unmodified Strata responses can therefore provide Prefill and Decode timing, but
 request's 20.3 seconds of queueing. This requires queue timing in the same response or a supported stable
 request correlation; matching by timestamp or body is insufficient. vLLM's `--enable-per-request-metrics`, available
 since 0.25.0, has separate existing support, and the platform reads its reported fields.
-For field declarations and measurement semantics, see [Inference Metric Vocabulary](../reference/inference-metrics.md#per-request-statistics).
+For field declarations and measurement semantics, see [Inference Metric Vocabulary](../reference/inference-metrics.md#逐请求统计).
 
 ## Built-in Strata Adaptation
 

@@ -45,8 +45,9 @@ func nodeListAnswer(t *testing.T, h *apiHandlers, body string) (list map[string]
 		}
 		list[node.UUID] = node.Reasons[0].Code
 		// What the node is told is about the node: the planner's own words
-		// for a launch ("deployment 0 resolve launch: ...") are not it.
-		if detail := fmt.Sprint(node.Reasons[0].Params["detail"]); strings.Contains(detail, "deployment 0") {
+		// for a launch ("resolve launch: ...", which names no deployment in
+		// a preview) are not it.
+		if detail := fmt.Sprint(node.Reasons[0].Params["detail"]); strings.Contains(detail, "resolve launch") {
 			t.Fatalf("node %s carries the planner's prefix: %s", node.UUID, detail)
 		}
 	}

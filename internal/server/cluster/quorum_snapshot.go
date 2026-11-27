@@ -7,6 +7,10 @@ import (
 	"slices"
 )
 
+// ErrQuorumReadNotLeader means the member asked does not lead the database:
+// only the leader reads a quorum snapshot, so the asker goes to the leader.
+var ErrQuorumReadNotLeader = errors.New("quorum snapshot requires the local native leader")
+
 // WithLocalQuorumReadSnapshot brackets one local leader SQL snapshot with fresh
 // barriers. The internal reader must use only fixed SELECT/schema queries and
 // close its rows before returning. TxOptions.ReadOnly is not enforced by the
@@ -38,7 +42,7 @@ func readLocalQuorumSnapshot(ctx context.Context, d *Database, barrier func(cont
 		return QuorumProof{}, err
 	}
 	if !localQuorumLeader(d, first) {
-		return QuorumProof{}, errors.New("quorum snapshot requires the local native leader")
+		return QuorumProof{}, ErrQuorumReadNotLeader
 	}
 	if err := readQuorumSQL(ctx, first, open, read); err != nil {
 		return QuorumProof{}, err

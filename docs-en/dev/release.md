@@ -87,7 +87,9 @@ Releases use calendar versions `YY.M.PATCH`, tagged as `vYY.M.PATCH`, for exampl
   Only tags that match `^v[0-9]+\.[0-9]+\.[0-9]+$` create a pipeline and publish to the `release` channel; tags such as `v26.11.0-rc.1` create no pipeline.
 - `v*` must be a protected tag in GitLab: the signing private key and the distribution source credentials are protected variables, so a pipeline for an unprotected tag cannot read them and the publish job fails.
 - Once pushed, a tag is never moved or recreated: a release id maps to exactly one set of bytes (see step 1 of the publishing process below). If something is wrong, release the next patch version.
-- When a server decides whether an update exists, it compares version numbers if both sides are version tags, and otherwise (a nightly's short commit hash, a local build) compares build times
+- When a server decides whether an update exists, it compares version numbers if both sides are version tags, and otherwise (a nightly's short commit hash, a local build) compares build times;
+  a build for the same channel that is later than the channel's newest version yet absent from its version list (a branch build) is left out of the comparison, and the console does not show it as up to date
+  (the console's version picker also marks a channel version whose database schema is older than this server's). The CLI `gpuworks upgrade` still compares build times only, so from a branch build the CLI takes a channel version for older and needs `--force` to install it
   ([ADR 0040](../adr/0040-signed-multi-source-distribution.md)). The `release` channel follows only the newest release line: when the channel already names a higher version
   (for example, pushing `v26.11.2` after `v26.12.0` was released), `publish_dist.sh` refuses to publish.
 
@@ -109,15 +111,20 @@ and `<sha256>` is the content digest of the corresponding catalog file:
 |---|---|
 | `<channel>/index.json` | An ed25519 signature envelope containing the signed release index; the body lists server archives for each platform, the image catalog, and the inference template catalog package, with a path, size, and sha256 for each file |
 | `<channel>/latest` | The release id as plain text, used to locate the version for the initial download |
-| `<channel>/manifest.json` | The same file as the image catalog in the channel's index, at a fixed address for downloading by hand and uploading in offline environments |
+| `<channel>/manifest.json` | Offline schema 3 catalog matching the signed `image_catalog` entry. Current servers use `image_catalog_v4.path` |
 | `releases/<release_id>/` | Server archives and `SHA256SUMS` |
 | `catalog/images/<sha256>.json` | The image catalog identified by its content digest |
 | `catalog/templates/<sha256>.tar.gz` | The inference template catalog package identified by its content digest |
 | Root-level `get.sh` | One-line installer (source: `scripts/get.sh`): picks the fastest source, downloads the archive for the local platform, verifies it against `SHA256SUMS`, and runs `gpuworks install` |
 
-The `nightly` channel is every master build, with the short commit hash as the release id; `release` is every version tag, with the tag as the release id (see [Version Numbers](#version-numbers)).
+The `nightly` channel is every master build, with the short commit hash as the release id; `release` is every version tag, with the tag as the release id (see [Version Numbers](#版本号)).
 Binaries follow the channel injected at build time (`make CHANNEL=…`, defaulting to `nightly`; `scripts/package_release.sh` reads `GPUWORKS_RELEASE_CHANNEL`,
-and the `release` channel accepts only release ids of the form `vYY.M.PATCH`).
+and a `release` channel release id is either `vYY.M.PATCH` or the short commit hash of a release branch build, described below).
+
+Every push to a `release/YY.M` branch also runs the core gates and the four build jobs, so the line's fixes that have no tag yet can be downloaded for development and testing.
+These builds use the short commit hash as the release id and put the binaries on the `release` channel: a server running one is offered the line's later tags as updates,
+not master's nightly, and the settings page labels it a development build. They are CI artifacts only: `release-publish` does not run on release branches,
+and `publish_dist.sh` refuses to publish a release id that is not `vYY.M.PATCH` to the `release` channel, so release users' update checks never see them.
 
 CI's `release-publish` runs `scripts/publish_dist.sh <channel> dist` after all four build jobs on master or on a version tag succeed.
 It runs in a separate `publish` stage because GitLab 14.0 allows needs to reference only jobs in earlier stages.
@@ -242,10 +249,6 @@ The built-in inference catalog is a content-addressed package, meaning it is ide
 embedded seed is generated from the gpuworks-runner build matrix by `make image-manifest` and enters the [distribution channel](#发布通道) with every release; see the
 [CLI Reference](../reference/cli.md#gpuworks-image-manifest). Unit tests fail if the embedded seed differs from the matrix.
 
-Register new SWR tags under `published` in `build/runner-images/matrix.yaml` with their exact tag, platforms and engine version. Run `make image-manifest` and publish the corresponding channel. Inventory tags without an immutability guarantee are manual selections, including names containing r1 or r2. New servers initially disable these entries. Older schema 3 servers can read the same catalog. Their initial switch is on, but their automatic resolver skips these tags.
-
-On new servers, Check for updates keeps conflicting custom or community entries, lists the skipped names and applies the rest. An uploaded manifest still fails as a whole on a conflict. An older installation with a custom entry at the same full image reference can upgrade its server before checking for updates to keep its deployment references.
-
 ## Upgrade and Rollback
 
 - Server: `gpuworks upgrade` automatically stops the service, creates a backup (database + `master.key` + old binary), performs an atomic replacement,
@@ -259,11 +262,11 @@ On new servers, Check for updates keeps conflicting custom or community entries,
 <!-- translation-source-sha256: 380ca742c2dd61ef49dd156973902812f1d52c8475127999dbff095c3b9fd434 # Release Guide -->
 <!-- translation-source-sha256: 9aadf552a7b17d37e4bb529f3165267cf854b47d6e32bf8cbca5992f5ab761e4 ## Build Artifacts -->
 <!-- translation-source-sha256: 42932b93632fa7546204b34d9107d978394aecabb5dea1d91d77f4aecd28097e ## Release Documentation PDFs -->
-<!-- translation-source-sha256: d7ce5d3d9eeb9df54e385d8877ce972c83455c47a0527194b5eb544befb004a8 ## Version Numbers -->
-<!-- translation-source-sha256: 76a74f767d39dfbee237cef24fd07069619e753a65f6ffffb48339b5416d22b8 ## Distribution Channel -->
+<!-- translation-source-sha256: 92549e86298548097b01b5143a11749f2f5b1871caaf622d2be7463e06adab29 ## Version Numbers -->
+<!-- translation-source-sha256: 611a7c6221dbc54581cd06d5a97d45484b52f7737638cf384c5149177a99af5e ## Distribution Channel -->
 <!-- translation-source-sha256: 43e6e82a406f6474f33b1436024c8e7d2e9a8f5167bc8d4a1ed73cfd15fea161 ### GitHub Actions Releases -->
 <!-- translation-source-sha256: 32a0c93ed7537847e5c6869de4228919ff01e969e898cef1f5f3a268150adfcd ### Kubernetes Agent Image -->
 <!-- translation-source-sha256: 28162a8691fe3e14460cdf3b97b977de5713069ca949be433af79bd0c0473b36 ## Embedded Native Assets -->
-<!-- translation-source-sha256: 43e4e84082a7030fe745bc9c458cfaf7ebd04d9387b5e8ee7362a6e096ca4534 ## Database and Catalog Packages -->
+<!-- translation-source-sha256: a6733565856202d23003d644b735bd8ce7dce418fb278199d5e2dd49c202561d ## Database and Catalog Packages -->
 <!-- translation-source-sha256: 3027f836a7754e1a3e7900b93c5102a75164ef89c3a9c1e20e9bcc2541175d09 ## Upgrade and Rollback -->
 <!-- translation-localized-code-block: 957acfe4b88a2bb0b730fab70c725bbbdaf2e1536f84f94d12918def820c5a7c cac397a0dea3afc07b0e87be5f17fd4204658d3b070919f828730dc6f0f4992d Translate release validation command comments -->

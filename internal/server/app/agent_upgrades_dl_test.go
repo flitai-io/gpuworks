@@ -17,7 +17,7 @@ func TestAgentUpgradeDownloadPinOverridesMutableBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 	pinned := []byte("frozen-target-build")
-	handler := withDL(dir, http.NotFoundHandler(), http.NotFoundHandler(), func(got string) ([]byte, bool, error) {
+	handler := withDL(http.StripPrefix("/dl/", http.FileServer(http.Dir(dir))), http.NotFoundHandler(), http.NotFoundHandler(), func(got string) ([]byte, bool, error) {
 		if got != name {
 			return nil, false, nil
 		}
@@ -44,7 +44,7 @@ func TestAgentUpgradeDownloadPinConflictDoesNotFallBack(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, name), []byte("wrong-new-target"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	handler := withDL(dir, http.NotFoundHandler(), http.NotFoundHandler(), func(string) ([]byte, bool, error) {
+	handler := withDL(http.StripPrefix("/dl/", http.FileServer(http.Dir(dir))), http.NotFoundHandler(), http.NotFoundHandler(), func(string) ([]byte, bool, error) {
 		return nil, true, errors.New("private artifact path must not leak")
 	})
 	rec := httptest.NewRecorder()
@@ -60,7 +60,7 @@ func TestAgentUpgradeDownloadWithoutPinUsesExistingHandler(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, name), []byte("ordinary-build"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	handler := withDL(dir, http.NotFoundHandler(), http.NotFoundHandler(), func(string) ([]byte, bool, error) { return nil, false, nil })
+	handler := withDL(http.StripPrefix("/dl/", http.FileServer(http.Dir(dir))), http.NotFoundHandler(), http.NotFoundHandler(), func(string) ([]byte, bool, error) { return nil, false, nil })
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/dl/"+name, nil))
 	if rec.Code != 200 || rec.Body.String() != "ordinary-build" {

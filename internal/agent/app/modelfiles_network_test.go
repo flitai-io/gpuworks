@@ -2,16 +2,20 @@ package app
 
 import (
 	"context"
+	"errors"
 	"io"
+	stdnet "net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/agent/modelfetch"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
@@ -34,7 +38,7 @@ func TestModelSourceClientSkipsTheProxyForNoProxyHosts(t *testing.T) {
 			t.Fatal(err)
 		}
 		req, _ := http.NewRequest(http.MethodGet, tc.target, nil)
-		got, err := client.Transport.(*http.Transport).Proxy(req)
+		got, err := client.Transport.(routeNamingTransport).Proxy(req)
 		if err != nil || (got == nil) != tc.direct {
 			t.Errorf("%s: proxy = %v, err = %v; want direct=%v", tc.target, got, err, tc.direct)
 		}
@@ -115,5 +119,126 @@ func TestStateSyncModelDownloadSelectsHTTPProxyForHTTPSource(t *testing.T) {
 		if err != nil || string(actual) != file.body {
 			t.Fatalf("downloaded %s = %q, err=%v", name, actual, err)
 		}
+	}
+}
+
+// A mirror that answers with a 302 to a host the node's no_proxy lists is
+// followed there directly, the way hf-mirror.com sends a Xet-stored file to
+// cas-bridge.xethub.hf.co (GWKS-508); a redirect to an unlisted host goes
+// through the proxy. A request that fails says which of the two it took.
+func TestModelSourceClientRoutesEachRedirectHopByNoProxy(t *testing.T) {
+	var proxied atomic.Int64
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxied.Add(1)
+		// A proxy that cannot reach the host: the connection just ends.
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err == nil {
+			_ = conn.Close()
+		}
+	}))
+	defer proxy.Close()
+	storage := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "weights")
+	}))
+	defer storage.Close()
+	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://"+r.URL.Query().Get("to")+"/model.safetensors", http.StatusFound)
+	}))
+	defer mirror.Close()
+	// Loopback is never proxied, so the hosts get names and the dialer
+	// takes them to the test servers.
+	addrs := map[string]string{
+		"mirror.example:80":    mirror.Listener.Addr().String(),
+		"storage.example:80":   storage.Listener.Addr().String(),
+		"elsewhere.example:80": storage.Listener.Addr().String(),
+		"proxy.example:3128":   proxy.Listener.Addr().String(),
+	}
+	net := proto.NetworkConfig{HTTPProxy: "http://proxy.example:3128", HTTPSProxy: "http://proxy.example:3128", NoProxy: "mirror.example,storage.example"}
+	client, err := modelSourceClient("huggingface", "http://mirror.example", net)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport := client.Transport.(routeNamingTransport)
+	dial := transport.DialContext
+	transport.DialContext = func(ctx context.Context, network, addr string) (stdnet.Conn, error) {
+		target, ok := addrs[addr]
+		if !ok {
+			t.Errorf("dialed unexpected address %s", addr)
+			target = addr
+		}
+		return dial(ctx, network, target)
+	}
+	defer transport.CloseIdleConnections()
+
+	resp, err := client.Get("http://mirror.example/resolve?to=storage.example")
+	if err != nil {
+		t.Fatalf("redirect to a no_proxy host: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if string(body) != "weights" || proxied.Load() != 0 {
+		t.Fatalf("body %q, proxy requests %d; want the weights fetched directly", body, proxied.Load())
+	}
+
+	_, err = client.Get("http://mirror.example/resolve?to=elsewhere.example")
+	if err == nil || proxied.Load() != 1 {
+		t.Fatalf("redirect to an unlisted host: err %v, proxy requests %d; want one failed proxied request", err, proxied.Load())
+	}
+	if want := "(via proxy proxy.example:3128)"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not name the route %s", err, want)
+	}
+
+	storage.Close()
+	_, err = client.Get("http://mirror.example/resolve?to=storage.example")
+	if err == nil || !strings.Contains(err.Error(), "(direct)") || proxied.Load() != 1 {
+		t.Fatalf("direct failure: err %v, proxy requests %d; want an error naming the direct route", err, proxied.Load())
+	}
+}
+
+// Naming the route keeps a timeout a timeout: url.Error asks the error it
+// wraps directly, and the retry and source-switch decisions read it.
+func TestRoutedTimeoutStillReadsAsATimeout(t *testing.T) {
+	listener, err := stdnet.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	go func() {
+		var held []stdnet.Conn // accepted, never answering the handshake
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				for _, c := range held {
+					_ = c.Close()
+				}
+				return
+			}
+			held = append(held, conn)
+		}
+	}()
+	client := httpClientFor(proto.NetworkConfig{HTTPSProxy: "http://proxy.example:3128"})
+	client.Transport.(routeNamingTransport).TLSHandshakeTimeout = 100 * time.Millisecond
+	_, err = client.Get("https://" + listener.Addr().String() + "/model.safetensors")
+	if err == nil {
+		t.Fatal("handshake with a silent server succeeded")
+	}
+	var netErr stdnet.Error
+	if !errors.As(err, &netErr) || !netErr.Timeout() {
+		t.Fatalf("error %q is not a timeout", err)
+	}
+	if !modelfetch.IsTransient(err) || !strings.Contains(err.Error(), "(direct)") {
+		t.Fatalf("error %q: transient %v; want a transient error naming the direct route", err, modelfetch.IsTransient(err))
+	}
+}
+
+// An https address answered in plain HTTP keeps net/http's own explanation,
+// which it derives from the TLS error's type.
+func TestRoutedClientKeepsTheSchemeMismatchError(t *testing.T) {
+	plain := httptest.NewServer(http.NotFoundHandler())
+	defer plain.Close()
+	client := httpClientFor(proto.NetworkConfig{HTTPSProxy: "http://proxy.example:3128"})
+	_, err := client.Get("https://" + plain.Listener.Addr().String() + "/model.safetensors")
+	if !errors.Is(err, http.ErrSchemeMismatch) {
+		t.Fatalf("error %v; want http.ErrSchemeMismatch", err)
 	}
 }

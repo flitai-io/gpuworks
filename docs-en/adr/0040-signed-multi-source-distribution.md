@@ -54,7 +54,7 @@ The publisher needs to know the number of installations, their scale, and hardwa
 
 ## Supplement (2026-10-28): Version Tags Order by Version Number, and the Image Catalog's Fixed Address Moves into the Channel
 
-Releases now use calendar versions `vYY.M.PATCH` ([Release Guide](../dev/release.md#version-numbers)), and long-term support release lines will follow. Ordering by build time alone would treat a patch to an older release line that was built later (`v26.11.2` after `v26.12.0`) as an update.
+Releases now use calendar versions `vYY.M.PATCH` ([Release Guide](../dev/release.md#版本号)), and long-term support release lines will follow. Ordering by build time alone would treat a patch to an older release line that was built later (`v26.11.2` after `v26.12.0`) as an update.
 
 - **Ordering**: when both sides are `vYY.M.PATCH`, they are compared by version number; otherwise (a nightly's short commit hash, a local build with a suffix) they are still compared by build time. Both "only a version built later than the current build counts as an update" in decision 4 and "the build time of the release the catalogs belong to" in decision 5 order by this rule. Nightly and release are still compared by build time, so switching channels still never offers a downgrade.
 - **Publishing side**: the `release` channel follows only the newest release line, and `publish_dist.sh` refuses to publish a tag below the channel's current version. Long-term support release lines will get channels of their own rather than going into `release`.

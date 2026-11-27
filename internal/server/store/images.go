@@ -182,7 +182,7 @@ func (s *Store) UpsertImage(img *Image) (*Image, error) {
 		return nil, fmt.Errorf("image %q already belongs to source %q; cannot change it to %q", img.ImageRef, existing.Source, img.Source)
 	}
 	img.ID = existing.ID
-	columns := []any{"series_id", "name", "engine", "engine_version", "framework", "framework_version", "variant", "arch", "source", "deprecated", "deprecated_since", "size_bytes", "notes", "offline_blob_sha256", "registry_sources", "rolling_tag", "upstream_gone", "enabled"}
+	columns := []any{"series_id", "name", "engine", "engine_version", "framework", "framework_version", "variant", "arch", "source", "deprecated", "deprecated_since", "size_bytes", "notes", "offline_blob_sha256", "registry_sources", "auto_select", "rolling_tag", "upstream_gone", "enabled"}
 	if existing.Source == "official" {
 		// The catalog owns a system row's description and registry
 		// references. Two things on it belong to this cluster and survive every

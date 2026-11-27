@@ -29,6 +29,15 @@ type routeAttempt struct {
 	affinity     string
 	deploymentID uint
 	accountant   *Accountant
+	// admission is the request's, which every replica it tries is leased
+	// for.
+	admission admission
+	// prioritized is whether the first replica schedules by priority
+	// (candidate.prioritized). A resend goes only to a replica that does
+	// the same: the priority written into the body, and the
+	// X-GPUWorks-Priority-Scheduling header set for the first replica, stay
+	// true of the one that answers.
+	prioritized bool
 }
 
 type retryTransport struct {
@@ -135,12 +144,16 @@ func (a *routeAttempt) releaseRenamed() {
 
 // pickNext leases the next replica to retry on. One whose engine answers
 // under another name is taken only when the body can be renamed for it,
-// which needs the public name the client asked for.
+// which needs the public name the client asked for, and one that schedules
+// otherwise than the first replica is not taken at all. A resend is never
+// refused for being busy: a replica already took the request.
 func (t *retryTransport) pickNext(a *routeAttempt, rename bool) *lease {
+	adm := a.admission.waiting()
 	return leaseUntil(func(excluded map[string]bool) *lease {
-		return t.balancer.pickBy(a.policy, a.candidates, a.affinity, excluded, t.hub.Online)
+		l, _ := t.balancer.pickBy(a.policy, a.candidates, a.affinity, excluded, t.hub.Online, adm)
+		return l
 	}, a.tried, func(l *lease) bool {
-		if l.c.modelName != a.modelName && !rename {
+		if (l.c.modelName != a.modelName && !rename) || l.c.prioritized != a.prioritized {
 			return false
 		}
 		return t.awake == nil || t.awake(l)

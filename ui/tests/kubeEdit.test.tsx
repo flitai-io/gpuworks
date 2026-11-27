@@ -38,6 +38,7 @@ const DEFAULTS: KubeDefaults = {
   agent_image: "gpuworks/gpuworks-agent:r1", stalled_after_seconds: 300, agent_image_source: "dockerhub",
   agent_image_sources: [{ id: "dockerhub", image: "gpuworks/gpuworks-agent:r1" }, { id: "swr", image: "swr.example/gpuworks-agent:r1" }],
   priority: 10000, priority_max: 1000000000, allow_preemption: false,
+  check_codes: { precheck: ["OK", "IMAGE_PULL_FAILED", "SERVER_UNREACHABLE", "PULL_SECRET_MISSING", "NO_NODE_SELECTED", "NOT_SCHEDULED", "POD_CREATE_FAILED", "CONTAINER_FAILED", "STILL_STARTING", "APPLY_FAILED", "KUBECTL_MISSING", "KUBECTL_FAILED"], verify: ["OK", "IMAGE_PULL_FAILED", "NO_NODE_SELECTED", "NOT_SCHEDULED", "POD_CREATE_FAILED", "CONTAINER_FAILED", "STILL_STARTING", "DAEMONSET_MISSING", "KUBECTL_MISSING", "KUBECTL_FAILED"] },
 };
 const SOURCE = { provider_id: 3, provider_name: "ali-prod", provider_kind: "aliyun", cluster_id: "c-gpu" };
 const REMOVE = ["kubectl delete daemonset gpuworks-agent -n gpuworks-system", "kubectl delete pods -n gpuworks-system -l app.kubernetes.io/part-of=gpuworks"];

@@ -93,7 +93,9 @@ test("a cluster the server calls stalled offers the commands and causes to look 
   const { user } = renderPage();
   await user.click(within(await rowOf("doks")).getByRole("button", { name: k.clusterUid.troubleshoot }));
   assert.ok(await screen.findByText(k.stalled.title));
-  assert.ok(screen.getByText(k.stalled.intro));
+  // First the check that says, node by node, why; then the commands to look further.
+  assert.ok(screen.getByLabelText(k.check.verifyTitle).textContent?.startsWith("curl -fsSL '"));
+  assert.ok(screen.getByText(k.stalled.introMore));
   for (const key of ["pull", "selector", "connect"] as const) assert.ok(screen.getByText(k.stalled[key]));
   // The agent Pod has no RuntimeClass, so a missing one cannot keep nodes from joining.
   assert.doesNotMatch(document.body.textContent ?? "", /RuntimeClass/);

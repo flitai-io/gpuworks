@@ -15,8 +15,8 @@ import {
   type ImageNode,
   type ImageSeries,
 } from "../api";
-import { apiErrorText } from "../apiError";
-import ImageCatalogConflicts from "./images/ImageCatalogConflicts";
+import { APIError, apiErrorText } from "../apiError";
+import ReplaceUploadedCatalogDialog from "../components/ReplaceUploadedCatalogDialog";
 import ImageImportDrawer from "./images/ImageImportDrawer";
 import type { NodeArchive } from "./images/ImageNodeArchiveFields";
 import ImageDetailDrawer from "./images/ImageDetailDrawer";
@@ -81,9 +81,10 @@ export default function ImagesPage() {
     nodeUUID: string;
     result: ImageInspection;
   } | null>(null);
-  const [catalogConflicts, setCatalogConflicts] = useState<string[]>([]);
   const [catalogVersion, setCatalogVersion] = useState("");
   const [syncingCatalog, setSyncingCatalog] = useState(false);
+  // The uploaded catalog the channel's would replace, while the server waits to be asked for that.
+  const [replacingUpload, setReplacingUpload] = useState<{ current?: string; latest?: string } | null>(null);
   const [uploadingManifest, setUploadingManifest] = useState(false);
   const totalVersions =
     allVersions.length ||
@@ -111,7 +112,6 @@ export default function ImagesPage() {
     setBusy(true);
     try {
       const result = await run();
-      setCatalogConflicts((result.skipped ?? []).map(entry => entry.name));
       setCatalogVersion(result.catalog_version || "");
       message.success(
         (["created", "updated", "deleted", "deprecated"] as const)
@@ -121,7 +121,8 @@ export default function ImagesPage() {
       refetch();
       versions.refetch();
     } catch (e) {
-      message.error(e instanceof Error ? e.message : t("page.catalog.updateFailed"));
+      if (e instanceof APIError && e.code === "IMAGE_CATALOG_UPLOADED") setReplacingUpload(e.params ?? {});
+      else message.error(e instanceof Error ? e.message : t("page.catalog.updateFailed"));
     } finally {
       setBusy(false);
     }
@@ -463,7 +464,8 @@ export default function ImagesPage() {
   }, t);
   return (
     <div className="resource-page">
-      {sourceTab === "official" && <ImageCatalogConflicts skipped={catalogConflicts} />}
+      <ReplaceUploadedCatalogDialog versions={replacingUpload} onCancel={() => setReplacingUpload(null)}
+        onConfirm={() => { setReplacingUpload(null); void applyCatalog(() => api.syncImages(true), setSyncingCatalog); }} />
       <ImagesPageOverview
         sourceTab={sourceTab}
         onSourceTabChange={(tab) => {
@@ -477,7 +479,7 @@ export default function ImagesPage() {
         updatedAt={updatedAt}
         catalogVersion={catalogVersion}
         syncingCatalog={syncingCatalog}
-        onSyncCatalog={() => void applyCatalog(api.syncImages, setSyncingCatalog)}
+        onSyncCatalog={() => void applyCatalog(() => api.syncImages(), setSyncingCatalog)}
         uploadingManifest={uploadingManifest}
         onUploadManifest={(file) =>
           void applyCatalog(() => api.importImageCatalogFile(file), setUploadingManifest)

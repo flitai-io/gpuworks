@@ -13,8 +13,8 @@
 #all-points:has(#full-point-columns:checked) :is(.ant-table-content,.ant-table-body) { overflow-x: auto !important }
 #all-points:has(#full-point-columns:checked) table { width: max-content !important; table-layout: auto !important }
 #all-points tr[data-offline-selected] > td { background: #fff7e6 !important }
-[data-report-curve] .ant-segmented-item:has(input:checked) { background: white !important; color: #172033 !important }
-[data-report-curve] .ant-segmented-item:not(:has(input:checked)) { background: transparent !important; box-shadow: none !important }
+[data-report-curve] [role=radiogroup] label:has(input:checked) { background: white !important; color: #172033 !important }
+[data-report-curve] [role=radiogroup] label:not(:has(input:checked)) { background: transparent !important; box-shadow: none !important }
 
 .offline-point-link { color: inherit; text-decoration: none }
 .offline-point-link:hover { text-decoration: underline }

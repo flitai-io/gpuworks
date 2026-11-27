@@ -60,7 +60,7 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generated manifest does not parse: %v", err)
 	}
-	if m.SchemaVersion != 3 || !strings.HasPrefix(m.CatalogVersion, "2026-10-08.") || len(m.CatalogVersion) != len("2026-10-08.")+8 {
+	if m.SchemaVersion != manifest.RunnerSchema || !strings.HasPrefix(m.CatalogVersion, "2026-10-08.") || len(m.CatalogVersion) != len("2026-10-08.")+8 {
 		t.Fatalf("schema/catalog version = %d %q", m.SchemaVersion, m.CatalogVersion)
 	}
 	versions := map[string]manifest.ManifestVersion{}
@@ -72,16 +72,25 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 			t.Fatalf("series %q = %+v", series.Name, series)
 		}
 		for _, version := range series.Versions {
+			if !releaseTagPattern.MatchString(version.Name) || !strings.HasSuffix(version.ImageRef, ":"+version.Name) {
+				t.Errorf("invalid runner ref %s (tag %s)", version.ImageRef, version.Name)
+			}
 			versions[version.Name] = version
 			seriesOf[version.Name] = series
 		}
 	}
-	wantSeries := "MLX Audio · Metal,MLX-VLM · Metal,SGLang · CANN,SGLang · CUDA,SGLang · DTK,SGLang · HGGC,SGLang · ROCm,SGLang · XRE,Strata · CUDA,System One · CUDA,llama.cpp · Metal,vLLM Omni · CANN,vLLM Omni · CUDA,vLLM Omni · HGGC,vLLM Omni · XRE,vLLM · CANN,vLLM · CUDA,vLLM · DTK,vLLM · HGGC,vLLM · Metal,vLLM · ROCm,vLLM · XRE"
+	wantSeries := "MLX Audio · Metal,MLX-VLM · Metal,SGLang · CANN,SGLang · CUDA,SGLang · DTK,SGLang · HGGC,SGLang · XRE,Strata · CUDA,System One · CUDA,llama.cpp · Metal,vLLM Omni · CANN,vLLM Omni · CUDA,vLLM · CANN,vLLM · CUDA,vLLM · DTK,vLLM · HGGC,vLLM · Metal,vLLM · ROCm,vLLM · XRE"
 	if strings.Join(names, ",") != wantSeries {
 		t.Fatalf("series = %v", names)
 	}
-	if len(versions) != 174 {
-		t.Fatalf("versions = %d, want 174", len(versions))
+	if len(versions) != 55 {
+		t.Fatalf("versions = %d, want 55", len(versions))
+	}
+	// Out of the catalog: sglang 0.5.23 serves MiniCPM-V 4.6 models with a
+	// crash (GWKS-505). The build and the published tags stay; the catalog
+	// does not offer the image.
+	if _, listed := versions["cuda13.0-sglang0.5.23-r2"]; listed {
+		t.Fatalf("cuda13.0-sglang0.5.23-r2 is out of the catalog (GWKS-505) but was generated")
 	}
 	// The Apple silicon environment package: framework metal, its version the
 	// minimum macOS, its arch the CPU's.
@@ -101,10 +110,6 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 		t.Fatalf("Kunlun release = %+v in %+v", xre, seriesOf[xre.Name])
 	}
 
-	if alias := versions["xre-vllm0.25.1-amd64-slot26"]; alias.FrameworkVersion != xre.FrameworkVersion || alias.EngineVersion != xre.EngineVersion || alias.Arch != xre.Arch {
-		t.Fatalf("Kunlun slot26 alias differs from its release: %+v, %+v", alias, xre)
-	}
-
 	omni := versions["cann9.1-910b-vllm-omni0.30.0-r3"]
 	if omni.ImageRef != "gpuworks/gpuworks-runner:cann9.1-910b-vllm-omni0.30.0-r3" || omni.EngineVersion != "0.30.0" || omni.FrameworkVersion != "9.1" || omni.Arch != "multi" {
 		t.Fatalf("omni version = %+v", omni)
@@ -122,7 +127,7 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 	if strings.Join(omni.RegistrySources, " ") != strings.Join(wantSources, " ") {
 		t.Fatalf("registry sources = %v", omni.RegistrySources)
 	}
-	if dtk := versions["dtk26.04-vllm0.18.1-r2"]; dtk.Arch != "amd64" || dtk.FrameworkVersion != "26.04" || seriesOf[dtk.Name].Framework != "dtk" {
+	if dtk := versions["dtk26.04-vllm0.21.0-r4"]; dtk.Arch != "amd64" || dtk.FrameworkVersion != "26.04" || seriesOf[dtk.Name].Framework != "dtk" {
 		t.Fatalf("dtk version = %+v", dtk)
 	}
 	if cuda := versions["cuda12.9-vllm0.31.0-r2"]; cuda.EngineVersion != "0.31.0" || cuda.FrameworkVersion != "12.9" || seriesOf[cuda.Name].Name != "vLLM · CUDA" {
@@ -135,7 +140,7 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 		t.Fatalf("post-release engine version = %+v", sglang)
 	}
 	for name, version := range versions {
-		if (version.RollingTag && !strings.HasPrefix(version.ImageRef, swrRunner+":")) || version.Deprecated || version.BlobSHA256 != "" || version.SizeBytes != 0 {
+		if version.RollingTag || version.Deprecated || version.BlobSHA256 != "" || version.SizeBytes != 0 {
 			t.Fatalf("version %s carries a field the generator must not produce: %+v", name, version)
 		}
 	}
@@ -380,8 +385,8 @@ func TestGenerateLeavesUnlistedItemsOutOfTheCatalog(t *testing.T) {
 	}
 }
 
-// The checked-in matrix declares the V100 line and keeps it out of the seed.
-func TestMatrixDeclaresTheVoltaImageUnlisted(t *testing.T) {
+// Templates on Volta keep their tested image without recommending it to other cards.
+func TestMatrixVoltaTemplateRequiresExplicitSelection(t *testing.T) {
 	data, err := os.ReadFile(matrixPath)
 	if err != nil {
 		t.Fatal(err)
@@ -399,8 +404,8 @@ func TestMatrixDeclaresTheVoltaImageUnlisted(t *testing.T) {
 	if found == nil {
 		t.Fatal("the matrix has no V100 item")
 	}
-	if found.Catalog == nil || *found.Catalog {
-		t.Fatalf("the V100 item must stay unlisted until it has run on hardware: %+v", found.Catalog)
+	if !found.ManualOnly {
+		t.Fatalf("the V100 image must require explicit selection: %+v", found)
 	}
 	if found.Args["ENGINE_VERSION"] != "1cat1.5.1" || found.Args["ONECAT_VERSION"] != "1.5.1" || len(found.Args["ONECAT_WHEEL_SHA256"]) != 64 {
 		t.Fatalf("args = %v", found.Args)
@@ -409,20 +414,51 @@ func TestMatrixDeclaresTheVoltaImageUnlisted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(seed, []byte(`"image_ref": "gpuworks/gpuworks-runner:cuda12.8-v100-vllm1cat1.5.1-r1"`)) {
-		t.Fatal("the seed lists the unlisted V100 build tier under the canonical reference")
+	m, err := manifest.Parse(seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, series := range m.Series {
+		for _, v := range series.Versions {
+			if v.Name == "cuda12.8-v100-vllm1cat1.5.1-r1" && v.AutoSelect == "manual" {
+				return
+			}
+		}
+	}
+	t.Fatal("missing explicitly selectable V100 image")
+}
+
+// A built item's tag is its id and revision, so the revision has to be the
+// grammar's r<number> too.
+func TestGenerateRejectsRevisionOutsideTheGrammar(t *testing.T) {
+	for _, revision := range []string{"r4-amd64", "v4", "r"} {
+		input := "defaults:\n  platforms: [linux/amd64]\nitems:\n  - id: cuda13.0-vllm0.30.0\n    revision: " + revision + "\n"
+		if _, err := generate([]byte(input), options{Date: "2026-11-24"}); err == nil || !strings.Contains(err.Error(), "is not r<number>") {
+			t.Errorf("revision %q: generate = %v", revision, err)
+		}
 	}
 }
 
-func TestGenerateRejectsInventoryWithoutBuildItems(t *testing.T) {
-	const data = `published:
-  - id: cuda13.0-vllm0.34.0
-    tag: cuda13.0-vllm0.34.0-r1-amd64
-    platforms: [linux/amd64]
-`
-	for _, prefix := range []string{"", "items: []\n", "items:\n  - id: cuda13.0-vllm0.34.0\n    revision: r1\n    platforms: [linux/amd64]\n    catalog: false\n"} {
-		if out, err := generate([]byte(prefix+data), options{}); err == nil || len(out) != 0 {
-			t.Fatalf("inventory alone generated a replacement catalog (%d bytes): %v", len(out), err)
+// The publishing scripts read the grammar from this file; it is the
+// generator's own expression, never a second copy.
+func TestExportedGrammarIsTheGenerators(t *testing.T) {
+	got, err := os.ReadFile("../../build/runner-images/tag-grammar.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(grammarFile()) {
+		t.Fatal("build/runner-images/tag-grammar.txt is stale; run `make image-manifest`")
+	}
+}
+
+func TestGenerateRequiresAnISOCatalogDate(t *testing.T) {
+	matrix := []byte("items:\n  - id: cuda13.0-vllm0.34.0\n    revision: r1\n    backend: cuda\n    base: docker.io/library/ubuntu:24.04\n    platforms: [linux/amd64]\n")
+	for _, date := range []string{"", "2026.11.26", "2026-11-26.1", "26-11-26", "2026-13-01"} {
+		if _, err := generate(matrix, options{Date: date}); err == nil || !strings.Contains(err.Error(), "must be YYYY-MM-DD") {
+			t.Errorf("date %q: %v", date, err)
 		}
+	}
+	if _, err := generate(matrix, options{Date: "2026-11-26"}); err != nil {
+		t.Fatalf("ISO date: %v", err)
 	}
 }

@@ -44,6 +44,7 @@ type ImageInput struct {
 	Arch             string
 	ImageRef         string
 	RegistrySources  []string
+	AutoSelect       string
 	RollingTag       bool
 	BlobSHA256       string
 	SizeBytes        int64
@@ -71,9 +72,9 @@ type Sink interface {
 // handled.
 type ImportOptions struct {
 	// SkipConflicts records a series name or ref that already belongs to a
-	// community/custom row in Result.Skipped and imports the rest during
-	// startup or channel sync. An uploaded manifest rejects conflicts before
-	// the first write.
+	// community/custom row in Result.Skipped and imports the rest (the startup
+	// sync must never block the server). When false, any conflict fails the
+	// whole import before the first write (an operator-triggered import).
 	SkipConflicts bool
 }
 
@@ -92,15 +93,6 @@ type Result struct {
 	Created, Updated    int
 	Deleted, Deprecated int
 	Skipped             []Conflict
-}
-
-// SkippedNames lists the local conflicts shown by the update view after a reload.
-func (r Result) SkippedNames() []string {
-	var names []string
-	for _, conflict := range r.Skipped {
-		names = append(names, conflict.Name)
-	}
-	return names
 }
 
 // ImportOfficial validates and imports a complete official directory. It
@@ -146,14 +138,11 @@ func ImportOfficial(m Manifest, sink Sink, opt ImportOptions) (Result, error) {
 			}
 		}
 	}
-	// Reconciliation only examines official rows. Keep references declared in a
-	// skipped series as well: an existing official row may live in another series.
+	// A skipped entry never enters seen: it is not an official row, so it must
+	// not be reconciled as one either way.
 	seen := make(map[string]struct{})
 	for _, series := range m.Series {
 		if skipSeries[series.Name] {
-			for _, v := range series.Versions {
-				seen[v.ImageRef] = struct{}{}
-			}
 			continue
 		}
 		if err := sink.UpsertSeries(SeriesInput{
@@ -186,7 +175,7 @@ func ImportOfficial(m Manifest, sink Sink, opt ImportOptions) (Result, error) {
 				Engine: series.Engine, EngineVersion: version.EngineVersion,
 				Framework: series.Framework, FrameworkVersion: version.FrameworkVersion,
 				Arch: version.Arch, ImageRef: version.ImageRef,
-				RegistrySources: version.RegistrySources, BlobSHA256: version.BlobSHA256, RollingTag: version.RollingTag,
+				RegistrySources: version.RegistrySources, BlobSHA256: version.BlobSHA256, AutoSelect: version.AutoSelect, RollingTag: version.RollingTag,
 				SizeBytes:  version.SizeBytes,
 				Deprecated: version.Deprecated, DeprecatedSince: deprecatedSince,
 				Notes: version.Notes,

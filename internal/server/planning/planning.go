@@ -38,7 +38,10 @@ type Input struct {
 	// It may be smaller than the repository/download size when a repository
 	// contains mutually exclusive layouts (for example Mistral consolidated and
 	// Hugging Face indexed shards).
-	RuntimeWeightBytes   int64
+	RuntimeWeightBytes int64
+	// ComponentWeightBytes is the non-primary component weights the whole
+	// group holds, a rank-scoped component's counted once per rank; what one
+	// node stores of them is ComponentArtifacts'.
 	ComponentWeightBytes int64
 	// KVBytesPerToken is the model's measured KV cost per token across the
 	// tensor-parallel group. Zero means unmeasured, and the breakdown then

@@ -53,6 +53,21 @@ esac`)
 	return h
 }
 
+func (h *linuxHost) waitForCall(line string) {
+	h.t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		calls := h.read(h.calls)
+		if strings.Contains(calls, line+"\n") {
+			return
+		}
+		if time.Now().After(deadline) {
+			h.t.Fatalf("agent did not record %q:\n%s", line, calls)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // The health check installs an agent with the cluster entry's enrollment
 // token: the node's Slurm name and the token reach `configure` (the token on
 // stdin, never in an argument list), the unit runs as root, and the agent is
@@ -128,6 +143,9 @@ func TestScriptKeepRecognisesASlurmNodesUnit(t *testing.T) {
 			out, err := h.run([]string{"GPUWORKS_SLURM_ENROLL_TOKEN=enroll-token", "GPUWORKS_SLURM_NODE=cn000"}, "--server", "http://gw:8800", "--supervisor", "keep")
 			if err != nil {
 				t.Fatalf("install = %v\n%s", err, out)
+			}
+			if !tc.systemd {
+				h.waitForCall("agent run --state " + h.stateDir)
 			}
 			if wrote := strings.Contains(h.read(h.calls), "tee /etc/systemd/system/gpuworks-agent.service"); wrote != tc.systemd {
 				t.Fatalf("wrote the unit = %v, want %v\n%s", wrote, tc.systemd, out)
@@ -211,14 +229,7 @@ exit 0
 	if err != nil {
 		t.Fatalf("install = %v\n%s", err, out)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for !strings.Contains(h.read(h.calls), "run-env") && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
-	calls := h.read(h.calls)
-	if !strings.Contains(calls, "run-env token=unset node=unset") {
-		t.Fatalf("the agent started with the enrollment in its environment:\n%s", calls)
-	}
+	h.waitForCall("run-env token=unset node=unset")
 	restart := h.read(filepath.Join(h.stateDir, "agent-restart.sh"))
 	if !strings.Contains(restart, "unset GPUWORKS_SLURM_ENROLL_TOKEN GPUWORKS_SLURM_NODE") || strings.Contains(restart, "enroll-token") {
 		t.Fatalf("restart script:\n%s", restart)

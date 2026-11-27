@@ -121,7 +121,7 @@ func TestGatewayReachesAFlaglessHostProcessEngine(t *testing.T) {
 			if rds := snapshot.byName["qwen"]; len(rds) != 1 || len(rds[0].candidates) != 1 || rds[0].candidates[0].modelName != want {
 				t.Fatalf("route table candidates = %+v, want model %q", rds, want)
 			}
-			if tgt, rejection, _ := p.selectDeploymentInstances(dep, "qwen", ""); rejection != nil || tgt.modelName != want {
+			if tgt, rejection, _ := p.selectDeploymentInstances(dep, "qwen", "", admission{}); rejection != nil || tgt.modelName != want {
 				t.Fatalf("uncached route = %+v %v, want model %q", tgt, rejection, want)
 			}
 			if driver != proto.RuntimeDriverHost {

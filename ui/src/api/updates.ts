@@ -11,10 +11,13 @@ export interface UpdateSourceStatus {
 
 /** An official catalog in force next to the published one. */
 export interface CatalogUpdate {
-  skipped?: string[];
   current: string;
   latest?: string;
   update_available: boolean;
+  /** The catalog in force was uploaded by hand (image catalog only): the channel's is then not its update. */
+  uploaded?: boolean;
+  /** Applying the channel's catalog would replace an uploaded one: the server does it only when asked to. */
+  replaces_upload?: boolean;
   /** True when this server can read the catalog; check_error explains a failed check. */
   compatible: boolean;
   /** Present when the catalog could not be checked; other updates remain usable. */
@@ -48,6 +51,8 @@ export interface UpdateStatus {
     latest?: string;
     built_at?: string;
     update_available: boolean;
+    /** Built for this channel after its newest release without being one of its releases: neither up to date nor behind. */
+    unpublished_build?: boolean;
     installable: boolean;
     /** True when the console can upgrade this server in place. */
     self_upgrade: boolean;
@@ -99,6 +104,8 @@ export interface ServerVersionChoice {
   built_at: string;
   sha256?: string;
   reason?: "installed" | "arch" | "older" | "backup";
+  /** The release's database schema is older than this server's: it refuses to start and the upgrade rolls back. */
+  downgrades_schema?: boolean;
 }
 
 export interface ServerUpgradeStarted {

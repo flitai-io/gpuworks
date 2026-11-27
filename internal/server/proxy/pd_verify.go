@@ -62,7 +62,7 @@ func (p *Proxy) VerifyPDHandoff(ctx context.Context, deploymentID uint, prefillU
 		return out, fmt.Errorf("prefill instance %s is not routable", prefillUUID)
 	}
 	out.PrefillNode = prefill.nodeUUID
-	lease := p.balancer.pick(decoders, nil, p.hub.Online)
+	lease, _ := p.balancer.pick(decoders, nil, p.hub.Online, admission{})
 	if lease == nil {
 		return out, errors.New("no decode instance is routable")
 	}

@@ -35,7 +35,9 @@ afterEach(async () => {
     const cancel = within(open).queryAllByRole("button", { name: /^(Cancel|取消)$/ }).at(-1) as HTMLButtonElement | undefined;
     if (!cancel || cancel.disabled) break;
     cancel.click();
-    await waitFor(() => assert.notEqual(screen.queryByRole("dialog"), open));
+    // Compare first: an assert given two DOM nodes formats both into its
+    // message on every poll that fails, which held each poll for seconds.
+    await waitFor(() => assert.ok(screen.queryByRole("dialog") !== open, "the confirmation closed"));
   }
   message.destroy(); cleanup(); Object.assign(api, original);
 });

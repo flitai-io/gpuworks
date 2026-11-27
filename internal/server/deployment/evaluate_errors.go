@@ -11,7 +11,6 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/messages"
-	"gpuworks.ai/gpuworks/internal/server/scheduler"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -79,8 +78,6 @@ func (c *evaluateFieldErrors) empty() bool { return len(c.items) == 0 }
 // is the form field; codes from other domains keep the caller's field.
 func launchErrorField(fallback string, productErr *messages.ProductError) string {
 	switch productErr.Code() {
-	case messages.ErrorDGPUStartupMemory:
-		return "gpu_memory_utilization"
 	case deploy.ErrorLaunchConfigConflict, deploy.ErrorLaunchConfigUnsetConflict,
 		deploy.ErrorQuickParamJSON, deploy.ErrorQuickParamPath,
 		deploy.ErrorDataParallelGPUCount, deploy.ErrorDataParallelAttentionDivisor:
@@ -96,13 +93,6 @@ func launchErrorField(fallback string, productErr *messages.ProductError) string
 		return fieldExtraArgs
 	}
 	return fallback
-}
-
-func dgpuStartupMemoryError(reason scheduler.Reason) error {
-	if reason.Code != scheduler.ReasonDGPUStartupMemory {
-		return nil
-	}
-	return productError(messages.ErrorDGPUStartupMemory, reason.Message, reason.Params)
 }
 
 // launchErrorFieldFor answers the form field a plain launch-materialization

@@ -179,9 +179,22 @@ func (m *Manager) reconcileNFS(ctx context.Context, sp Spec, st Status) Status {
 	if err != nil {
 		return failWith(st, ReasonOther, err.Error())
 	}
+	if m.o.NodeRoot != "" {
+		if failed, stop := m.unseenNodeMount(ctx, sp, st); stop {
+			return failed
+		}
+	}
 	st.State, st.Message = StateMounting, ""
 	if err := m.call(ctx, storageKey(sp.ID), func() error { return os.MkdirAll(sp.Path, 0o755) }); err != nil {
 		return failErr(st, err, "create mount point")
+	}
+	if m.o.NodeRoot != "" {
+		if shared, err := m.sharedWithNode(ctx, sp); err != nil {
+			return failErr(st, err, "check mount point on the node")
+		} else if !shared {
+			return failWith(st, ReasonNotSharedWithNode, fmt.Sprintf("%s is not a directory the agent shares with its node: "+
+				"the node would mount the export where the agent cannot read it", sp.Path))
+		}
 	}
 	res, err := m.runMount(ctx, storageKey(sp.ID), sp.Export, sp.Path, opts, true)
 	if err != nil {
@@ -195,6 +208,12 @@ func (m *Manager) reconcileNFS(ctx context.Context, sp Spec, st Status) Status {
 	if res.err != nil || res.timedOut {
 		reason, msg := mountFailure(res, m.o.MountTimeout)
 		return failWith(st, reason, msg)
+	}
+	if m.o.NodeRoot != "" {
+		if _, seen := m.mountAt(sp.Path); !seen {
+			m.takeOffUnseen(ctx, sp, 1)
+			return failWith(st, ReasonNotSharedWithNode, fmt.Sprintf("the node mounted %s on %s, but the mount did not reach the agent", sp.Export, sp.Path))
+		}
 	}
 	m.o.Logger.Info("storagemount: mounted", "storage", sp.Name, "export", sp.Export, "path", sp.Path, "options", opts)
 	return m.finishReady(ctx, sp, st, filepath.Join(sp.Path, MetaDirName))

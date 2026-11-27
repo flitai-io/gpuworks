@@ -6,6 +6,7 @@ package deploy
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -118,5 +119,30 @@ func (s CatalogSelection) RankWeightModelID(rank int) (uint, bool) {
 	return 0, false
 }
 
-// RankScoped reports whether the selection's weights are rank-scoped.
+// RankScoped reports whether the selection's own weights are rank-scoped.
 func (s CatalogSelection) RankScoped() bool { return len(s.RankWeights) > 0 }
+
+// ReadsByRank reports whether what a node reads depends on its rank: the
+// selection's own weights or some component's are rank-scoped.
+func (s CatalogSelection) ReadsByRank() bool { return len(s.BoundRanks()) > 0 }
+
+// BoundRanks are the ranks a rank-scoped binding names, the selection's own
+// weights' and every component's, in ascending order.
+func (s CatalogSelection) BoundRanks() []int {
+	seen := map[int]bool{}
+	var ranks []int
+	add := func(weights []RankWeight) {
+		for _, weight := range weights {
+			if !seen[weight.Rank] {
+				seen[weight.Rank] = true
+				ranks = append(ranks, weight.Rank)
+			}
+		}
+	}
+	add(s.RankWeights)
+	for _, component := range s.Components {
+		add(component.RankWeights)
+	}
+	slices.Sort(ranks)
+	return ranks
+}

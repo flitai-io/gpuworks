@@ -1,11 +1,14 @@
 package store
 
 import (
+	"encoding/json"
+	"log/slog"
 	"sort"
 
 	"gorm.io/gorm"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/imagecatalog/pullref"
 )
 
 // imageReferenceBatch bounds one IN list. SQLite allows 32766 parameters; a
@@ -59,7 +62,7 @@ func (s *Store) ReconcileMissingOfficialImages(seen map[string]struct{}, since s
 	// System rows are bounded by the manifest size, so reading them all and
 	// taking the difference in memory beats a NOT IN over every seen ref.
 	var official []Image
-	if err := s.db.Select("id", "image_ref", "series_id", "deprecated", "deprecated_since").Where("source = ?", "official").Find(&official).Error; err != nil {
+	if err := s.db.Select("id", "image_ref", "series_id", "deprecated", "deprecated_since", "auto_select", "registry_sources").Where("source = ?", "official").Find(&official).Error; err != nil {
 		return 0, 0, err
 	}
 	missing := make([]Image, 0, len(official))
@@ -82,11 +85,57 @@ func (s *Store) ReconcileMissingOfficialImages(seen map[string]struct{}, since s
 	if err != nil {
 		return 0, 0, err
 	}
+	// Installed template packages update independently of the image catalog.
+	// Keep the row and its other mirrors while a spec names the canonical
+	// reference or one of those mirrors. Read this set once per reconciliation.
+	var templateRefs []struct{ Image, Source string }
+	if err := s.db.Model(&InferenceSpecRow{}).Distinct("image", "source").Scan(&templateRefs).Error; err != nil {
+		return 0, 0, err
+	}
+	// Upstream template packages can still require a withdrawn release in the
+	// picker. A user template retains its sources for explicit use, following
+	// the same deprecation rule as a deployment that already uses the image.
+	upstreamPins := map[string]bool{}
+	userPins := map[string]bool{}
+	for _, spec := range templateRefs {
+		key := pullref.RefKey(spec.Image)
+		if spec.Source == "upstream" {
+			upstreamPins[key] = true
+		} else {
+			userPins[key] = true
+		}
+	}
+	var retained []uint
+	var retainedRefs []string
 	var deprecateIDs, deleteIDs []uint
 	var deprecatedRefs, deletedRefs []string
 	seriesIDs := map[uint]struct{}{}
 	for _, row := range missing {
-		if counts[row.ImageRef] > 0 || held[row.ID] {
+		var mirrors []string
+		if row.RegistrySources != "" {
+			if err := json.Unmarshal([]byte(row.RegistrySources), &mirrors); err != nil {
+				slog.Warn("skipping missing official image with invalid registry_sources", "image_id", row.ID, "error", err)
+				continue
+			}
+		}
+		key := pullref.RefKey(row.ImageRef)
+		upstream, user := upstreamPins[key], userPins[key]
+		for _, ref := range mirrors {
+			if pullref.IsArchiveURL(ref) {
+				continue
+			}
+			k := pullref.RefKey(ref)
+			upstream = upstream || upstreamPins[k]
+			user = user || userPins[k]
+		}
+		if upstream {
+			if row.AutoSelect != "manual" {
+				retained = append(retained, row.ID)
+				retainedRefs = append(retainedRefs, row.ImageRef)
+			}
+			continue
+		}
+		if user || counts[row.ImageRef] > 0 || held[row.ID] {
 			// Already deprecated by an earlier catalog: keep the version that
 			// first dropped it.
 			if row.Deprecated && row.DeprecatedSince != "" {
@@ -107,6 +156,11 @@ func (s *Store) ReconcileMissingOfficialImages(seen map[string]struct{}, since s
 	sort.Slice(affectedSeries, func(i, j int) bool { return affectedSeries[i] < affectedSeries[j] })
 	var deletedSeries []string
 	err = s.db.Transaction(func(tx *gorm.DB) error {
+		for start := 0; start < len(retained); start += imageReferenceBatch {
+			if err := tx.Model(&Image{}).Where("id IN ?", retained[start:min(start+imageReferenceBatch, len(retained))]).Update("auto_select", "manual").Error; err != nil {
+				return err
+			}
+		}
 		for start := 0; start < len(deprecateIDs); start += imageReferenceBatch {
 			batch := deprecateIDs[start:min(start+imageReferenceBatch, len(deprecateIDs))]
 			if err := tx.Model(&Image{}).Where("id IN ?", batch).Updates(map[string]any{"deprecated": true, "deprecated_since": since}).Error; err != nil {
@@ -145,7 +199,7 @@ func (s *Store) ReconcileMissingOfficialImages(seen map[string]struct{}, since s
 	for _, name := range deletedSeries {
 		s.Bus.PublishChange("image", name, "series_deleted")
 	}
-	for _, ref := range deprecatedRefs {
+	for _, ref := range append(deprecatedRefs, retainedRefs...) {
 		s.Bus.PublishChange("image", ref, "updated")
 	}
 	return len(deleteIDs), len(deprecateIDs), nil

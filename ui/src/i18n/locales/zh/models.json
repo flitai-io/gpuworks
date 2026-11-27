@@ -258,7 +258,8 @@
     "previewFailed": "预览失败：{{detail}}",
     "registered": "模型已注册",
     "failed": "注册失败：{{detail}}",
-    "fetchingMetadata": "正在从 {{source}} 读取模型元数据，可能需要十几秒。"
+    "fetchingMetadata": "正在从 {{source}} 读取模型元数据，可能需要十几秒。",
+    "force": "仍然注册"
   },
   "download": {
     "title": "下载到… · {{name}}",

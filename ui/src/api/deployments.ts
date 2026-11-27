@@ -4,7 +4,7 @@ import type { ListPage } from "./http";
 import type { RequirementLabel } from "./nodes";
 import type { PdRoleName } from "./engines";
 import type { ModelNodePresence } from "./models";
-import type { ScheduleMessage } from "./scheduling";
+import type { ProductWarning, ScheduleMessage } from "./scheduling";
 import type { Instance } from "./instances";
 
 // The server's health check of a deployment: a minimal request through the
@@ -90,6 +90,7 @@ export interface DeploymentRuntimeNode {
 }
 
 export interface Deployment {
+  warnings?: ProductWarning[];
   operations?: Array<
     Pick<
       import("../inferenceApi").InferenceAPIOperation,

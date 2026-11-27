@@ -11,15 +11,15 @@ import (
 )
 
 // pickBy leases a candidate by the deployment's routing policy, passing over
-// the excluded ones.
-func (b *balancer) pickBy(policy string, candidates []candidate, affinity string, excluded map[string]bool, online func(string) bool) *lease {
+// the excluded ones, for a request of adm; busy as for pick.
+func (b *balancer) pickBy(policy string, candidates []candidate, affinity string, excluded map[string]bool, online func(string) bool, adm admission) (*lease, bool) {
 	switch policy {
 	case deploy.Failover:
-		return b.pickFailover(candidates, excluded, online)
+		return b.pickFailover(candidates, excluded, online, adm)
 	case deploy.PrefixAffinity:
-		return b.pickAffinity(candidates, affinity, excluded, online)
+		return b.pickAffinity(candidates, affinity, excluded, online, adm)
 	default:
-		return b.pick(candidates, excluded, online)
+		return b.pick(candidates, excluded, online, adm)
 	}
 }
 
@@ -59,15 +59,20 @@ func (p *Proxy) awake(l *lease) bool {
 // pickAwake leases an awake candidate by the routing policy. Candidates built
 // from rows read for this request (fresh) are taken as read; those from the
 // route snapshot are checked, and when none passes the caller falls back to
-// reading the rows, which tells asleep from not ready.
-func (p *Proxy) pickAwake(candidates []candidate, policy, affinity string, fresh bool) *lease {
+// reading the rows, which tells asleep from not ready. busy is true when no
+// lease was taken because every candidate left had no free run slot for adm
+// (hasRoom); one found asleep on the way is not counted.
+func (p *Proxy) pickAwake(candidates []candidate, policy, affinity string, fresh bool, adm admission) (l *lease, busy bool) {
 	accept := func(*lease) bool { return true }
 	if !fresh {
 		accept = p.awake
 	}
-	return leaseUntil(func(excluded map[string]bool) *lease {
-		return p.balancer.pickBy(policy, candidates, affinity, excluded, p.hub.Online)
+	l = leaseUntil(func(excluded map[string]bool) *lease {
+		var next *lease
+		next, busy = p.balancer.pickBy(policy, candidates, affinity, excluded, p.hub.Online, adm)
+		return next
 	}, nil, accept)
+	return l, busy
 }
 
 // routingGeneration counts the instance and deployment changes the store's

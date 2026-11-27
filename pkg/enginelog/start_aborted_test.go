@@ -55,8 +55,15 @@ func TestStartAbortedIsWhatSGLangSaysWhenAChildFailed(t *testing.T) {
 		t.Fatal(err)
 	}
 	checked := 0
+	// Captured starts that are aborted starts: each says it in the engine's
+	// own words. The rest of the captures, healthy or starved, and the
+	// repository's other logs, do not.
+	abortedStarts := map[string]bool{
+		"sglang_ascend_nerdctl_schedulers_crashed.txt": true,
+		"sglang_cuda_docker_capture_assert.txt":        true,
+	}
 	for _, path := range append(logs, others...) {
-		if strings.HasSuffix(path, "schedulers_crashed.txt") {
+		if abortedStarts[filepath.Base(path)] {
 			continue
 		}
 		raw, err := os.ReadFile(path)

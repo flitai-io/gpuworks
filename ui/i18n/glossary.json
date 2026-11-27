@@ -1392,6 +1392,12 @@
       }
     },
     {
+      "term_en": "Extension-Held Card",
+      "translations": {
+        "zh": "扩展保持的卡"
+      }
+    },
+    {
       "term_en": "Extension Module",
       "translations": {
         "zh": "扩展模块"
@@ -2038,6 +2044,24 @@
       "term_en": "Material Proof",
       "translations": {
         "zh": "材料证明"
+      }
+    },
+    {
+      "term_en": "Key Information",
+      "translations": {
+        "zh": "令牌信息"
+      }
+    },
+    {
+      "term_en": "Run Slots",
+      "translations": {
+        "zh": "运行位"
+      }
+    },
+    {
+      "term_en": "Busy Rejection",
+      "translations": {
+        "zh": "繁忙婉拒"
       }
     }
   ],

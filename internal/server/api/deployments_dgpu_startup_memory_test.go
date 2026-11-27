@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -17,23 +18,24 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
-func TestAscendDGPUStartupMemoryAdmission(t *testing.T) {
+func TestAscendDGPUStartupMemoryWarning(t *testing.T) {
 	const repo = "Qwen/Qwen3-0.6B"
 	builtin, spec := builtinDGPUStartupSpec(t, strings.ToLower(repo))
 	for _, tc := range []struct {
 		name, placement, quick, extra, command string
 		quota                                  int
-		busy, refused                          bool
+		busy, warn, direct                     bool
 	}{
-		{name: "manual_quick", placement: "manual", quick: `{"gpu_memory_utilization":0.90}`, quota: 8, refused: true},
-		{name: "auto_extra", placement: "auto", quick: "{}", extra: "--mem-fraction-static=0.90", quota: 8, refused: true},
+		{name: "direct_create", placement: "manual", quick: `{"gpu_memory_utilization":0.90}`, quota: 8, warn: true, direct: true},
+		{name: "manual_quick", placement: "manual", quick: `{"gpu_memory_utilization":0.90}`, quota: 8, warn: true},
+		{name: "auto_extra", placement: "auto", quick: "{}", extra: "--mem-fraction-static=0.90", quota: 8, warn: true},
 		{name: "manual_safe", placement: "manual", quick: `{"gpu_memory_utilization":0.88}`, quota: 8},
 		{name: "auto_default", placement: "auto", quick: "{}", quota: 8},
 		{name: "whole_card", placement: "manual", quick: `{"gpu_memory_utilization":0.90}`},
-		{name: "custom_graph", placement: "manual", quick: `{"gpu_memory_utilization":0.90}`, extra: "--cuda-graph-max-bs=256", quota: 8, refused: true},
+		{name: "custom_graph", placement: "manual", quick: `{"gpu_memory_utilization":0.90}`, extra: "--cuda-graph-max-bs=256", quota: 8, warn: true},
 		{name: "no_graph", placement: "manual", quick: `{"gpu_memory_utilization":0.90}`, extra: "--disable-cuda-graph", quota: 8},
-		{name: "manual_script", placement: "manual", quick: "{}", command: sglangOneCardScript + " --dtype bfloat16 --mem-fraction-static=0.90", quota: 8, refused: true},
-		{name: "busy_node", placement: "manual", quick: `{"gpu_memory_utilization":0.90}`, quota: 8, busy: true, refused: true},
+		{name: "manual_script", placement: "manual", quick: "{}", command: sglangOneCardScript + " --dtype bfloat16 --mem-fraction-static=0.90", quota: 8, warn: true},
+		{name: "busy_node", placement: "manual", quick: `{"gpu_memory_utilization":0.90}`, quota: 8, busy: true, warn: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h, holderModel := partitionPoolFixture(t, map[string]string{"pool-ascend": accelerator.BackendAscendLogical})
@@ -78,28 +80,52 @@ func TestAscendDGPUStartupMemoryAdmission(t *testing.T) {
 			body := fmt.Sprintf(`{"name":%q,"model_id":%d,"template_id":%d,"template_spec_source":%q,"template_spec_name":%q,"engine":"sglang","image":%q,"node_uuid":%q,"placement_mode":%q,"target_vendor":"ascend","placement":{"tp":1},"vram_limit_gib":%d,"quick_params":%s,"extra_args":%q,"container_overrides":%s}`,
 				tc.name, model.ID, template.ID, spec.Source, spec.Name, spec.Image, node, tc.placement, tc.quota, tc.quick, tc.extra, command)
 
-			wire := evaluateWire(t, h, body)
+			if !tc.direct {
+				wire := evaluateWire(t, h, body)
+				assertDGPUStartupWarning(t, wire["warnings"], tc.warn)
+				if string(wire["ok"]) != fmt.Sprint(!tc.busy) || len(wire["errors"]) != 0 {
+					t.Fatalf("evaluate = %s, errors = %s, plan = %s; busy = %v", wire["ok"], wire["errors"], wire["plan"], tc.busy)
+				}
+			}
 			created := httptest.NewRecorder()
 			h.createDeployment(created, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body)))
-			if tc.refused {
-				wantJSON(t, string(wire["ok"]), "false")
-				wantJSON(t, string(wire["errors"]), `[{"field":"gpu_memory_utilization","code":"DGPU_STARTUP_MEMORY","params":{"quota_gib":8,"utilization":0.9,"max_utilization":0.88}}]`)
-				if created.Code != http.StatusBadRequest || !strings.Contains(created.Body.String(), `"code":"`+messages.ErrorDGPUStartupMemory+`"`) {
-					t.Fatalf("create = %d %s, want startup memory refusal", created.Code, created.Body)
-				}
-				if rows, err := st.ListDeployments(); err != nil || len(rows) != wantDeployments {
-					t.Fatalf("refused request persisted deployments: %v %v", rows, err)
-				}
-				return
-			}
-			if string(wire["ok"]) != "true" || len(wire["errors"]) != 0 {
-				t.Fatalf("evaluate = %s, errors = %s, plan = %s; want accepted", wire["ok"], wire["errors"], wire["plan"])
-			}
 			if created.Code != http.StatusCreated {
 				t.Fatalf("create = %d %s, want accepted", created.Code, created.Body)
 			}
+			var response map[string]json.RawMessage
+			if err := json.Unmarshal(created.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			assertDGPUStartupWarning(t, response["warnings"], tc.warn)
+			if rows, err := st.ListDeployments(); err != nil || len(rows) != wantDeployments+1 {
+				t.Fatalf("created request did not persist a deployment: %v %v", rows, err)
+			}
 		})
 	}
+}
+
+func assertDGPUStartupWarning(t *testing.T, body json.RawMessage, want bool) {
+	t.Helper()
+	var warnings []messages.Warning
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &warnings); err != nil {
+			t.Fatal(err)
+		}
+	}
+	warnings = slices.DeleteFunc(warnings, func(w messages.Warning) bool {
+		return w.Code != messages.WarningDGPUStartupMemory
+	})
+	if !want {
+		if len(warnings) != 0 {
+			t.Fatalf("unexpected dGPU warnings: %v", warnings)
+		}
+		return
+	}
+	got, err := json.Marshal(warnings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantJSON(t, string(got), `[{"code":"DGPU_STARTUP_MEMORY","params":{"quota_gib":8,"utilization":0.9,"max_utilization":0.88}}]`)
 }
 
 func builtinDGPUStartupSpec(t *testing.T, modelID string) (store.InferenceModel, store.InferenceSpecRow) {

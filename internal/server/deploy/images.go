@@ -50,6 +50,8 @@ type ImageCandidate struct {
 	Source     string
 	Deprecated bool
 	Enabled    bool
+	// AutoSelect limits automatic selection to a CPU architecture or to manual choice.
+	AutoSelect string
 	// RollingTag marks a tag whose content moves (latest, nightly, ...). It
 	// may be chosen by hand but is never picked automatically: two replicas
 	// of one deployment could otherwise run different builds.
@@ -127,7 +129,6 @@ func ResolveImageCatalog(t ImageTarget, candidates []ImageCandidate) ImageResolu
 		}
 		res := ImageResolution{Image: override, Source: "override"}
 		if candidate, ok := findCandidateByRef(candidates, override); ok {
-			candidate.Engine = candidate.ManualEngine()
 			if !candidateCompatible(t, candidate) {
 				res.Warnings = append(res.Warnings, messages.NewWarning(messages.WarningImageOverrideIncompatible, map[string]any{"image": override}))
 			}
@@ -155,7 +156,7 @@ func ResolveImageCatalog(t ImageTarget, candidates []ImageCandidate) ImageResolu
 	var best *ImageCandidate
 	for i := range candidates {
 		candidate := &candidates[i]
-		if candidate.RollingTag || !imageCandidateEligible(t, *candidate) {
+		if (candidate.AutoSelect == "manual" || (candidate.AutoSelect != "" && candidate.AutoSelect != normalizeArch(t.PlatformArch))) || candidate.RollingTag || !imageCandidateEligible(t, *candidate) {
 			continue
 		}
 		compatible, score := catalogCompatibility(t, targetVendor, *candidate)
@@ -183,20 +184,11 @@ func ResolveImageCatalog(t ImageTarget, candidates []ImageCandidate) ImageResolu
 	return ImageResolution{Image: ResolveImage(t), Source: "fallback", Warnings: []messages.Warning{messages.NewWarning(messages.WarningImageCatalogNoMatch, nil)}}
 }
 
-// ManualEngine returns the deploy engine for an explicitly selected image family.
-func (c ImageCandidate) ManualEngine() string {
-	if c.Engine == enginenames.VLLMOmni {
-		return enginenames.VLLM
-	}
-	return c.Engine
-}
-
 // ImageCandidateSelectable reports whether an enabled catalog image may be
 // offered for the target. Engine, framework, the vendor the framework implies
 // and host architecture decide it; the chip family only orders the automatic
 // pick (chipFamilyWeight), so every image stays a manual choice.
 func ImageCandidateSelectable(t ImageTarget, candidate ImageCandidate) bool {
-	candidate.Engine = candidate.ManualEngine()
 	return imageCandidateEligible(t, candidate)
 }
 

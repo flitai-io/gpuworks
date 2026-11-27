@@ -7,11 +7,15 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -197,6 +201,53 @@ func TestInstallNodeEndpointPassesNoSystemd(t *testing.T) {
 	if !fake.req.NoSystemd || fake.req.KeepSupervisor {
 		t.Fatalf("no_systemd = %v, keep = %v; want true, false", fake.req.NoSystemd, fake.req.KeepSupervisor)
 	}
+}
+
+func TestServerDialInstallCheckRetrySchedule(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		successOn int
+		wantTimes []time.Duration
+		wantCode  string
+	}{
+		{"already listening", 1, []time.Duration{0}, messages.CheckServerDialConnected},
+		{"ready on first retry", 2, []time.Duration{0, 2 * time.Second}, messages.CheckServerDialConnected},
+		{"ready on second retry", 3, []time.Duration{0, 2 * time.Second, 6 * time.Second}, messages.CheckServerDialConnected},
+		{"still unreachable", 0, []time.Duration{0, 2 * time.Second, 6 * time.Second}, messages.CheckServerDialNotConnected},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				start := time.Now()
+				var times []time.Duration
+				result := serverDialInstallCheck(t.Context(), "agent:18800", "token", func(context.Context, string, string) error {
+					times = append(times, time.Since(start))
+					if len(times) == tc.successOn {
+						return nil
+					}
+					return errors.New("agent not listening")
+				})
+				if !slices.Equal(times, tc.wantTimes) || result.Code != tc.wantCode {
+					t.Fatalf("dial times %v, code %q; want %v, %q", times, result.Code, tc.wantTimes, tc.wantCode)
+				}
+			})
+		})
+	}
+}
+
+func TestServerDialInstallCheckCanceledDuringRetryWait(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		time.AfterFunc(3*time.Second, cancel)
+		calls := 0
+		result := serverDialInstallCheck(ctx, "agent:18800", "token", func(context.Context, string, string) error {
+			calls++
+			return errors.New("agent not listening")
+		})
+		if calls != 2 || result.Code != messages.CheckServerDialNotConnected || result.Evidence != context.Canceled.Error() {
+			t.Fatalf("got %d attempts and result %+v after cancellation", calls, result)
+		}
+	})
 }
 
 func TestInstallNodeEndpointTriggersServerDial(t *testing.T) {

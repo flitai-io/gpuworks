@@ -37,7 +37,7 @@ function Host({ build }: { build?: (values: Record<string, unknown>) => Record<s
     <button type="button" onClick={() => form.setFieldsValue({ template_id: 3, template_spec_source: "user", template_spec_name: "browser-vllm", engine: "vllm" })}>Select spec</button>
     <output data-testid="state">{JSON.stringify({ pending: evaluation.evaluating, error: evaluation.error, result: evaluation.result, source: values.model_source })}</output>
     <Fields acquisition={evaluation.result?.acquisition} modelSource="local" evaluating={evaluation.evaluating} />
-    <Modal open={source.modalOpen} loading={source.registering} selection={selected ? selection as never : undefined} choice={source.choice} matches={source.matches} useModel={source.useModel} onUseModel={source.setUseModel} onChoice={source.setChoice} onCancel={() => source.setModalOpen(false)} onConfirm={source.confirm} />
+    <Modal open={source.modalOpen} loading={source.registering} selection={selected ? selection as never : undefined} choice={source.choice} matches={source.matches} useModel={source.useModel} onUseModel={source.setUseModel} onChoice={source.setChoice} sourceTest={source.sourceTest} onRetest={source.retestSource} onCancel={() => source.setModalOpen(false)} onConfirm={source.confirm} />
   </Form>;
 }
 const state = () => JSON.parse(screen.getByTestId("state").textContent!);

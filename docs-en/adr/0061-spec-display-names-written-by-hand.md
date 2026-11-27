@@ -12,7 +12,7 @@ What really tells sibling specs apart is the chip generation, the quantization a
 
 1. Remove the spec-level `display_profile` and `gpus.display_target`. Imports still read both keys so older templates keep working, but ignore them and raise the `CATALOG_DISPLAY_PROFILE_RETIRED` warning; they are neither stored nor exported again.
 2. Specs gain hand-written `display_name_zh_cn` and `display_name_en`, one column each. The server sends them as is; the frontend picks the one for its language, falls back to the other, and shows the spec's `name` when there is neither. It derives no names.
-3. A name reads "cards · quantization [· key limit or shape]"; see [Inference Catalog Specification · Display Names](../reference/inference-catalog-spec.md#display-names). Catalog validation keeps the Chinese and English names each unique within a model and engine, on one line and within a length limit; every built-in spec carries both names (guarded by a seed test).
+3. A name reads "cards · quantization [· key limit or shape]"; see [Inference Catalog Specification · Display Names](../reference/inference-catalog-spec.md#显示名). Catalog validation keeps the Chinese and English names each unique within a model and engine, on one line and within a length limit; every built-in spec carries both names (guarded by a seed test).
 4. The detail drawer's "Applicable GPUs" shows the real `gpus` predicate; the name is only a summary.
 
 ## Trade-offs

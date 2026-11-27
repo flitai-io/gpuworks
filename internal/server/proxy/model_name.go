@@ -21,17 +21,37 @@ import (
 // --served-model-name registers that host path as its name, whatever the
 // agent's version; hostEngineName applies the same rewrite.
 func instanceModelName(dep *store.Deployment, instance *store.Instance, hostProcess bool) string {
+	name, _ := instanceLaunchFacts(dep, instance, hostProcess)
+	return name
+}
+
+// instanceLaunchFacts reads what routing needs from the instance's launch in
+// one decode of its desired state: the name its engine answers under
+// (instanceModelName) and its run slots (deploy.RunSlots, 0 when unknown).
+func instanceLaunchFacts(dep *store.Deployment, instance *store.Instance, hostProcess bool) (string, int) {
 	if dep.Engine != engines.SGLang && dep.Engine != engines.VLLM {
-		return ""
+		return "", 0
 	}
 	var desired proto.InstanceDesiredState
 	if json.Unmarshal([]byte(instance.DesiredStateJSON), &desired) != nil {
-		return ""
+		return "", 0
 	}
 	args, scriptArgs, ok := deploy.LaunchArgs(desired.ResolvedLaunch)
 	if !ok {
-		return ""
+		return "", 0
 	}
+	slots, _ := deploy.RunSlots(dep.Engine, args)
+	return launchModelName(dep, desired, args, scriptArgs, hostProcess), slots
+}
+
+// instanceRunSlots is the instance's run slots alone (instanceLaunchFacts):
+// where its node runs does not change them.
+func instanceRunSlots(dep *store.Deployment, instance *store.Instance) int {
+	_, slots := instanceLaunchFacts(dep, instance, false)
+	return slots
+}
+
+func launchModelName(dep *store.Deployment, desired proto.InstanceDesiredState, args, scriptArgs []string, hostProcess bool) string {
 	engineName := func(name string) string {
 		if hostProcess {
 			return hostEngineName(desired, name)

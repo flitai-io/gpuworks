@@ -106,7 +106,7 @@ func (a *apiHandlers) registerURLModel(w http.ResponseWriter, r *http.Request) {
 	}
 	var notice *dto.ProductMessage
 	if meta, err := a.deployments().FetchModelMeta(r.Context(), entity.Source, entity.SourceID, entity.Revision, entity.ArtifactSubfolder, entity.SourceURL); err == nil {
-		notice = a.metadataNotice(meta, entity.Source, entity.SourceURL)
+		notice = a.metadataNotice(meta, entity)
 		a.applyFetchedMetadata(r.Context(), entity, meta)
 	}
 	initRegisteredModelContract(entity)

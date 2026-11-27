@@ -58,14 +58,21 @@ type GPU struct {
 	// it persists until disabled, regardless of time or reports.
 	// SchedulingActions are what an operator may do
 	// to it now (stopped, schedulable), decided by the server.
-	SchedulingStopped bool             `json:"scheduling_stopped,omitempty"`
-	SchedulingAllowed bool             `json:"scheduling_allowed,omitempty"`
-	SchedulingActions []string         `json:"scheduling_actions,omitempty"`
-	HealthStatus      string           `json:"health_status,omitempty"`
-	HealthCode        string           `json:"health_code,omitempty"`
-	HealthMessage     string           `json:"health_message,omitempty"`
-	HealthEvidence    []GPUHealthField `json:"health_evidence,omitempty"`
-	HealthGuide       *GPUHealthGuide  `json:"health_guide,omitempty"`
+	SchedulingStopped bool     `json:"scheduling_stopped,omitempty"`
+	SchedulingAllowed bool     `json:"scheduling_allowed,omitempty"`
+	SchedulingActions []string `json:"scheduling_actions,omitempty"`
+	// SchedulingHeldBy names the extension source that holds the card out
+	// of scheduling (a card holder); absent when none does. SchedulingHold
+	// says why, as a product message a client renders in its language,
+	// with Message as the English fallback. While it is held the card is
+	// not Schedulable and SchedulingActions never offers schedulable.
+	SchedulingHeldBy string           `json:"scheduling_held_by,omitempty"`
+	SchedulingHold   *ProductMessage  `json:"scheduling_hold,omitempty"`
+	HealthStatus     string           `json:"health_status,omitempty"`
+	HealthCode       string           `json:"health_code,omitempty"`
+	HealthMessage    string           `json:"health_message,omitempty"`
+	HealthEvidence   []GPUHealthField `json:"health_evidence,omitempty"`
+	HealthGuide      *GPUHealthGuide  `json:"health_guide,omitempty"`
 }
 
 // Node is the API view of a store.Node.

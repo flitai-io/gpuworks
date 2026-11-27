@@ -124,27 +124,29 @@ type TimelineSummary struct {
 // (the shallower on a tie), absent when no asleep stretch names a level. The
 // server decides, the UI only draws the slice in the colour of State.
 type TimelineSummaryDeployment struct {
-	DeploymentID     uint   `json:"deployment_id"`
-	Deployment       string `json:"deployment"`
-	AwakeSeconds     int64  `json:"awake_seconds"`
-	AsleepSeconds    int64  `json:"asleep_seconds"`
-	SwitchingSeconds int64  `json:"switching_seconds"`
-	StartingSeconds  int64  `json:"starting_seconds"`
-	State            string `json:"state"`
-	Level            int    `json:"level,omitempty"`
+	DeploymentID      uint   `json:"deployment_id"`
+	Deployment        string `json:"deployment"`
+	DeploymentDeleted bool   `json:"deployment_deleted,omitempty"`
+	AwakeSeconds      int64  `json:"awake_seconds"`
+	AsleepSeconds     int64  `json:"asleep_seconds"`
+	SwitchingSeconds  int64  `json:"switching_seconds"`
+	StartingSeconds   int64  `json:"starting_seconds"`
+	State             string `json:"state"`
+	Level             int    `json:"level,omitempty"`
 }
 
 // TimelineSegment is one stretch of an instance holding a GPU in one state:
 // awake, asleep (Level says how deep), switching (between a sleep or wake
 // order and its result) or starting. From and To are inside the window.
 type TimelineSegment struct {
-	DeploymentID uint      `json:"deployment_id"`
-	Deployment   string    `json:"deployment"`
-	Instance     string    `json:"instance"`
-	State        string    `json:"state"`
-	Level        int       `json:"level,omitempty"`
-	From         time.Time `json:"from"`
-	To           time.Time `json:"to"`
+	DeploymentID      uint      `json:"deployment_id"`
+	Deployment        string    `json:"deployment"`
+	DeploymentDeleted bool      `json:"deployment_deleted,omitempty"`
+	Instance          string    `json:"instance"`
+	State             string    `json:"state"`
+	Level             int       `json:"level,omitempty"`
+	From              time.Time `json:"from"`
+	To                time.Time `json:"to"`
 }
 
 // TimelineDeployment is what a deployment that shares GPUs (any yield policy

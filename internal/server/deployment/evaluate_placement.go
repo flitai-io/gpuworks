@@ -189,7 +189,7 @@ func selectedReasons(result planning.ScheduleResult) []dto.ScheduleReason {
 // between the evaluation the deployer confirmed and the create - and the
 // answer is the conflict the client already knows how to handle, never a
 // silent re-placement or a row the controller will fail to schedule.
-func (s *Service) revalidateAutomaticPlacement(ctx context.Context, req *dto.DeployRequest, engine deploy.Engine, model *store.Model, selection templateSelection, placement planning.Placement, quick deploy.LaunchConfig, userExtraArgs []string, servedName string, node *store.Node, modelMount string, componentMounts []proto.MountSpec, requestOverrides deploy.ContainerOverrides, weightStorageID uint) error {
+func (s *Service) revalidateAutomaticPlacement(ctx context.Context, req *dto.DeployRequest, engine deploy.Engine, model *store.Model, selection templateSelection, placement planning.Placement, quick deploy.LaunchConfig, userExtraArgs []string, servedName string, node *store.Node, modelMount string, componentMounts []proto.MountSpec, requestOverrides deploy.ContainerOverrides, weightStorageID uint) ([]messages.Warning, error) {
 	previewSelection := snapshotTemplateSelection(selection, req.Image)
 	plan, planErr := s.planLaunch(ctx, planning.LaunchRequest{
 		StartTimeoutSec: req.StartTimeoutSec,
@@ -210,14 +210,14 @@ func (s *Service) revalidateAutomaticPlacement(ctx context.Context, req *dto.Dep
 	} else if plan.Output.PlacementError != nil {
 		detail = plan.Output.PlacementError.Error()
 	} else if plan.Output.Fits() {
-		return nil
+		return plan.Output.Warnings, nil
 	} else if refusal := plan.Output.Refusal(node, yieldpolicy.Policy{Yield: requestYield(req.YieldPolicy)}); refusal.Code != "" {
 		detail = refusal.Message
 		if detail == "" {
 			detail = refusal.Code
 		}
 	}
-	return wrapProductError(messages.ErrorAutomaticPlacementStale,
+	return nil, wrapProductError(messages.ErrorAutomaticPlacementStale,
 		"the evaluated placement no longer fits the node",
 		map[string]any{"node": node.UUID, "detail": detail}, nil)
 }

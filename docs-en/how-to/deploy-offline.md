@@ -191,7 +191,7 @@ For images, the equivalent is a source rule with “Allow upstream” disabled.
 
 ### Update the Image Catalog and Inference Templates
 
-To use system image and inference template catalogs newer than those embedded in the server, download `<channel>/manifest.json`
+To use system image and inference template catalogs newer than those embedded in the server, download the file at `image_catalog_v4.path` in the signed index (use `<channel>/manifest.json` for a schema 3 server)
 and the `catalog/templates/<sha256>.tar.gz` listed in `<channel>/index.json` from any release source (such as `https://dl.gpuworks.ai`) on the online machine. Under “Version and updates” on the Settings page, click “Upload manifest” and “Upload catalog package.”
 For the rules, see [Image Catalog](../reference/image-families.md#更新目录). In an offline environment, “Check for updates” returns 502 `UPDATE_SOURCES_UNAVAILABLE` because release sources cannot be reached; the database is unchanged.
 
@@ -222,7 +222,7 @@ Configuring offline sources does not disconnect the operating system from the ne
 <!-- translation-source-sha256: 5a0156a93daf2f305c4f30d02801b85d638ef8e72de98fef0c84c9b4cf9b8510 ### Store Models in a Private HTTP Directory -->
 <!-- translation-source-sha256: 0cd309cbfe4a33a2dd395170ea964de04c682be0f2a9567d291f3c7cbc706569 ### Nodes Cannot Access the Public Internet -->
 <!-- translation-source-sha256: 2b52ee21896a93065c94e0d039ec0f784fb9abc4ba4a9d37c828086bfd5e0aa9 ### Immediately Report Why an Image or Model Is Missing -->
-<!-- translation-source-sha256: 2d57ae06d23397d5f630e7f3f2d71c8517af8866e0be11b8c8b3460daba23b29 ### Update the Image Catalog and Inference Templates -->
+<!-- translation-source-sha256: f1840816e6877d35174f99444fc5d1139580728faad52f2f4b4003b4a56dd314 ### Update the Image Catalog and Inference Templates -->
 <!-- translation-source-sha256: a3a925dcbbad8133b709314d36a4cc3ba4a8464bfa8cd5a3e7664bc959ffb4d4 ## Offline Boundaries -->
 <!-- translation-source-sha256: 98465786e340902f4386309b8d140a002538e2be6f7cd40ac285d8992d70a38d ## Related Guides -->
 <!-- translation-localized-code-block: c717c0459f55443287bf882bfa1df2c29a02f63e677ed105a6b9f0cfa648769b fb1f692b5059c1a518bf7610bc04b414fbac8c14c412eb611037ff1567010f7c Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->

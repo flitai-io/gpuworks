@@ -18,7 +18,7 @@ ui_bundle_gzip_kb	2450	warn
 ui_untested_shared_files	0	max
 ui_copy_long_strings	0	max
 ui_copy_caveat_strings	0	max
-ui_copy_helper_strings	305	max
+ui_copy_helper_strings	303	max
 ui_copy_message_strings	42	max
 ui_copy_sentences_strings	26	max
 ui_copy_clauses_strings	24	max
@@ -81,4 +81,4 @@ console_unlinked_code_packages	0	max
 edition_branches	0	max
 kv_backend_id_literals	0	max
 feature_key_literals_in_core	0	max
-published_tags_outside_grammar	121	max
+published_tags_outside_grammar	120	max

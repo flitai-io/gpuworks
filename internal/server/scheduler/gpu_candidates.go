@@ -65,6 +65,9 @@ func gpuResourceRefusal(req Request, node string, gpu GPU, need int64) Reason {
 		return Reason{Code: ReasonGPUIndexUnavailable}
 	}
 	if !gpu.takesWorkFor(req) {
+		if reason, ok := holderHeldReason(node, []GPU{gpu}); ok {
+			return reason
+		}
 		if gpu.HeldOutsidePlatform || gpu.withheld > 0 {
 			return heldReason(req, node, []GPU{gpu}, gpu)
 		}

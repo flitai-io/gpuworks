@@ -20,6 +20,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/modelmeta"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -51,13 +52,27 @@ func (a *apiHandlers) metadataSources(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// metadataNotice says why a read of source returned nothing usable, or nil
-// when it did: the rules chosen for the management node forbid every
-// address, or it reached none of the ones they give. Both point at the
-// rules, where a site rule can be chosen for the management node.
-func (a *apiHandlers) metadataNotice(meta *modelmeta.Meta, source, sourceURL string) *dto.ProductMessage {
+// metadataNotice says why a read of a model's source returned nothing
+// usable, or nil when it did. The site's own answer comes first: it has no
+// such repository or revision, or refuses access to it. Otherwise the rules
+// chosen for the management node forbid every address, or it reached none of
+// the ones they give; those two point at the rules, where a site rule can be
+// chosen for the management node.
+func (a *apiHandlers) metadataNotice(meta *modelmeta.Meta, model *store.Model) *dto.ProductMessage {
 	if hasFetchedMetadata(meta) {
 		return nil
+	}
+	source, sourceURL := model.Source, model.SourceURL
+	status := 0
+	if meta != nil {
+		status = meta.Answer.Status
+		if code := sourceAnswerCode(meta.Answer.Outcome); code != "" {
+			params := map[string]any{"source": source, "repo": model.SourceID, "host": hostOf(meta.Answer.Endpoint), "status": status}
+			if code == messages.ErrorModelRevisionNotFound {
+				params["revision"] = model.Revision
+			}
+			return deployment.ProductMessage(productError(code, fmt.Sprintf("%s answered %d for %s", params["host"], status, model.SourceID), params))
+		}
 	}
 	candidates, err := planning.ServerFetchCandidates(a.d.Store, source, sourceURL)
 	if containsProductCode(err, ErrorModelMetadataForbidden) {
@@ -69,8 +84,45 @@ func (a *apiHandlers) metadataNotice(meta *modelmeta.Meta, source, sourceURL str
 			hosts = append(hosts, parsed.Host)
 		}
 	}
-	return deployment.ProductMessage(productError(ErrorModelMetadataUnreachable, "the management node reached none of "+strings.Join(hosts, ", "),
-		map[string]any{"source": source, "hosts": strings.Join(hosts, ", "), "route": "/api/v1/pull/source-rules"}))
+	params := map[string]any{"source": source, "hosts": strings.Join(hosts, ", "), "route": "/api/v1/pull/source-rules"}
+	if status != 0 {
+		params["status"] = status
+	}
+	return deployment.ProductMessage(productError(ErrorModelMetadataUnreachable, "the management node reached none of "+strings.Join(hosts, ", "), params))
+}
+
+// sourceAnswerCode is the product code of what a site said about a
+// repository; empty when it said nothing definite (unreachable, or read).
+func sourceAnswerCode(outcome modelmeta.Outcome) string {
+	switch outcome {
+	case modelmeta.OutcomeRepoNotFound:
+		return messages.ErrorModelRepoNotFound
+	case modelmeta.OutcomeRevisionNotFound:
+		return messages.ErrorModelRevisionNotFound
+	case modelmeta.OutcomeDenied:
+		return messages.ErrorModelRepoAccessDenied
+	}
+	return ""
+}
+
+// sourceAnswerStatus is the HTTP status this API answers with when a model's
+// source gave the answer code: the site's own meaning, so a caller does not
+// take "correct the repository" for "wait for the network".
+func sourceAnswerStatus(code string) int {
+	switch code {
+	case messages.ErrorModelRepoNotFound, messages.ErrorModelRevisionNotFound:
+		return http.StatusNotFound
+	case messages.ErrorModelRepoAccessDenied:
+		return http.StatusForbidden
+	}
+	return http.StatusBadGateway
+}
+
+func hostOf(address string) string {
+	if parsed, err := url.Parse(address); err == nil && parsed.Host != "" {
+		return parsed.Host
+	}
+	return address
 }
 
 func (a *apiHandlers) applyFetchedMetadata(ctx context.Context, entity *store.Model, meta *modelmeta.Meta) {
@@ -250,8 +302,8 @@ func (a *apiHandlers) refreshModelMetadata(w http.ResponseWriter, r *http.Reques
 		writeErr(w, http.StatusBadGateway, err)
 		return
 	}
-	if notice := a.metadataNotice(meta, entity.Source, entity.SourceURL); notice != nil {
-		writeProductError(w, http.StatusBadGateway, notice.Code, notice.Message, notice.Params)
+	if notice := a.metadataNotice(meta, entity); notice != nil {
+		writeProductError(w, sourceAnswerStatus(notice.Code), notice.Code, notice.Message, notice.Params)
 		return
 	}
 	a.applyFetchedMetadata(r.Context(), entity, meta)

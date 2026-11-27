@@ -27,6 +27,13 @@ const (
 	WarningImageCatalogNoMatchDomestic     = "IMAGE_CATALOG_NO_MATCH_DOMESTIC"
 	WarningImageCatalogUnavailableDomestic = "IMAGE_CATALOG_UNAVAILABLE_DOMESTIC"
 	WarningImageDriverCompatibility        = "IMAGE_DRIVER_COMPATIBILITY"
+	// WarningTemplateImagePinnedByRuntimePatch: the request runs a template
+	// spec that patches its own runtime - a pre-start script or assets
+	// pinned to the engine sources of its own image ({image}) - on another
+	// image ({requested}). The catalog records that such a step exists but
+	// not what it does, so the platform states the risk rather than deciding:
+	// the patch may refuse the other image's sources and fail the start.
+	WarningTemplateImagePinnedByRuntimePatch = "TEMPLATE_IMAGE_PINNED_BY_RUNTIME_PATCH"
 	// WarningExtraArgsEngineUnverified: a residual user flag is documented by
 	// another engine's dictionary, not this target's. It remains passthrough;
 	// dictionary absence is not evidence that the target CLI refuses it.
@@ -39,6 +46,9 @@ const (
 	// WarningPlanningKVBelowContext is an uncertain KV capacity prediction,
 	// not a startup/resource refusal. Params: kv_tokens, max_model_len.
 	WarningPlanningKVBelowContext = "PLANNING_KV_BELOW_CONTEXT"
+	// WarningDGPUStartupMemory flags a tested configuration that may fail
+	// Decode graph capture. Params: quota_gib, utilization, max_utilization.
+	WarningDGPUStartupMemory = "DGPU_STARTUP_MEMORY"
 	// WarningManualDraftUnavailable: a multi-node or PD draft has no manual
 	// command script that runs every rank's own engine command, because ranks
 	// of one kind differ in something no platform variable carries (the RDMA

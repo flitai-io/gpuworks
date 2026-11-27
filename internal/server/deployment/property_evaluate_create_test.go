@@ -86,7 +86,7 @@ func TestEvaluateAgreesWithCreate(t *testing.T) {
 			}
 			return
 		}
-		gpuChecks.add(compareEvaluationWithDeployment(rt, f, resp, created))
+		gpuChecks.add(compareEvaluationWithDeployment(rt, f, resp, created.Deployment))
 	})
 	outcomes.log(t, "outcome")
 	gpuChecks.log(t, "placement")

@@ -97,6 +97,13 @@ type PhysicalGPU struct {
 	SchedulingStopped bool     `json:"scheduling_stopped,omitempty"`
 	SchedulingAllowed bool     `json:"scheduling_allowed,omitempty"`
 	SchedulingActions []string `json:"scheduling_actions,omitempty"`
+	// SchedulingHeldBy names the extension source that holds the card out
+	// of scheduling (a card holder); absent when none does. SchedulingHold
+	// says why, as a product message a client renders in its language,
+	// with Message as the English fallback. While it is held the card is
+	// not Schedulable and SchedulingActions never offers schedulable.
+	SchedulingHeldBy string          `json:"scheduling_held_by,omitempty"`
+	SchedulingHold   *ProductMessage `json:"scheduling_hold,omitempty"`
 	// HealthStatus is the level, normalized when the card was stored, so
 	// it is always one of OK, Warning or Error.
 	HealthStatus   string           `json:"health_status,omitempty"`

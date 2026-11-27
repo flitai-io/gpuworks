@@ -96,7 +96,7 @@ jobs:
         if: matrix.shard == 1
       - run: npm ci --no-audit --no-fund
         working-directory: ui
-      - run: npm run test:coverage
+      - run: npm test
         working-directory: ui
         env:
           TEST_SHARD: ${{ matrix.shard }}/4

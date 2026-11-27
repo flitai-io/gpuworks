@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -38,7 +39,9 @@ func (s CardScheduling) Valid() bool {
 // SetCardScheduling records an operator's decision about one card of a node,
 // named by its identity (accelerator.CardIdent). Enabling it records explicit
 // intent even when it is healthy now, so later reports cannot revoke it.
-// A card that is not this node's to use cannot be enabled.
+// A card that is not this node's to use cannot be enabled, nor can one a
+// card holder holds (ErrCardHeld, wrapping the hold's product error); a
+// held card may still be stopped.
 func (s *Store) SetCardScheduling(nodeUUID, ident string, to CardScheduling) (*GPU, error) {
 	if !to.Valid() {
 		return nil, ErrInvalidCardScheduling
@@ -59,6 +62,9 @@ func (s *Store) SetCardScheduling(nodeUUID, ident string, to CardScheduling) (*G
 		if !accelerator.CardUsable(card.Ownership) {
 			return nil, ErrCardNotOwned
 		}
+		if src, hold := s.admission.cardHoldOf(cardHoldFacts(nodeHoldFacts(node), &card)); src != SchedulingBySelf {
+			return nil, fmt.Errorf("%w: %w", ErrCardHeld, hold.ProductError())
+		}
 		updates["scheduling_allowed_at"] = time.Now().UTC()
 	}
 	if err := s.db.Model(&GPU{}).Where("id = ?", card.ID).Updates(updates).Error; err != nil {
@@ -75,8 +81,9 @@ func (s *Store) SetCardScheduling(nodeUUID, ident string, to CardScheduling) (*G
 
 // SchedulingActions are what an operator may do to the card now: stop it
 // (unless they already have), or make it schedulable (when they stopped it,
-// or the platform's verdict keeps work off it). The server answers this so
-// a client never works it out (frontend makes no business decisions).
+// or the platform's verdict keeps work off it) unless a card holder holds
+// it. The server answers this so a client never works it out (frontend
+// makes no business decisions).
 func (g GPU) SchedulingActions() []string {
 	if !accelerator.CardUsable(g.Ownership) {
 		return nil
@@ -85,7 +92,7 @@ func (g GPU) SchedulingActions() []string {
 	if !g.SchedulingStopped {
 		actions = append(actions, string(CardSchedulingStopped))
 	}
-	if g.SchedulingStopped || !g.CanTakeWork() {
+	if !g.HeldByHolder() && (g.SchedulingStopped || !g.CanTakeWork()) {
 		actions = append(actions, string(CardSchedulingSchedulable))
 	}
 	return actions

@@ -58,7 +58,13 @@ func (s *Service) Fleet(ctx context.Context, nodes []store.Node) (Fleet, error) 
 	if err != nil {
 		return f, err
 	}
+	held := s.heldSince()
 	for _, item := range pending {
+		// An unknown outcome past its hold holds nothing: the node may be
+		// upgraded again, and its batch is not one that is running.
+		if item.Phase == "unconfirmed" && (item.FinishedAt == nil || item.FinishedAt.Before(held)) {
+			continue
+		}
 		f.RunID = item.RunID
 		f.Eligibility[item.NodeUUID] = "busy"
 	}

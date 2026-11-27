@@ -42,7 +42,13 @@ func signalSession(sid int, sig syscall.Signal) error { return errUnsupported }
 
 func processTree(root int) []procIdentity { return nil }
 
-func processesUsingTTY(path string) []procIdentity { return nil }
+type ttyRef string
+
+func ttyRefOf(slave *os.File) ttyRef { return "" }
+
+func processesUsingTTY(ref ttyRef) []procIdentity { return nil }
+
+func pinTTY(ref ttyRef) *os.File { return nil }
 
 func signalProcessIdentities(processes []procIdentity, sig syscall.Signal) {}
 

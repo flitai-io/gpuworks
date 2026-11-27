@@ -30,7 +30,7 @@ test("drawer dismisses with Escape and returns focus to its opener", async () =>
   await screen.findByRole("dialog", { name: "Resource" });
   await user.keyboard("{Escape}");
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
-  await waitFor(() => assert.equal(document.activeElement, opener));
+  await waitFor(() => assert.ok(document.activeElement === opener, "focus returns to the opener"));
 });
 
 test("number input retains null and applies supplied bounds and precision on blur", () => {

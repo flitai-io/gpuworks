@@ -78,6 +78,7 @@ read GET /api/v1/inference-templates/organizations
 read GET /api/v1/inference-templates/schema
 read GET /api/v1/inference-templates/summary
 read GET /api/v1/inference-templates/weight-models
+read GET /api/v1/inference-templates/weight-source-probe
 read GET /api/v1/inference-templates/yaml
 read GET /api/v1/instances
 read GET /api/v1/instances/{uuid}
@@ -85,6 +86,7 @@ read GET /api/v1/instances/{uuid}/events
 read GET /api/v1/instances/{uuid}/launch-facts
 read GET /api/v1/instances/{uuid}/logs
 read GET /api/v1/kube/clusters
+read GET /api/v1/kube/clusters/{uuid}/rollout
 read GET /api/v1/kube/defaults
 read GET /api/v1/logs/context
 read GET /api/v1/logs/histogram
@@ -172,6 +174,7 @@ read POST /api/v1/ai/configs/test
 read POST /api/v1/benchmarks/models
 read POST /api/v1/benchmarks/probe
 read POST /api/v1/evaluate
+read POST /api/v1/kube/precheck
 read POST /api/v1/mcp
 read POST /api/v1/models/local/preview
 read POST /api/v1/models/preview-url
@@ -202,6 +205,7 @@ recovery GET /api/v1/updates
 recovery GET /api/v1/updates/server/result
 recovery GET /api/v1/updates/server/versions
 recovery GET /healthz
+recovery GET /kube/check.sh
 recovery GET /slurm/check.sh
 recovery GET /slurm/token-status
 recovery HEAD /*

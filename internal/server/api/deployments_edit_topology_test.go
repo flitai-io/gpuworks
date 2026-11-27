@@ -276,7 +276,8 @@ func TestCreateAndEvaluateRefuseAManualScriptThatLeavesAssignedGPUsIdle(t *testi
 	if want := `"ok":false`; !strings.Contains(rec.Body.String(), want) {
 		t.Fatalf("evaluate lacks %s\n%s", want, rec.Body)
 	}
-	if want := `"errors":[{"field":"","code":"FIELD_INVALID","params":{"detail":"deployment 0 resolve launch: resolve launch: sglang topology: tp-size 1 × pp-size 1 requires 1 GPUs, but placement assigned 2"}}]`; !strings.Contains(rec.Body.String(), want) {
+	// A preview has no deployment yet, so its error names none (GWKS-522).
+	if want := `"errors":[{"field":"","code":"FIELD_INVALID","params":{"detail":"resolve launch: resolve launch: sglang topology: tp-size 1 × pp-size 1 requires 1 GPUs, but placement assigned 2"}}]`; !strings.Contains(rec.Body.String(), want) {
 		t.Fatalf("evaluate lacks %s\n%s", want, rec.Body)
 	}
 }

@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"gpuworks.ai/gpuworks/internal/server/agentbin"
 	"gpuworks.ai/gpuworks/internal/server/api"
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
@@ -60,7 +59,7 @@ func experienceLauncher(cfg Config, log *slog.Logger) api.Experience {
 	// The simulated nodes run the agent this build carries for its own
 	// platform; a build without one (a development build) has no
 	// environment to offer.
-	if err != nil || !agentbin.Has("gpuworks-agent-"+goruntime.GOOS+"-"+goruntime.GOARCH) {
+	if err != nil || cfg.DataDir == "" || !cfg.agents.Has("gpuworks-agent-"+goruntime.GOOS+"-"+goruntime.GOARCH) {
 		return nil
 	}
 	lc, ok := experienceLaunchConfig(cfg, bin)

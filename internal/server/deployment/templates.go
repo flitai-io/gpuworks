@@ -241,21 +241,21 @@ func (s *Service) resolveTemplateComponentModels(selection *templateSelection, f
 		if component.Role == "primary" {
 			component.StoreModelID = fallbackPrimary.ID
 			component.Provider, component.RepoID = fallbackPrimary.Source, fallbackPrimary.SourceID
-			component.Revision, component.Subfolder = fallbackPrimary.Revision, fallbackPrimary.ArtifactSubfolder
+			component.Revision = fallbackPrimary.Revision
+			// A rank-scoped primary keeps the template, as the selection's
+			// own weights do: its ranks are the deployment's RankWeights.
+			if !deploy.RankScopedSubfolder(component.Subfolder) {
+				component.Subfolder = fallbackPrimary.ArtifactSubfolder
+			}
 			continue
 		}
 		original, err := s.d.Store.InferenceModelByModelID(component.OriginalModelID)
 		if err != nil {
 			return fmt.Errorf("component %s original model %s: %w", component.Name, component.OriginalModelID, err)
 		}
-		model, err := s.selectionWeightModel(selection,
-			weightSource{Provider: component.Provider, RepoID: component.RepoID, Revision: component.Revision, Subfolder: component.Subfolder}, original,
-			selection.Spec.Engine, component.Quantization, component.WeightBytes, 0, selection.StoragePins, false, selection.ExplicitComponents[component.Name],
-		)
-		if err != nil {
-			return fmt.Errorf("component %s weights: %w", component.Name, err)
+		if err := s.resolveComponentModel(selection, component, original); err != nil {
+			return err
 		}
-		component.StoreModelID = model.ID
 	}
 	return nil
 }
@@ -375,6 +375,9 @@ func (s *Service) applyTemplateDefaults(req *dto.DeployRequest, hardware templat
 	}
 	selection.Diff = flatTemplateRequestDiff(requestedEngine, requestedScenario, requestedImage, requestedSpec, req, selection)
 	selection.Deviated = len(selection.Diff) > 0
+	if warning := patchedImageWarning(requestedImage, spec, selection); warning != nil {
+		selection.Warnings = append(selection.Warnings, *warning)
+	}
 	// The spec's args stay as the author wrote them. Which of them become
 	// configuration values and which stay passthrough tokens is decided once, at
 	// materialization, for the request and the template alike.

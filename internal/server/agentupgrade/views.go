@@ -165,7 +165,11 @@ func (s *Service) ContinuePreview(ctx context.Context, id uint) (Preview, error)
 	}
 	uuids := []string{}
 	for _, i := range items {
-		if i.Phase == "queued" || i.Phase == "failed" || i.Phase == "cancelled" || i.Phase == "interrupted" {
+		// An unknown outcome is retried too unless it is known to have ended
+		// on the target or its node is gone; the preview judges each node
+		// afresh (one already on the target is skipped as current).
+		retry := i.Phase == "unconfirmed" && i.VerificationCode != "target_registered" && i.VerificationCode != ReasonNodeRemoved
+		if i.Phase == "queued" || i.Phase == "failed" || i.Phase == "cancelled" || i.Phase == "interrupted" || retry {
 			uuids = append(uuids, i.NodeUUID)
 		}
 	}

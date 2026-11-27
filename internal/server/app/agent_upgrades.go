@@ -11,13 +11,13 @@ import (
 	"gpuworks.ai/gpuworks/internal/version"
 )
 
-func newAgentUpgrades(st *store.Store, h *hub.Hub, dataDir string, log *slog.Logger) (*agentupgrade.Service, error) {
+func newAgentUpgrades(st *store.Store, h *hub.Hub, dataDir string, agents agentbin.Files, log *slog.Logger) (*agentupgrade.Service, error) {
 	dir := filepath.Join(dataDir, "dl")
 	svc, err := agentupgrade.New(st, agentupgrade.Config{
 		TargetVersion:   version.Version,
 		ArtifactDir:     filepath.Join(dataDir, "agent-upgrades", "artifacts"),
-		BinaryAvailable: func(name string) bool { return agentbin.Available(dir, name, version.Version) },
-		ReadBinary:      func(name string) ([]byte, error) { return agentbin.ReadVerified(dir, name, version.Version) },
+		BinaryAvailable: func(name string) bool { return agents.Available(dir, name, version.Version) },
+		ReadBinary:      func(name string) ([]byte, error) { return agents.ReadVerified(dir, name, version.Version) },
 		Transport:       h, Logger: log,
 	})
 	if err != nil {

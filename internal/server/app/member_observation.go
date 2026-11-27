@@ -48,7 +48,7 @@ func registerMemberObservation(router chi.Router, bundle *enrollmentBundle, sess
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	facts, err := closedQuorumFactsHandler(bundle, session, requests)
+	facts, err := closedQuorumFactsHandler(bundle, session, requests, log)
 	if err != nil {
 		return err
 	}

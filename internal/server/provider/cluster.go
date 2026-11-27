@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"gpuworks.ai/gpuworks/internal/server/kubeapply"
+	"gpuworks.ai/gpuworks/internal/server/kubemanifest"
 )
 
 // Cluster is a managed Kubernetes cluster in a cloud account. Its GPU node
@@ -187,4 +188,19 @@ func (s *Service) RemoveFromCluster(ctx context.Context, providerID uint, cluste
 		return results, &ClusterOperationError{Step: "api_server", Err: err}
 	}
 	return results, nil
+}
+
+// ClusterRollout reads how the agent DaemonSet of a cluster entry stands in
+// the provider's cluster, pod by pod, with a kubeconfig issued for the read
+// and not kept. It changes nothing in the cluster.
+func (s *Service) ClusterRollout(ctx context.Context, providerID uint, clusterID, namespace string) (kubemanifest.RolloutState, error) {
+	c, err := s.clusterClient(ctx, providerID, clusterID)
+	if err != nil {
+		return kubemanifest.RolloutState{}, err
+	}
+	state, err := c.AgentRollout(ctx, namespace, kubemanifest.AgentName)
+	if err != nil {
+		return state, &ClusterOperationError{Step: "api_server", Err: err}
+	}
+	return state, nil
 }

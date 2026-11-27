@@ -137,8 +137,8 @@ func TestReadsThatActAndReadsThatReachOutside(t *testing.T) {
 			}
 		}
 	}
-	if n := len(platformChangingReads) + len(platformReachingReads); n != 19 {
-		t.Errorf("platform_limit.go names %d reads that act or reach outside; this table has 19: add the new one here", n)
+	if n := len(platformChangingReads) + len(platformReachingReads); n != 20 {
+		t.Errorf("platform_limit.go names %d reads that act or reach outside; this table has 20: add the new one here", n)
 	}
 }
 
@@ -171,13 +171,13 @@ func TestPlatformLimitRoutesAreTheKnownOnes(t *testing.T) {
 }
 
 // A POST is served under a limit only when it stores nothing and changes
-// nothing on a node (eleven do); one that starts work, stores something or
+// nothing on a node (twelve do); one that starts work, stores something or
 // acts on a node is refused. The
 // server's own upgrade stays possible under any limit, bringing a new
 // package in does not.
 func TestWritesThatOnlyReadAndWritesThatBringCodeIn(t *testing.T) {
-	if n := len(platformReadingPosts); n != 11 {
-		t.Errorf("platform_limit.go names %d reading POSTs; this table has 11: add the new one here", n)
+	if n := len(platformReadingPosts); n != 12 {
+		t.Errorf("platform_limit.go names %d reading POSTs; this table has 12: add the new one here", n)
 	}
 	for _, tc := range []struct {
 		route string
@@ -199,6 +199,7 @@ func TestWritesThatOnlyReadAndWritesThatBringCodeIn(t *testing.T) {
 		{"POST /api/v1/ai/configs/test", platformRead, "tests an assistant model that is not saved"},
 		{"POST /api/v1/benchmarks/probe", platformRead, "asks a node whether a benchmark's target answers"},
 		{"POST /api/v1/nodes/precheck", platformRead, "checks a machine's SSH address before it is added"},
+		{"POST /api/v1/kube/precheck", platformRead, "renders a script for a cluster that is not connected; nothing is stored"},
 		{"POST /api/v1/nodes", platformChange, "adds a node"},
 		{"POST /api/v1/updates/server", platformRecovery, "a release may be what makes the limit liftable"},
 		{"PUT /api/v1/updates/channel", platformRecovery, "chooses where that release comes from"},

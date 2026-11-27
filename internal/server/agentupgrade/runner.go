@@ -212,11 +212,52 @@ func (s *Service) finish(i store.AgentUpgradeItem, phase, reason, detail string)
 	s.notify()
 	return err
 }
+
+// unconfirmed records an attempt that missed its deadline. Its batch goes on:
+// how this one node ended concerns only that node, and the platform settles
+// it by itself when the node is seen again (observeConnection,
+// backOnOldVersion, observeEvent) or is removed (settleRemovedNodes). The
+// attempt holds the slot for UnconfirmedHold (heldSince), after which
+// reconcile dispatches the batch's next node; nothing waits for an
+// administrator.
 func (s *Service) unconfirmed(i store.AgentUpgradeItem, reason, detail string) error {
 	if err := s.finish(i, "unconfirmed", reason, detail); err != nil {
 		return err
 	}
-	return s.st.PauseAgentUpgrade(i.RunID, "confirmation_required")
+	return s.pauseOnRepeatedUnknownOutcome(i.RunID)
+}
+
+// PauseRepeatedUnknownOutcome pauses a batch whose last two attempted nodes
+// both ended with an unknown outcome.
+const PauseRepeatedUnknownOutcome = "repeated_unknown_outcome"
+
+// pauseOnRepeatedUnknownOutcome is the batch's circuit breaker. One node that
+// goes silent is that node's matter and the batch goes on; two in a row say
+// something about the target build or the network, and going on would take
+// the fleet's agents away one by one with nobody watching. The batch then
+// pauses, saying why, and an administrator continues it. An attempt later
+// seen on the target version did succeed and does not count.
+func (s *Service) pauseOnRepeatedUnknownOutcome(runID uint) error {
+	items, err := s.st.AgentUpgradeItems(runID)
+	if err != nil {
+		return err
+	}
+	attempted := make([]store.AgentUpgradeItem, 0, len(items))
+	for _, i := range items {
+		if i.StartedAt != nil && !activePhase(i.Phase) {
+			attempted = append(attempted, i)
+		}
+	}
+	sort.SliceStable(attempted, func(a, b int) bool { return attempted[a].StartedAt.Before(*attempted[b].StartedAt) })
+	if len(attempted) < 2 {
+		return nil
+	}
+	for _, i := range attempted[len(attempted)-2:] {
+		if i.Phase != "unconfirmed" || i.VerificationCode == "target_registered" {
+			return nil
+		}
+	}
+	return s.st.PauseAgentUpgrade(runID, PauseRepeatedUnknownOutcome)
 }
 
 func (s *Service) observeConnection(i store.AgentUpgradeItem) error {
@@ -301,9 +342,7 @@ func (s *Service) observeEvent(o Observation) error {
 // and it enrolls again under a new identity while the upgrade it was given
 // may still be applying; the deadline bounds that, as it does for any
 // attempt. The sweeps remove a node only after it has been gone longer than
-// the deadline, so their attempts are always unconfirmed by then. The run
-// stays paused, as after any unconfirmed attempt: the rest of its queue
-// waits for an administrator to continue it.
+// the deadline, so their attempts are always unconfirmed by then.
 func (s *Service) settleRemovedNodes(items []store.AgentUpgradeItem) error {
 	var uuids []string
 	for _, i := range items {
@@ -370,7 +409,7 @@ func (s *Service) backOnOldVersion(i store.AgentUpgradeItem) error {
 		return nil
 	}
 	conn, ok := s.cfg.Transport.AgentUpgradeConnection(i.NodeUUID)
-	if !ok || !conn.Ready || conn.SessionID == "" || conn.SessionID == i.BaselineSessionID {
+	if !ok || !conn.Ready || conn.SessionID == "" {
 		return nil
 	}
 	run, err := s.st.AgentUpgradeRun(i.RunID)
@@ -379,6 +418,23 @@ func (s *Service) backOnOldVersion(i store.AgentUpgradeItem) error {
 	}
 	if conn.Version == run.TargetVersion {
 		return nil // observeConnection settles it as target_registered
+	}
+	if conn.SessionID == i.BaselineSessionID {
+		// The agent never restarted: it is the process that was asked to
+		// upgrade, still on its old version. Once the attempt no longer
+		// holds the slot the agent has given the upgrade up (heldSince), so
+		// it did not take effect; without this the attempt would stay open
+		// for as long as the node stays connected.
+		if i.FinishedAt == nil || !i.FinishedAt.Before(s.heldSince()) {
+			return nil
+		}
+		verified, err := s.st.VerifyAgentUpgrade(i.ID, s.now(), "system", ReasonStillOnOldVersion, "")
+		if err != nil || !verified {
+			return err
+		}
+		s.notify()
+		s.cfg.Logger.Info("agent upgrade attempt settled: its node never left its old version", "run", i.RunID, "node", i.NodeUUID, "version", conn.Version)
+		return nil
 	}
 	if s.oldVersion == nil {
 		s.oldVersion = map[uint]oldVersionSession{}
@@ -420,3 +476,8 @@ func (s *Service) forgetSettled(items []store.AgentUpgradeItem) {
 // ReasonReconnectedOldVersion is the verification code of an unconfirmed
 // attempt whose node came back on a version other than the target.
 const ReasonReconnectedOldVersion = "reconnected_old_version"
+
+// ReasonStillOnOldVersion is the verification code of an unconfirmed attempt
+// whose node stayed connected, on the session and version it had, past the
+// hold: the upgrade never took effect.
+const ReasonStillOnOldVersion = "still_old_version"

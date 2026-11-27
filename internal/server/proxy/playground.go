@@ -43,6 +43,9 @@ func (p *Proxy) PlaygroundHandler(box *auth.Secretbox) http.HandlerFunc {
 			caller.Source = uxrecord.SourceEvaluation
 		}
 		r.Header.Del(loadgen.BenchmarkRunHeader)
+		// The console waits rather than send a request elsewhere: a
+		// declaration from it is dropped, so no engine sees it.
+		takeBusyDeclaration(r)
 		r = r.WithContext(uxrecord.WithCaller(r.Context(), caller))
 		modelName, cleanup, err := extractModel(r, p.maxBodyBytes)
 		defer cleanup()

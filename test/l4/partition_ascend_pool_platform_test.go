@@ -167,9 +167,16 @@ func attachAscendPoolNode(t *testing.T, control *testenv.Env, candidate ascendPo
 	node := &ascendPoolNode{candidate: candidate, control: control, uuid: enrolled.Node.UUID, remoteDir: remoteDir}
 	t.Cleanup(func() { node.cleanup(t) })
 
-	agent, readErr := agentbin.Read("", "gpuworks-agent-linux-arm64")
+	var agent []byte
+	var readErr error
 	if path := os.Getenv("GPUWORKS_ASCEND_L4_AGENT"); path != "" {
 		agent, readErr = os.ReadFile(path)
+	} else {
+		agents, err := agentbin.Prepare(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		agent, readErr = agents.Read("", "gpuworks-agent-linux-arm64")
 	}
 	if readErr != nil || len(agent) < 1<<20 {
 		t.Fatalf("self-contained arm64 agent asset is missing; run make cross-agents: size=%d err=%v", len(agent), readErr)

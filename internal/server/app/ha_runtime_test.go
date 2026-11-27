@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/agentbin"
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/packages"
@@ -114,6 +115,10 @@ func newMemberApp(t *testing.T, ha haRuntime) *App {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	events := bus.New()
 	st, master, err := openCredentialStore(cfg, events, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.agents, err = agentbin.Prepare(cfg.DataDir)
 	if err != nil {
 		t.Fatal(err)
 	}

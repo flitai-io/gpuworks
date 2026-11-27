@@ -186,7 +186,7 @@ made directly to the database, bypassing the server, need to wait for cache expi
 "Accept /v1 inference requests without a token" (`inference_open_access`, off by default) under **Settings → Security**. With it on, anyone who can
 reach the inference listener can call the deployed models anonymously and consume their GPUs, so turn it on only when you really need it (a fully
 controlled intranet trial, say) and review what `listen.gateway` exposes in the same change. Do not add a "pass requests without a key" rule in a
-reverse proxy or firewall instead of this switch. For the rule and the 401 shapes see [Gateway Authentication](../reference/openai-gateway.md#authentication).
+reverse proxy or firewall instead of this switch. For the rule and the 401 shapes see [Gateway Authentication](../reference/openai-gateway.md#认证).
 
 Long requests and upgrades: a server restart or upgrade disconnects all in-flight streams, and responses that have already started are not retried; a node agent
 disconnection interrupts all streams on that node. Schedule upgrades for long-generation workloads during off-peak hours, or implement retries for interrupted streams in the caller first.

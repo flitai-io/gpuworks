@@ -47,7 +47,7 @@ func (r *saveToRig) plan(t *testing.T, source *dto.ModelSource, component templa
 	if err != nil {
 		t.Fatal(err)
 	}
-	plans, err := r.h.planComponents(source, r.model, []templateComponent{component}, saveTo, pinned, nodes)
+	plans, err := r.h.planComponents(source, r.model, []templateComponent{component}, saveTo, pinned, nodes, nil)
 	if err != nil || len(plans) != 1 {
 		t.Fatalf("planComponents = %+v, %v", plans, err)
 	}

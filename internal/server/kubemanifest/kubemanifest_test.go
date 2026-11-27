@@ -21,6 +21,7 @@ func sample() Params {
 		Token: "enroll-token", AgentImage: "registry.example/gpuworks/gpuworks-agent:v1.2.3",
 		NodeSelector: map[string]string{"nvidia.com/gpu.present": "true", "gpuworks.ai/pool": "a"},
 		Priority:     10000,
+		MountRoot:    "/mnt/gpuworks",
 	}
 }
 
@@ -223,10 +224,10 @@ func TestRenderCarriesNoVendor(t *testing.T) {
 	for _, m := range c["volumeMounts"].([]any) {
 		mounts[dig(t, m, "mountPath").(string)] = m.(map[string]any)
 	}
-	if len(mounts) != 3 || mounts["/opt/gpuworks-kube"] == nil || mounts[DevicePluginDir] == nil || mounts[PodResourcesDir] == nil {
-		t.Fatalf("mounts = %v, want only the state, device plugin and pod resources directories", mounts)
+	if len(mounts) != 4 || mounts["/opt/gpuworks-kube"] == nil || mounts[p.MountRoot] == nil || mounts[DevicePluginDir] == nil || mounts[PodResourcesDir] == nil {
+		t.Fatalf("mounts = %v, want only the state, storage mount, device plugin and pod resources directories", mounts)
 	}
-	if len(spec["volumes"].([]any)) != 3 {
+	if len(spec["volumes"].([]any)) != 4 {
 		t.Fatalf("volumes = %v", spec["volumes"])
 	}
 }
@@ -534,5 +535,55 @@ func TestRemoveCommandsNameTheManifestsClusterWideObjects(t *testing.T) {
 	}
 	if q := quoteShell("a b'c"); q != `'a b'\''c'` {
 		t.Fatalf("quote: %s", q)
+	}
+}
+
+// agentVolumes are the agent container's mounts by name, with the host
+// directory each comes from.
+func agentVolumes(t *testing.T, p Params) map[string][3]string {
+	t.Helper()
+	out, err := Render(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][3]string{}
+	for _, d := range docs(t, out) {
+		if d["kind"] != "DaemonSet" {
+			continue
+		}
+		spec := dig(t, d, "spec", "template", "spec")
+		host := map[string]string{}
+		for _, v := range dig(t, spec, "volumes").([]any) {
+			host[dig(t, v, "name").(string)] = dig(t, v, "hostPath", "path").(string)
+		}
+		for _, m := range dig(t, spec, "containers", 0, "volumeMounts").([]any) {
+			mm := m.(map[string]any)
+			propagation, _ := mm["mountPropagation"].(string)
+			name := mm["name"].(string)
+			got[name] = [3]string{mm["mountPath"].(string), host[name], propagation}
+		}
+	}
+	return got
+}
+
+// The agent creates a storage's mount point in its own file tree and mounts
+// on the node: the two meet only in a directory mounted from the node at the
+// same path, with propagation both ways.
+func TestAgentSharesTheStorageMountRootWithItsNode(t *testing.T) {
+	got := agentVolumes(t, sample())["storage-mounts"]
+	if want := [3]string{"/mnt/gpuworks", "/mnt/gpuworks", "Bidirectional"}; got != want {
+		t.Fatalf("storage-mounts = %v, want %v", got, want)
+	}
+	for name, p := range map[string]Params{
+		"no mount root":               {MountRoot: ""},
+		"mount root inside the state": {MountRoot: "/opt/gpuworks/mounts"},
+		"mount root is the state":     {MountRoot: "/srv/gw", StateDir: "/srv/gw"},
+		"state inside the mount root": {MountRoot: "/mnt/gpuworks", StateDir: "/mnt/gpuworks/state"},
+	} {
+		q := sample()
+		q.MountRoot, q.StateDir = p.MountRoot, p.StateDir
+		if v, ok := agentVolumes(t, q)["storage-mounts"]; ok {
+			t.Errorf("%s: rendered a second volume %v", name, v)
+		}
 	}
 }

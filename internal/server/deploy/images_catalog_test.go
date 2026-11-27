@@ -148,3 +148,35 @@ func TestResolveImageCatalogSelectsPreviouslyImportedVendorEngine(t *testing.T) 
 		t.Fatal("SGLang vendor build offered for a vLLM deployment")
 	}
 }
+
+func TestManualReleaseIsOnlySelectedByOverride(t *testing.T) {
+	target := ImageTarget{Engine: "vllm", Vendor: "nvidia", Framework: "cuda", FrameworkVersion: "13.0", PlatformArch: "amd64"}
+	manual := ImageCandidate{Engine: "vllm", EngineVersion: "0.34.0", Framework: "cuda", FrameworkVersion: "13.0", Arch: "amd64", ImageRef: "registry.example/runner:cuda13.0-vllm0.34.0-r1", Source: "official", Enabled: true, AutoSelect: "manual"}
+	if got := ResolveImageCatalog(target, []ImageCandidate{manual}); got.Image == manual.ImageRef {
+		t.Fatal("auto-selected the manual release")
+	}
+	target.Override = manual.ImageRef
+	if got := ResolveImageCatalog(target, []ImageCandidate{manual}); got.Blocking || got.Image != manual.ImageRef {
+		t.Fatalf("override=%+v", got)
+	}
+}
+
+func TestPartialMultiArchitectureWinner(t *testing.T) {
+	multi := ImageCandidate{Engine: "vllm", Framework: "cuda", FrameworkVersion: "13.0", Arch: "multi", Enabled: true, ImageRef: "gpuworks/gpuworks-runner:cuda13.0-vllm0.34-r2", AutoSelect: "arm64"}
+	single := multi
+	single.AutoSelect = ""
+	single.Arch = "amd64"
+	single.ImageRef = "gpuworks/gpuworks-runner:cuda13.0-vllm0.34-r10"
+	for arch, want := range map[string]string{"amd64": single.ImageRef, "arm64": multi.ImageRef} {
+		target := ImageTarget{Engine: "vllm", PlatformArch: arch}
+		got := ResolveImageCatalog(target, []ImageCandidate{multi, single})
+		if got.Image != want || !ImageCandidateSelectable(target, multi) {
+			t.Errorf("%s: %+v", arch, got)
+		}
+		target.Override = multi.ImageRef
+		target.TrustedOverride = true
+		if pinned := ResolveImageCatalog(target, []ImageCandidate{multi, single}); pinned.Image != multi.ImageRef || pinned.Blocking {
+			t.Errorf("explicit template on %s: %+v", arch, pinned)
+		}
+	}
+}

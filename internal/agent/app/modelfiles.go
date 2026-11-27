@@ -190,6 +190,22 @@ func (n *NodeRuntime) reconcileModelFileTask(ctx context.Context, mf proto.Model
 				Acquisition: proto.ModelAcquireRegistered,
 				Message:     "registered model path is absent: " + err.Error(),
 			})
+		} else if trustedAtomicPeer && os.IsNotExist(err) && modelscan.MissingDirectory(nil, absTarget) {
+			// A receiver installs the directory before it leaves modelSyncs,
+			// so seeing no receiver under one hold cannot be a transfer that
+			// is about to report the copy present.
+			n.syncMu.Lock()
+			receiving := n.modelSyncs[mf.Key] != nil
+			n.syncMu.Unlock()
+			// The server takes this back only from a row it holds as ready
+			// (store.UpdateModelFileStatus): a copy it recorded and this
+			// node no longer has.
+			if !receiving {
+				n.reportModelFile(proto.ModelFileStatus{
+					Key: mf.Key, State: proto.MFAbsent, Path: absTarget,
+					Acquisition: proto.ModelAcquirePeer, TransferID: mf.TransferID,
+				})
+			}
 		}
 	}
 }

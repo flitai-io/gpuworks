@@ -142,8 +142,9 @@ func (p *Proxy) decidePriority(w http.ResponseWriter, r *http.Request) (*http.Re
 	return r.WithContext(context.WithValue(r.Context(), priorityDecisionKey{}, decision)), true
 }
 
-// applyRequestPriority says the request's class in the answer's header and
-// writes the engine's priority field: the class's value, in the engine's
+// applyRequestPriority says the request's class in the answer's header, and
+// in another whether the engine schedules by it, and writes the engine's
+// priority field: the class's value, in the engine's
 // direction, when the target instance runs priority scheduling and the path
 // generates, and the neutral 0 otherwise (only rewriting a body that names
 // the field; named says whether it does). It writes the error itself when it
@@ -157,11 +158,16 @@ func (p *Proxy) applyRequestPriority(w http.ResponseWriter, r *http.Request, dep
 	w.Header().Set(priorityClassHeader, decision.Class.Name)
 	r = r.WithContext(context.WithValue(r.Context(), priorityClassKey{}, decision.Class.Name))
 	r.Header.Del(priorityHeader)
-	value := 0
-	if dep := p.routedDeployment(deploymentID); dep != nil && tgt.upstreamPath == "" && p.instanceRunsPriority(tgt.instanceUUID) {
-		if v, engineHas := deploy.PriorityFieldValue(dep.Engine, decision.Class.Value); engineHas {
-			value = v
-		}
+	value, scheduled := 0, false
+	if dep := p.routedDeployment(deploymentID); dep != nil && tgt.upstreamPath == "" && p.targetRunsPriority(tgt) {
+		value, scheduled = deploy.PriorityFieldValue(dep.Engine, decision.Class.Value)
+	}
+	// On only when the engine gets the class: a body the gateway does not
+	// own (a multipart upload) is sent as it came.
+	if scheduled && owned {
+		w.Header().Set(priorityScheduling, "on")
+	} else {
+		w.Header().Set(priorityScheduling, "off")
 	}
 	if !owned || (value == 0 && !named) {
 		return r, func() {}, true
@@ -229,6 +235,24 @@ func (p *Proxy) instanceRunsPriority(instanceUUID string) bool {
 	}
 	snap := p.routes.current.Load()
 	return snap != nil && snap.prioritized[instanceUUID]
+}
+
+// targetRunsPriority reports whether the replica tgt leased runs priority
+// scheduling, as its candidate was read: the same fact the busy judgement
+// counted its leases by (hasRoom), and that a resend keeps
+// (retryTransport.pickNext). A target leased no other way is looked up in
+// the route snapshot.
+func (p *Proxy) targetRunsPriority(tgt target) bool {
+	if tgt.lease != nil {
+		return tgt.lease.c.prioritized
+	}
+	return p.instanceRunsPriority(tgt.instanceUUID)
+}
+
+// runsPriority reports whether in, an instance of dep, was launched with the
+// engine's priority scheduling for a deployment that asks for it.
+func runsPriority(dep *store.Deployment, in *store.Instance) bool {
+	return dep.PriorityScheduling && deploy.SpecRunsPriority(in.DesiredStateJSON)
 }
 
 type priorityClassKey struct{}

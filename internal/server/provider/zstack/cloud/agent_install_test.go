@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/provider/zstack/cloud/inventory"
 	"gpuworks.ai/gpuworks/internal/server/provision"
@@ -30,7 +32,8 @@ func (i *cloudHostInstaller) InstallSSH(_ context.Context, req provision.SSHInst
 	return provision.SSHInstallReport{Checks: []provision.CheckResult{{ID: "agent_process", Status: "pass", Message: "systemd"}}}, nil
 }
 
-func TestInstallAgentOnHostWithoutGPUs(t *testing.T) {
+func agentInstallCloudServer(t *testing.T, status string) *httptest.Server {
+	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || !validTestAccessKey(r) {
 			t.Errorf("unexpected Cloud mutation or missing authorization: %s %s", r.Method, r.URL)
@@ -39,7 +42,7 @@ func TestInstallAgentOnHostWithoutGPUs(t *testing.T) {
 		}
 		switch r.URL.Path {
 		case "/v1/hosts":
-			_, _ = w.Write([]byte(`{"inventories":[{"uuid":"host-empty","managementIp":"192.0.2.11","hypervisorType":"KVM","state":"Enabled","status":"Connected"}]}`))
+			_, _ = fmt.Fprintf(w, `{"inventories":[{"uuid":"host-empty","name":"compute-1","managementIp":"192.0.2.11","hypervisorType":"KVM","state":"Enabled","status":%q}]}`, status)
 		case "/v1/gpu-device/gpu-devices":
 			_, _ = w.Write([]byte(`{"inventories":[]}`))
 		case "/v1/resource-configurations/host-empty/kvm/reservedMemory":
@@ -51,7 +54,37 @@ func TestInstallAgentOnHostWithoutGPUs(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	}))
-	defer server.Close()
+	t.Cleanup(server.Close)
+	return server
+}
+
+func TestInstallAgentRejectsDisconnectedCloudHostBeforeSSH(t *testing.T) {
+	server := agentInstallCloudServer(t, "Disconnected")
+	st, err := store.Open(":memory:", bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	installer := &cloudHostInstaller{}
+	driver := &Driver{store: st, installer: installer}
+	_, err = driver.InstallAgentWithReport(t.Context(), provider.Credentials{
+		Endpoint: server.URL, PublicKey: "test-access-key", PrivateKey: "test-access-secret",
+	}, provider.InstallRequest{Instance: provider.Instance{ExternalID: "host-empty"}, Password: "pw"})
+	var reason *messages.ProductError
+	if !errors.As(err, &reason) || reason.Code() != messages.ErrorZStackAgentHostNotConnected {
+		t.Fatalf("install error = %v, want a host connection status error", err)
+	}
+	params := reason.Params()
+	if params["host"] != "compute-1" || params["address"] != "192.0.2.11" || params["status"] != "Disconnected" {
+		t.Fatalf("unexpected host connection details: %v", params)
+	}
+	if installer.request != nil {
+		t.Fatal("attempted SSH installation on a disconnected host")
+	}
+}
+
+func TestInstallAgentOnHostWithoutGPUs(t *testing.T) {
+	server := agentInstallCloudServer(t, "Connected")
 	for _, tc := range []struct {
 		name      string
 		err       error

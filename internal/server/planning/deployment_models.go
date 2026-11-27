@@ -8,16 +8,17 @@ import (
 
 // DeploymentModelIDs is the common dependency set for admission, launch and
 // preparation display: the deployment's own model, every other rank's model
-// when its weights are rank-scoped, each template component's, then each
-// model an extra mount row names. Component and rank bindings are immutable
-// model IDs.
+// when its weights are rank-scoped, each template component's (every rank's
+// artifact of a rank-scoped component), then each model an extra mount row
+// names. Component and rank bindings are immutable model IDs.
 func DeploymentModelIDs(dep *store.Deployment) ([]uint, error) {
 	return deploymentModelIDs(dep, -1)
 }
 
 // RankModelIDs is what one rank of the deployment reads: the model its
 // primary mount takes first (the deployment's own, or the rank's own artifact
-// for rank-scoped weights, ADR 0076), then the models every rank shares.
+// for rank-scoped weights, ADR 0076), then each component's (the rank's own
+// artifact of a rank-scoped component) and the extra mounts.
 func RankModelIDs(dep *store.Deployment, rank int) ([]uint, error) {
 	return deploymentModelIDs(dep, max(rank, 0))
 }
@@ -52,7 +53,24 @@ func deploymentModelIDs(dep *store.Deployment, rank int) ([]uint, error) {
 		if component.StoreModelID == 0 {
 			return nil, fmt.Errorf("deployment %d component %s has no immutable model binding", dep.ID, component.Name)
 		}
-		add(component.StoreModelID)
+		if !component.RankScoped() {
+			add(component.StoreModelID)
+			continue
+		}
+		if rank >= 0 {
+			id, ok := component.RankModelID(rank)
+			if !ok {
+				return nil, fmt.Errorf("deployment %d component %s binds no model for rank %d", dep.ID, component.Name, rank)
+			}
+			add(id)
+			continue
+		}
+		for _, weight := range component.RankWeights {
+			if weight.StoreModelID == 0 {
+				return nil, fmt.Errorf("deployment %d component %s rank %d has no immutable model binding", dep.ID, component.Name, weight.Rank)
+			}
+			add(weight.StoreModelID)
+		}
 	}
 	for _, id := range LaunchSourceFromDeployment(dep).Overrides.ModelMountIDs() {
 		add(id)
@@ -61,7 +79,7 @@ func deploymentModelIDs(dep *store.Deployment, rank int) ([]uint, error) {
 }
 
 // NodeModelIDs returns what each node reads of the deployment: its rank's
-// models when the weights are rank-scoped and the deployment places the node
+// models when its weights or a component's are rank-scoped and the deployment places the node
 // at one rank (nodeRanks), every rank's otherwise. The snapshot is decoded
 // once, however many nodes are asked about.
 func NodeModelIDs(dep *store.Deployment) (func(*store.Node) []uint, error) {
@@ -73,13 +91,13 @@ func NodeModelIDs(dep *store.Deployment) (func(*store.Node) []uint, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !layer.RankScoped() {
+	if !layer.ReadsByRank() {
 		return func(*store.Node) []uint { return all }, nil
 	}
 	byUUID, byID := nodeRanks(dep)
 	perRank := map[int][]uint{}
-	for _, weight := range layer.RankWeights {
-		if perRank[weight.Rank], err = RankModelIDs(dep, weight.Rank); err != nil {
+	for _, rank := range layer.BoundRanks() {
+		if perRank[rank], err = RankModelIDs(dep, rank); err != nil {
 			return nil, err
 		}
 	}

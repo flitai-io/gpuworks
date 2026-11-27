@@ -41,8 +41,10 @@ Deleting one row deleted the directory shared by everyone; two nodes downloading
 7. **When multiple gpuworks installations share storage, write heartbeats and warn on deletion.** Each control plane writes a heartbeat to `<root>/.gpuworks/control-planes/<control-plane-id>.json`.
    Freshness is determined by the NFS server's file modification time. Deleting shared model files requires an explicit force option when another control plane is found to be using them. Heartbeats are warnings, not locks.
 8. **Every agent call that touches shared storage has a time limit.** A hung hard NFS mount must not block status reporting: health checks, status snapshots, and RPCs use time-limited calls,
-   reporting `unresponsive` on timeout. Before creating a container, run a time-limited `stat` on the model path; if it does not exist, fail with `MODEL_PATH_UNAVAILABLE`
-   to prevent docker from creating an empty directory for a missing mount source.
+   reporting `unresponsive` on timeout. Before creating a container, run a time-limited `stat` on the model path, so docker never creates an empty directory for a missing mount source.
+   A directory that does not exist, with the nearest directory above it not empty, fails the start with `MODEL_PATH_MISSING`, and the platform takes back its record of that copy
+   (only a copy on the node's own disk, and only while the node reports that storage ready; a shared storage's record is never taken back on one node's word).
+   One that does not answer, or is not a directory, fails it with `MODEL_PATH_UNAVAILABLE`. The empty mount point a dropped mount leaves behind does not count as the files being gone.
 
 ## Consequences
 
@@ -66,5 +68,5 @@ Deleting one row deleted the directory shared by everyone; two nodes downloading
 
 <!-- translation-source-sha256: a8656648b2fd6b7842c14203810a2474e16979c37cbea48b9410780a99a865f6 # ADR 0034: Model Files Belong to Storage, With One Row for Model Files on Shared Storage -->
 <!-- translation-source-sha256: 1c102df9476f932dac85e948a07fc96a4d03431ad8e80f6d76b2dd66e7d7b8a6 ## Context -->
-<!-- translation-source-sha256: d009c907e3229b4d031af7424656b389beed143bd2871b33509883b38d488e65 ## Decision -->
+<!-- translation-source-sha256: 1cd7378e75416590e15acf5c0b220c54706a6e21c17968c51baf8127a389807d ## Decision -->
 <!-- translation-source-sha256: 8bca6e67c02ab67e84c004c79009ddd8ff197ff9f0b3d89e00ba12f98fe51907 ## Consequences -->

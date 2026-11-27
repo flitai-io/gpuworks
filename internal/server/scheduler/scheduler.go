@@ -38,6 +38,11 @@ type GPU struct {
 	// using — one reason it is not Schedulable that is not a fault, and
 	// that the refusal names so an operator looks at the right thing.
 	HeldOutsidePlatform bool
+	// HeldByHolder marks a card an extension holds out of scheduling
+	// (store.GPU.HeldByHolder): it is not Schedulable nor ForeignShareable,
+	// so it takes no work whatever the request consents to, and the
+	// refusal names the hold (ReasonGPUsHeld) rather than a fault.
+	HeldByHolder bool
 	// Degraded marks a healthy GPU the agent flagged at warning level (a memory
 	// repair waiting for a reset, a vendor-tool warning): it may be placed on,
 	// but only when the fully healthy GPUs cannot take the request.
@@ -277,7 +282,6 @@ const (
 	ReasonRuntimeUnavailable                 = "runtime_unavailable"
 	ReasonRuntimeUnsupported                 = "runtime_unsupported"
 	ReasonLaunchFeaturesUnknown              = "launch_features_unknown"
-	ReasonDGPUStartupMemory                  = "dgpu_startup_memory"
 	ReasonRuntimeUnreported                  = "runtime_unreported"
 	ReasonAcceleratorFeatureUnsupported      = "accelerator_feature_unsupported"
 	ReasonAcceleratorDeviceSelectionRequired = "accelerator_device_selection_required"
@@ -321,6 +325,11 @@ const (
 	// outside the platform, and no operator enabled scheduling on them or
 	// chose them for this deployment.
 	ReasonHeldOutsidePlatformNotAllowed = "held_outside_platform_not_allowed"
+	// ReasonGPUsHeld: the cards that could take the request ({gpus},
+	// {count} on {node}) are held out of scheduling by an extension, which
+	// an operator cannot lift; each card's own view says why
+	// (store.Store.CardHoldOf).
+	ReasonGPUsHeld = "gpus_held"
 	// ReasonForeignSharedGPUsUsed: the chosen group includes cards shared
 	// with processes outside the platform ({gpus}, {count}, up to
 	// {foreign_gib}) because no card free of them could take the request.
@@ -381,6 +390,8 @@ const (
 	// {idle_sec} or, taking turns, at the end of {max_serve_sec}); the
 	// residency arbiter puts them to sleep by those terms.
 	ReasonWaitingForYield = "waiting_for_yield"
+	// ReasonDGPUStartupMemory remains a wire code for persisted scheduling history.
+	ReasonDGPUStartupMemory = "dgpu_startup_memory"
 	// ReasonReservedForSleepers: the replica would fit on {node}'s cards
 	// {gpus} but deployments asleep there ({sleepers}: each one's {deployment}
 	// and yield {policy}) keep them for a request's wake, and the replica's

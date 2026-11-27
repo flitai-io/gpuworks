@@ -62,7 +62,7 @@ func declaredLegacyRunnerTags(t *testing.T) map[string]bool {
 		Published []struct {
 			Tag          string `yaml:"tag"`
 			LegacyReason string `yaml:"legacy_reason"`
-		} `yaml:"published"`
+		} `yaml:"legacy_tags"`
 	}
 	if err := yaml.Unmarshal(raw, &matrix); err != nil {
 		t.Fatal(err)

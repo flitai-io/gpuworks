@@ -39,6 +39,7 @@ func Candidates(st *store.Store) ([]deploy.ImageCandidate, error) {
 			Deprecated:       row.Deprecated,
 			Enabled:          row.Enabled && seriesEnabled,
 			RollingTag:       row.RollingTag,
+			AutoSelect:       row.AutoSelect,
 			CreatedAt:        row.CreatedAt,
 		})
 	}

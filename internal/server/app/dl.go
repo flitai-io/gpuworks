@@ -6,14 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"gpuworks.ai/gpuworks/internal/server/agentbin"
 	"gpuworks.ai/gpuworks/internal/server/offlinepkg"
 )
 
 // withDL serves embedded (or override-dir) agent binaries and the offline
 // package built from them at /dl/ in front of the SPA handler.
-func withDL(dir string, offline http.Handler, next http.Handler, pinned ...func(string) ([]byte, bool, error)) http.Handler {
-	dl := agentbin.Handler(dir)
+func withDL(dl, offline, next http.Handler, pinned ...func(string) ([]byte, bool, error)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if offlinepkg.Handles(r.URL.Path) {
 			offline.ServeHTTP(w, r)

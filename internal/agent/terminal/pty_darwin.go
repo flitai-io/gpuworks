@@ -84,11 +84,17 @@ func processTree(root int) []procIdentity {
 	return result
 }
 
+// ttyRef names a session's pty slave by path.
+type ttyRef string
+
+func ttyRefOf(slave *os.File) ttyRef { return ttyRef(slave.Name()) }
+
 // processesUsingTTY finds processes whose controlling terminal is the slave at
 // path. macOS has no per-process fd table to read without libproc, so the
 // controlling terminal stands in for "holds the slave on stdio"; a process that
 // detached from it is still caught by processTree.
-func processesUsingTTY(path string) []procIdentity {
+func processesUsingTTY(ref ttyRef) []procIdentity {
+	path := string(ref)
 	if path == "" {
 		return nil
 	}

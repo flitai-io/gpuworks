@@ -123,6 +123,18 @@ export interface TemplateWeightModels {
   sources: Array<WeightSource & { reuse_model_id?: number }>;
 }
 
+/** GET /inference-templates/weight-source-probe: the server's answer on registering and deploying from one declared source. */
+export interface WeightSourceProbe {
+  /** The source served the repository, or its files are already in place. */
+  proceed: boolean;
+  /** A registered model of this source has its files in place; the site was not asked. */
+  present?: boolean;
+  /** The address that served the repository. */
+  host?: string;
+  /** Why proceed is false. */
+  reason?: ProductMessage;
+}
+
 /** One page of GET /models?page=…, with the summary of every model. */
 export interface ModelPage extends ListPage<ModelListItem> {
   summary: { registered: number; ready_files: number; sources: number; weight_gib: number };

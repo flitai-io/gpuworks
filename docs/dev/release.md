@@ -85,7 +85,9 @@ MR 和 nightly 不生成 PDF，MR 仍运行文档站构建及相关检查。重�
   只有匹配 `^v[0-9]+\.[0-9]+\.[0-9]+$` 的 tag 会创建 pipeline 并发布到 `release` 渠道；`v26.11.0-rc.1` 这类 tag 不创建 pipeline。
 - `v*` 必须在 GitLab 里设为 protected tag：签名私钥和发布源凭据是受保护变量，不受保护的 tag 的 pipeline 读不到它们，发布 job 会失败。
 - tag 推送后不移动、不重打：一个 release id 只对应一份字节（见下文发布流程第 1 步），有问题就发下一个补丁版本。
-- server 判断有没有更新时，两边都是版本 tag 就按版本号比较，否则（nightly 的短提交号、本地构建）按构建时间比较
+- server 判断有没有更新时，两边都是版本 tag 就按版本号比较，否则（nightly 的短提交号、本地构建）按构建时间比较；
+  构建时间晚于渠道最新版本、却不在渠道版本清单里的同渠道构建（分支构建）不参与比较，控制台不把它显示成已是最新
+  （控制台的版本选择还会标出数据库结构比本机旧的渠道版本）。CLI `gpuworks upgrade` 仍只按构建时间比较，所以从分支构建走 CLI 时渠道版本会被当成更旧，需要 `--force` 才安装。
   （[ADR 0040](../adr/0040-signed-multi-source-distribution.md)）。`release` 渠道只跟随最新一条发布线：渠道已经指向更高版本时
   （例如 `v26.12.0` 发布之后再推 `v26.11.2`），`publish_dist.sh` 拒绝发布。
 
@@ -107,7 +109,7 @@ server 版本、系统镜像目录与内置推理模板目录通过同一个发�
 |---|---|
 | `<channel>/index.json` | ed25519 签名信封，即带签名的发布索引；正文列出 server 各平台压缩包、镜像目录与推理模板目录包，每个文件带路径、大小与 sha256 |
 | `<channel>/latest` | release id 纯文本，供首次下载定位版本 |
-| `<channel>/manifest.json` | 与该渠道索引里的镜像目录是同一文件，固定地址，供离线环境手工下载后上传 |
+| `<channel>/manifest.json` | schema 3 离线目录，匹配签名索引中的 `image_catalog`。新版 server 使用 `image_catalog_v4.path` |
 | `releases/<release_id>/` | server 压缩包与 `SHA256SUMS` |
 | `catalog/images/<sha256>.json` | 按内容摘要标识的镜像目录 |
 | `catalog/templates/<sha256>.tar.gz` | 按内容摘要标识的推理模板目录包 |
@@ -115,7 +117,12 @@ server 版本、系统镜像目录与内置推理模板目录通过同一个发�
 
 渠道 `nightly` 是每次 master 构建，release id 是短提交号；`release` 是每个版本 tag，release id 就是 tag（见[版本号](#版本号)）。
 二进制跟随构建时注入的渠道（`make CHANNEL=…`，默认 `nightly`；`scripts/package_release.sh` 读 `GPUWORKS_RELEASE_CHANNEL`，
-`release` 渠道只接受 `vYY.M.PATCH` 形式的 release id）。
+`release` 渠道的 release id 是 `vYY.M.PATCH`，或下面发布分支构建的短提交号）。
+
+发布分支 `release/YY.M` 的每次推送也跑核心门禁和四个构建 job，供开发测试下载这条线尚未打 tag 的修复。
+这些构建的 release id 是短提交号，二进制渠道为 `release`：装上它的 server 把这条线之后发布的 tag 当作更新，
+而不是 master 的 nightly，设置页把它标成开发测试版。它们只是 CI 产物，`release-publish` 不在发布分支上运行，
+`publish_dist.sh` 也拒绝把非 `vYY.M.PATCH` 的 release id 发布到 `release` 渠道，所以正式版用户的更新检查看不到它们。
 
 CI 的 `release-publish` 在 master 或版本 tag 的四个构建 job 全部成功后运行 `scripts/publish_dist.sh <渠道> dist`。
 它位于独立的 `publish` 阶段，因为 GitLab 14.0 的 needs 只能指向更早阶段的 job；
@@ -233,10 +240,6 @@ server 启动会执行版本化迁移；发布前必须验证 migration marker�
 内置推理目录是内容寻址包，即以内容摘要标识包；发布构建应对包做同一套 schema、路径和摘要校验。系统镜像目录
 由 `make image-manifest` 从 gpuworks-runner 构建矩阵生成内嵌种子，随每次发布进入[发布通道](#发布通道)，见
 [CLI 参考](../reference/cli.md#gpuworks-image-manifest)；内嵌种子与矩阵不一致时单测失败。
-
-SWR 新标签进入系统目录时，在 `build/runner-images/matrix.yaml` 的 `published` 中登记准确 tag、平台和引擎版本，运行 `make image-manifest`，再按对应通道的流程发布。已登记但尚未保证不可变的标签仅供手选，含有 r1、r2 等字样的库存标签也遵循此规则。新版服务端首次导入时默认关闭这些条目；旧版 schema 3 服务端可读取同一份目录，开关初始为开启，自动选镜像仍会跳过这些标签。
-
-新版「检查更新」会保留冲突的本地自定义或社区条目，并列出跳过的名称，其余条目照常更新。手工上传目录时仍会在遇到冲突后整批拒绝。旧版如果曾以自定义镜像添加同一完整地址，先升级服务端再检查更新，即可保留已有部署引用。
 
 ## 升级与回滚
 

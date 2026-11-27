@@ -1,15 +1,11 @@
-// Package agentbin embeds the cross-compiled agent binaries so the single server
-// binary can serve them at /dl/ for the curl|sh install flow (no separate
-// download host). The Makefile cross-compiles the agents and stores each in
-// dl/ zstd-compressed (<name>.zst): three agents are most of the server's
-// size, and a release archive's gzip shrinks them less than zstd does. A
-// plain <name> in dl/ (a test's own build) is served as it is. A .gitkeep keeps
-// the dir present so go:embed always compiles.
+// Package agentbin prepares the agents embedded in a server build and serves
+// complete binaries, with optional operator overrides in the data directory.
 package agentbin
 
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"io"
 	"io/fs"
 	"net/http"
@@ -24,8 +20,10 @@ import (
 //go:embed all:dl
 var embedded embed.FS
 
-// binaries is what the handlers read: the embedded tree, which tests replace.
-var binaries fs.FS = embedded
+// Files is the agent source for one server instance.
+type Files struct{ tree fs.FS }
+
+var bundled = Files{embedded}
 
 // compressedSuffix marks an embedded agent stored zstd-compressed.
 const compressedSuffix = ".zst"
@@ -33,7 +31,7 @@ const compressedSuffix = ".zst"
 // Handler serves agent binaries at /dl/<name>. It prefers a real file in
 // overrideDir (dev/manual placement); otherwise it serves the embedded copy,
 // expanding a compressed one as it streams.
-func Handler(overrideDir string) http.Handler {
+func (f Files) Handler(overrideDir string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(r.URL.Path, "/dl/")
 		if !validName(name) {
@@ -41,8 +39,8 @@ func Handler(overrideDir string) http.Handler {
 			return
 		}
 		// Override dir wins (lets ops swap in a patched agent without rebuilding).
-		if overrideDir != "" {
-			if f, err := os.Open(filepath.Join(overrideDir, name)); err == nil {
+		if dir := f.overrideDir(overrideDir, name); dir != "" {
+			if f, err := os.Open(filepath.Join(dir, name)); err == nil {
 				defer f.Close()
 				if st, err := f.Stat(); err == nil && !st.IsDir() {
 					w.Header().Set("Content-Type", "application/octet-stream")
@@ -52,12 +50,20 @@ func Handler(overrideDir string) http.Handler {
 			}
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
-		if raw, err := fs.ReadFile(binaries, "dl/"+name); err == nil {
-			w.Header().Set("Content-Length", strconv.Itoa(len(raw)))
-			_, _ = w.Write(raw)
+		if file, err := f.tree.Open("dl/" + name); err == nil {
+			defer file.Close()
+			if st, err := file.Stat(); err == nil && st.Mode().IsRegular() {
+				w.Header().Set("Content-Length", strconv.FormatInt(st.Size(), 10))
+				_, _ = io.Copy(w, file)
+			} else {
+				http.NotFound(w, r)
+			}
+			return
+		} else if errors.Is(err, errAgentUnavailable) {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return
 		}
-		compressed, err := fs.ReadFile(binaries, "dl/"+name+compressedSuffix)
+		compressed, err := fs.ReadFile(f.tree, "dl/"+name+compressedSuffix)
 		if err != nil {
 			http.NotFound(w, r)
 			return
@@ -76,20 +82,22 @@ func Handler(overrideDir string) http.Handler {
 }
 
 // Read returns an agent binary by name, preferring overrideDir over embedded data.
-func Read(overrideDir, name string) ([]byte, error) {
+func (f Files) Read(overrideDir, name string) ([]byte, error) {
 	if !validName(name) {
 		return nil, fs.ErrNotExist
 	}
-	if overrideDir != "" {
-		path := filepath.Join(overrideDir, name)
+	if dir := f.overrideDir(overrideDir, name); dir != "" {
+		path := filepath.Join(dir, name)
 		if st, err := os.Stat(path); err == nil && !st.IsDir() {
 			return os.ReadFile(path)
 		}
 	}
-	if raw, err := fs.ReadFile(binaries, "dl/"+name); err == nil {
+	if raw, err := fs.ReadFile(f.tree, "dl/"+name); err == nil {
 		return raw, nil
+	} else if errors.Is(err, errAgentUnavailable) {
+		return nil, err
 	}
-	compressed, err := fs.ReadFile(binaries, "dl/"+name+compressedSuffix)
+	compressed, err := fs.ReadFile(f.tree, "dl/"+name+compressedSuffix)
 	if err != nil {
 		return nil, err
 	}
@@ -103,12 +111,12 @@ func Read(overrideDir, name string) ([]byte, error) {
 
 // Has reports whether an embedded agent binary exists (a real build vs the
 // placeholder-only tree).
-func Has(name string) bool {
+func (f Files) Has(name string) bool {
 	if !validName(name) {
 		return false
 	}
 	for _, path := range []string{"dl/" + name, "dl/" + name + compressedSuffix} {
-		if _, err := fs.Stat(binaries, path); err == nil {
+		if info, err := fs.Stat(f.tree, path); err == nil && info.Mode().IsRegular() {
 			return true
 		}
 	}

@@ -39,6 +39,15 @@ type fakeHost struct {
 
 	mountHook func(ctx context.Context) // runs before mount decides; used to block
 
+	// root, when set, is the node's root directory: the commands run in the
+	// node's mount namespace and resolve paths under it, as `nsenter -t 1 -m`
+	// does for an agent in a pod. ownInfoPath is then the agent's own mount
+	// table, which gets the node's mounts under the directories in shared
+	// only (the volumes a pod mounts from its node with propagation).
+	root        string
+	ownInfoPath string
+	shared      []string
+
 	// forceFail makes "umount -f -l <path>" fail with this output; forced
 	// runs after a forced unmount took the mount off, as the kernel failing
 	// the calls blocked on it would.
@@ -67,9 +76,13 @@ func (h *fakeHost) escape(s string) string {
 }
 
 func (h *fakeHost) writeInfo() {
-	var b strings.Builder
+	var b, own strings.Builder
 	b.WriteString("22 1 8:1 / / rw,relatime shared:1 - ext4 /dev/sda1 rw,errors=remount-ro\n")
 	b.WriteString("23 22 0:21 / /proc rw,nosuid,nodev,noexec,relatime shared:12 - proc proc rw\n")
+	own.WriteString("900 800 0:99 / / rw,relatime - overlay overlay rw\n")
+	if h.ownInfoPath != "" {
+		defer func() { h.replaceInfo(h.ownInfoPath, own.String()) }()
+	}
 	for i, m := range h.mounts {
 		exp := h.exports[m.export]
 		vers := exp.vers
@@ -84,18 +97,38 @@ func (h *fakeHost) writeInfo() {
 		if fstype == "" {
 			fstype = "nfs4"
 		}
-		fmt.Fprintf(&b, "%d 22 0:%d / %s %s,noatime shared:%d - %s %s %s,vers=%s,rsize=1048576,proto=tcp\n",
+		line := fmt.Sprintf("%d 22 0:%d / %s %s,noatime shared:%d - %s %s %s,vers=%s,rsize=1048576,proto=tcp\n",
 			100+i, 50+i, h.escape(m.path), mode, 200+i, fstype, m.export, mode, vers)
+		b.WriteString(line)
+		if h.reaches(m.path) {
+			own.WriteString(line)
+		}
 	}
-	// The kernel never shows a reader half a table: replace the file in one
-	// step, so a read that races a mount sees the table before or after it.
-	tmp := h.infoPath + ".next"
-	if err := os.WriteFile(tmp, []byte(b.String()), 0o644); err != nil {
+	h.replaceInfo(h.infoPath, b.String())
+}
+
+// replaceInfo replaces a mount table in one step: the kernel never shows a
+// reader half a table, so a read that races a mount sees the table before
+// or after it.
+func (h *fakeHost) replaceInfo(path, table string) {
+	tmp := path + ".next"
+	if err := os.WriteFile(tmp, []byte(table), 0o644); err != nil {
 		h.t.Fatal(err)
 	}
-	if err := os.Rename(tmp, h.infoPath); err != nil {
+	if err := os.Rename(tmp, path); err != nil {
 		h.t.Fatal(err)
 	}
+}
+
+// reaches reports whether a mount the node makes on path shows up in the
+// agent's namespace.
+func (h *fakeHost) reaches(path string) bool {
+	for _, dir := range h.shared {
+		if strings.HasPrefix(path, dir+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // addForeign registers a mount that this agent did not create.
@@ -193,7 +226,7 @@ func (h *fakeHost) mount(args []string) ([]byte, error) {
 	if strings.ContainsAny(opts, " ;$`") {
 		return []byte("mount.nfs: an incorrect mount option was specified\n"), exitErr{32}
 	}
-	if st, err := os.Stat(path); err != nil || !st.IsDir() {
+	if st, err := os.Stat(h.root + path); err != nil || !st.IsDir() {
 		return []byte(fmt.Sprintf("mount.nfs: mount point %s does not exist\n", path)), exitErr{32}
 	}
 	h.mu.Lock()
@@ -213,7 +246,7 @@ func (h *fakeHost) mount(args []string) ([]byte, error) {
 	}
 	if exp.readOnly {
 		// Writes to a read-only tree fail; model that by occupying the probe directory name with a file.
-		if err := os.WriteFile(filepath.Join(path, MetaDirName), nil, 0o444); err != nil {
+		if err := os.WriteFile(filepath.Join(h.root+path, MetaDirName), nil, 0o444); err != nil {
 			h.t.Fatal(err)
 		}
 	}
@@ -253,9 +286,9 @@ func (h *fakeHost) umount(ctx context.Context, args []string) ([]byte, error) {
 		h.writeInfo()
 		// The fake has no real filesystem behind the mount: what was written "through" it lands in the
 		// mount point directory. A real unmount uncovers the empty directory, so clear it.
-		ents, _ := os.ReadDir(path)
+		ents, _ := os.ReadDir(h.root + path)
 		for _, x := range ents {
-			os.RemoveAll(filepath.Join(path, x.Name()))
+			os.RemoveAll(filepath.Join(h.root+path, x.Name()))
 		}
 		if out := h.forceDetachFail[path]; force && out != "" {
 			return []byte(out + "\n"), exitErr{32}

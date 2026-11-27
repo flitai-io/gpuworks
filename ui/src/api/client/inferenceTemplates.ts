@@ -1,12 +1,20 @@
 import { getJSON, listQueryString, sendJSON, type List, type ListQuery } from "../http";
-import type { TemplateWeightModels } from "../models";
-import type { DetectedTemplateChip, InferenceTemplate, InferenceTemplateChip, InferenceTemplateDetail, InferenceTemplateImportResult, InferenceTemplateIndex, InferenceTemplateOrganizations, InferenceTemplatePage, InferenceTemplateSummary, OfficialInferenceCatalogResult } from "../inferenceTemplates";
+import type { TemplateWeightModels, WeightSourceProbe } from "../models";
+import type { DetectedTemplateChip, InferenceTemplate, InferenceTemplateChip, InferenceTemplateDetail, InferenceTemplateImportResult, InferenceTemplateIndex, InferenceTemplateOrganizations, InferenceTemplatePage, InferenceTemplateSummary, OfficialInferenceCatalogResult, WeightSource } from "../inferenceTemplates";
 import { getText, sendFile } from "./transport";
 
 export const inferenceTemplatesApi = {
   templateWeightModels: (templateID: number, specSource: string, specName: string) =>
     getJSON<TemplateWeightModels>(
       `/api/v1/inference-templates/weight-models?${new URLSearchParams({ template_id: String(templateID), spec_source: specSource, spec_name: specName })}`,
+    ),
+  probeWeightSource: (templateID: number, specSource: string, specName: string, source: WeightSource, signal?: AbortSignal) =>
+    getJSON<WeightSourceProbe>(
+      `/api/v1/inference-templates/weight-source-probe?${new URLSearchParams({
+        template_id: String(templateID), spec_source: specSource, spec_name: specName, provider: source.provider, repo_id: source.repo_id,
+        ...(source.revision ? { revision: source.revision } : {}), ...(source.subfolder ? { subfolder: source.subfolder } : {}),
+      })}`,
+      signal,
     ),
   inferenceTemplates: (query: ListQuery) =>
     getJSON<InferenceTemplatePage>(`/api/v1/inference-templates?${listQueryString(query)}`),

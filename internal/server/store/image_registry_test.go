@@ -52,7 +52,7 @@ func TestResolveImageRefMatchesDeclaredSourcesExactly(t *testing.T) {
 	if got, err := st.ResolveImageRef("mirror.example/team/app_x:v1"); err != nil || got.ID != row.ID {
 		t.Fatalf("declared source = %+v, %v", got, err)
 	}
-	for _, other := range []string{"mirror.example/team/appyx:v1", "mirror.example/team/app%:v1", "mirror.example/team/app_x", "", "team/app"} {
+	for _, other := range []string{"docker.io/mirror.example/team/app_x:v1", "mirror.example/team/appyx:v1", "mirror.example/team/app%:v1", "mirror.example/team/app_x", "", "team/app"} {
 		if got, err := st.ResolveImageRef(other); err != ErrNotFound {
 			t.Fatalf("ResolveImageRef(%q) = %+v, %v; want not found", other, got, err)
 		}

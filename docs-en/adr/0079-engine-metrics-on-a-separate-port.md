@@ -25,7 +25,7 @@ Every 10 seconds the agent scrapes `http://127.0.0.1:<API port><path>` (ADR 0039
 
 ## Consequences
 
-- Syntax and behavior: [api.metrics in the Inference Catalog model.yaml Syntax Reference](../reference/inference-catalog-spec.md#apimetrics引擎指标映射); how to write it: [Declare Engine Metrics for an Inference Template](../how-to/declare-engine-metrics.md#metrics-on-another-port).
+- Syntax and behavior: [api.metrics in the Inference Catalog model.yaml Syntax Reference](../reference/inference-catalog-spec.md#apimetrics引擎指标映射); how to write it: [Declare Engine Metrics for an Inference Template](../how-to/declare-engine-metrics.md#指标在另一个端口上).
 - Protocol: `InstanceDesiredState.metrics_port`.
 - New error codes: `CATALOG_METRICS_PORT_INVALID`, `CATALOG_METRICS_PORT_UNDECLARED`, `CATALOG_METRICS_PORT_UNREFERENCED` (en/zh texts changed together).
 

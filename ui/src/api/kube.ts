@@ -53,6 +53,8 @@ export interface KubeCluster {
   created_at: string;
   /** Carries the enrollment token; administrators only. */
   apply_command?: string;
+  /** Fetches and runs, with bash, the check that says node by node how the applied agents stand; carries the enrollment token, administrators only. */
+  verify_command?: string;
   /** kubectl commands, in order, that uninstall the entry's agents and the pods they started from the cluster; administrators only, also for a revoked entry. */
   remove_commands?: string[];
   /** No node joined for longer than the dictionary's stalled_after_seconds: worth troubleshooting. */
@@ -93,6 +95,51 @@ export interface KubeDefaults {
   priority: number;
   priority_max: number;
   allow_preemption: boolean;
+  /** The codes each check script prints, in the order to explain them. */
+  check_codes: KubeCheckCodes;
+}
+
+/** The codes the pre-check and the check after an apply print (dto.KubeCheckCodes). */
+export interface KubeCheckCodes {
+  precheck: string[];
+  verify: string[];
+}
+
+/** The form fields a pre-check is rendered for (dto.KubePrecheckRequest); omitted ones take a new entry's defaults. */
+export interface KubePrecheckRequest {
+  server_url: string;
+  namespace?: string;
+  agent_image?: string;
+  agent_image_source?: string;
+  node_selector?: string;
+  image_pull_secret?: string;
+}
+
+/** How the agents of an entry made from a cloud cluster stand, node by node (dto.KubeRollout); ask again after poll_after_seconds while not done. */
+export interface KubeRollout {
+  done: boolean;
+  poll_after_seconds?: number;
+  /** Agent pods the DaemonSet wants; null until counted or without a DaemonSet. */
+  desired: number | null;
+  rows: KubeCheckRow[];
+}
+
+/** One line of a check: a node and its pod (neither for the DaemonSet as a whole), a code of check_codes.verify, and Kubernetes' detail (dto.KubeCheckRow). */
+export interface KubeCheckRow {
+  node?: string;
+  pod?: string;
+  code: string;
+  detail?: string;
+}
+
+/** The pre-check script and what it checks (dto.KubePrecheck). */
+export interface KubePrecheck {
+  script: string;
+  file_name: string;
+  /** The agent image every selected node pulls. */
+  image: string;
+  /** The host:port every selected node dials. */
+  server: string;
 }
 
 /** A registry the agent image is published to (dto.KubeAgentImageSource). */
@@ -138,7 +185,7 @@ export interface KubeClusterRequest {
   server_url: string;
   namespace?: string;
   agent_image?: string;
-  /** Omitted: Docker Hub for an entry made by hand, the registry its region reaches for one from a cloud cluster. */
+  /** Omitted: the dictionary's agent_image_source for an entry made by hand, the registry its region reaches for one from a cloud cluster. */
   agent_image_source?: string;
   node_selector?: string;
   /** The agent's directory on the host; omitted means /opt/gpuworks. */

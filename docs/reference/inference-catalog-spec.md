@@ -190,6 +190,7 @@ sources:
 #### 按 rank 拆分的权重
 
 多机配方预先把权重切成每个 rank 一份、放在同一仓库的不同子目录时，spec 自己的 `weights.sources`
+或某个[组件](#components多权重组合)的 `weights.sources`
 可以在 `subfolder` 里写 rank 变量 `${GPUWORKS_NODE_RANK}`（与模板字段一样，不带前缀的旧写法 `${NODE_RANK}` 是它的别名）：
 
 ```yaml
@@ -209,7 +210,33 @@ weights:
 - 每个节点的下载任务、模型标记与本地模型身份都是它那个 rank 的子目录；准入、磁盘预算与准备进度也按 rank 计算：rank `r` 的节点只为 rank `r` 的制品留磁盘，已有该子目录的节点不再计下载。
 - 挂载仍保留仓库内的相对路径：rank `r` 的容器里权重在 `${GPUWORKS_MODEL_PATH}/rank<r>/…`，命令里写 `${GPUWORKS_MODEL_PATH}/rank${GPUWORKS_NODE_RANK}/…`。
 - `weight_bytes`（及 `runtime_weight_bytes`）写一个 rank 的大小；显存估算按"每个 rank 一份"乘回整组的权重。
-- 子目录里只能出现 rank 变量；同一 spec 的所有来源要么都写、要么都不写；不能与 `components`、`pd_mode` 一起用，也不能以 PD 方式部署（`RANK_WEIGHTS_PD_UNSUPPORTED`）。请求显式指定 `model_id` 时，它必须是 rank 0 的制品（`RANK_WEIGHTS_MODEL_NOT_RANK_ZERO`）。单机部署的 `${GPUWORKS_NODE_RANK}` 为 `0`（与变量表一致），只读 rank 0 那一份；子目录的份数由配方决定，平台不核对部署的节点数与之相符。
+- 子目录里只能出现 rank 变量；同一组权重（spec 自己的或某个组件的）的所有来源要么都写、要么都不写；不能与 `pd_mode` 一起用，也不能以 PD 方式部署（`RANK_WEIGHTS_PD_UNSUPPORTED`）。请求显式指定 `model_id` 时，它必须是 rank 0 的制品（`RANK_WEIGHTS_MODEL_NOT_RANK_ZERO`）。单机部署的 `${GPUWORKS_NODE_RANK}` 为 `0`（与变量表一致），只读 rank 0 那一份；子目录的份数由配方决定，平台不核对部署的节点数与之相符。
+
+组件也可以按 rank 拆分，各组权重分别决定。典型形状是各 rank 相同的主模型加一个按 rank 拆分的辅助组件（例如两台 GB10 上
+TP2 的 TensorFold 配方：EXL3 主包两机相同，Engram 表在 `rank0/`、`rank1/` 下各一份）：
+
+```yaml
+components:
+- name: primary
+  role: primary
+  weights: {...}                          # 与 spec 自己的 weights 相同，各 rank 共用
+  weight_bytes: 203793388493
+  mount_path: /model
+- name: engram
+  role: auxiliary
+  weights:
+    quantization: bf16
+    sources:
+    - modelscope:
+        repo_id: org/engram-tp2
+        subfolder: rank${GPUWORKS_NODE_RANK}
+  weight_bytes: 101379024392              # 一个 rank 的大小
+  mount_path: /engram                     # rank r 的容器里是 /engram/rank<r>/…
+```
+
+- 组件的每个 rank 与上面的规则相同：创建时按节点数解析成每个 rank 一个制品（来源、仓库、revision 相同，revision 是身份），绑定记在部署快照该组件的 `rank_weights` 里，组件的 `store_model_id` 是 rank 0 的制品；rank `r` 的节点只下载、只挂载自己那份，挂载点仍是组件的 `mount_path`，其下保留仓库内的相对路径，命令里写 `/engram/rank${GPUWORKS_NODE_RANK}`。
+- 组件的 `weight_bytes` 写一个 rank 的大小：磁盘准入按一个 rank 计，显存估算乘回整组，与主权重一致。部署评估的 `acquisition.components` 对这样的组件每个 rank 列一项。
+- primary 组件就是 spec 自己的权重：二者要么都按 rank 拆分、要么都不拆；都拆时与不写 `components` 的按 rank 拆分权重相同（rank 绑定是部署自己的 `rank_weights`）。
 
 同一 spec 多个来源表示"任一可拉"。部署的 `model_source.provider` 选定运行哪一家权重；节点怎么取到权重（已有、同步组内复制、从共享存储读取或下载）由[拉取设置](../how-to/configure-pull-settings.md)决定。
 
@@ -359,7 +386,7 @@ PD 配方往往不只是「两个角色各一份参数」：角色的 TP、每�
 | 指标端口 | `api.metrics.port: separate`，并在启动字段里引用 `${GPUWORKS_METRICS_PORT}`，见 [api.metrics](#apimetrics引擎指标映射) | launcher 监听的本机端口（`${GPUWORKS_METRICS_PORT}`），不由模板指定数值 | 平台（与 API 端口一起保留） | 实例创建时定下，随实例保留 |
 | 系统层环境变量 | 不用写；`env` 里同名键覆盖它 | 计算网络的 `NCCL_*` / `GLOO_SOCKET_IFNAME` / `UCX_NET_DEVICES`，见[环境变量分层](deployment-launch-sources.md#环境变量分层)；多机 rank 有 peers 文件时还有 `GPUWORKS_PEERS_FILE`（与同名启动变量同值，给配方启动的程序直接读） | 平台 | 每次启动 |
 | 主权重 | `weights`；`subfolder` 可写 `rank${GPUWORKS_NODE_RANK}`，见[按 rank 拆分的权重](#按-rank-拆分的权重) | 只读，在 `${GPUWORKS_MODEL_PATH}`（缺省 `/model`，有 primary 组件时为它的 `mount_path`）；按 rank 拆分时每个 rank 只有自己的子目录 | 平台（模型存储） | 随模型 |
-| 组件权重 | `components[].mount_path` | 只读，在该路径 | 平台（模型存储） | 随模型 |
+| 组件权重 | `components[].mount_path`；`subfolder` 同样可写 `rank${GPUWORKS_NODE_RANK}` | 只读，在该路径；按 rank 拆分时每个 rank 只有自己的子目录 | 平台（模型存储） | 随模型 |
 | 资产 | `assets[].unpack_to` | 只读，展开到该路径 | 平台（模板包） | 随模板版本 |
 | 可写目录 | `dirs[]`（`name`、`mount_path`、`limit_bytes`、`retain`），见 [dirs](#dirs托管的可写目录) | 读写，在 `mount_path`；每个节点一份 | 平台（节点托管目录，需 agent 能力 `mount.managed_dirs`） | 随部署，从不修剪 |
 | KV 磁盘层 | 不能写（部署参数） | 读写，平台选的路径 | 平台（节点托管目录） | 随节点上的实例，超限修剪 |
@@ -679,6 +706,8 @@ components:
 `role: auxiliary` 用于引擎在主模型之外还要读的权重（如 IndexTTS 2.5 的 Wav2Vec2-BERT、
 CAMPPlus 与 BigVGAN 声码器）：它不是目录里的独立模型，`model_id` 可省略，省略时和 primary
 一样按 spec 所属模型解析。
+
+组件的权重来源同样可以在 `subfolder` 里写 rank 变量，让多机部署的每个 rank 只下载、只挂载自己那份，见[按 rank 拆分的权重](#按-rank-拆分的权重)。
 
 非 primary 组件的 `mount_path` 必须被启动契约文本（args / entrypoint /
 pre_start / env）引用，否则校验失败——挂了不用或拼错路径在导入时暴露。

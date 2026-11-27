@@ -224,7 +224,7 @@ func TestUpdatesComparesTheChannelWithThisServer(t *testing.T) {
 	channel := newTestChannel(t)
 	channel.publishImageCatalog([]byte(upstreamManifest))
 	run.useChannel(channel)
-	if err := run.store.RecordImageCatalogImport("2026-10-08.11111111", nil); err != nil {
+	if err := run.store.RecordImageCatalogImport("2026-10-08.11111111", false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -255,16 +255,69 @@ func TestUpdatesComparesTheChannelWithThisServer(t *testing.T) {
 	}
 }
 
-// The catalogs a channel publishes come from its release's build. A server
-// built after that release (a nightly switched to release, a build ahead of
-// the channel) is not offered them as updates, though they are shown.
-func TestCatalogsFromAnOlderReleaseAreNotUpdates(t *testing.T) {
-	saved := version.BuildDate
-	t.Cleanup(func() { version.BuildDate = saved })
+// An image catalog uploaded by hand differs from the channel's because someone
+// chose it. The channel's catalog is not offered as its update (applying it
+// would delete the versions only the upload has), the status says the catalog
+// was uploaded, and applying the channel's on request makes it a channel
+// catalog again.
+func TestAnUploadedImageCatalogIsNotOfferedTheChannelsAsAnUpdate(t *testing.T) {
 	run := newImageManifestRun(t)
-	channel := newTestChannel(t) // its release is built 2026-10-11T00:00:00Z
+	channel := newTestChannel(t)
 	channel.publishImageCatalog([]byte(upstreamManifest))
 	run.useChannel(channel)
+	uploaded := strings.Replace(strings.Replace(upstreamManifest, "2026-10-09.abcdef12", "2026-10-10.offline-site", 1),
+		`]}]}`, `,{"name":"cuda13.0-vllm0.31.0-site","image_ref":"gpuworks/gpuworks-runner:cuda13.0-vllm0.31.0-site","engine_version":"0.31.0","framework_version":"13.0","arch":"multi"}]}]}`, 1)
+	if rec := run.do(http.MethodPost, "/api/v1/images/import", "application/json", uploaded); rec.Code != http.StatusOK {
+		t.Fatalf("upload = %d %s", rec.Code, rec.Body.String())
+	}
+
+	rec := run.do(http.MethodGet, "/api/v1/updates", "", "")
+	if !strings.Contains(rec.Body.String(), `"image_catalog":{"current":"2026-10-10.offline-site","latest":"2026-10-09.abcdef12","update_available":false,"uploaded":true,"replaces_upload":true,"compatible":true}`) {
+		t.Fatalf("image catalog after an upload = %s", rec.Body.String())
+	}
+	if _, err := run.store.ImageByRef("gpuworks/gpuworks-runner:cuda13.0-vllm0.31.0-site"); err != nil {
+		t.Fatalf("the uploaded version: %v", err)
+	}
+
+	// "Check for updates" does not replace the upload: it would delete the
+	// version only the upload has.
+	rec = run.do(http.MethodPost, "/api/v1/images/sync", "", "")
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"code":"IMAGE_CATALOG_UPLOADED"`) ||
+		!strings.Contains(rec.Body.String(), `"params":{"current":"2026-10-10.offline-site","latest":"2026-10-09.abcdef12"}`) {
+		t.Fatalf("sync over an upload = %d %s", rec.Code, rec.Body.String())
+	}
+	if _, err := run.store.ImageByRef("gpuworks/gpuworks-runner:cuda13.0-vllm0.31.0-site"); err != nil {
+		t.Fatalf("the uploaded version after a refused sync: %v", err)
+	}
+
+	// Asked to replace it, the channel's catalog does.
+	if rec := run.do(http.MethodPost, "/api/v1/images/sync?replace_uploaded=true", "", ""); rec.Code != http.StatusOK {
+		t.Fatalf("sync = %d %s", rec.Code, rec.Body.String())
+	}
+	if _, err := run.store.ImageByRef("gpuworks/gpuworks-runner:cuda13.0-vllm0.31.0-site"); err == nil {
+		t.Fatal("the version only the upload had is still listed after the channel's catalog replaced it")
+	}
+	// A channel catalog is not an upload: nothing would be replaced.
+	rec = run.do(http.MethodGet, "/api/v1/updates", "", "")
+	if strings.Contains(rec.Body.String(), `"replaces_upload":true`) || strings.Contains(rec.Body.String(), `"uploaded":true`) {
+		t.Fatalf("the channel's catalog is reported as an upload: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"image_catalog":{"current":"2026-10-09.abcdef12","latest":"2026-10-09.abcdef12","update_available":false,"compatible":true}`) {
+		t.Fatalf("image catalog after the channel's = %s", rec.Body.String())
+	}
+}
+
+// The catalogs a channel publishes come from its release's build. A server
+// of another channel built after that release (a nightly switched to release)
+// is not offered them as updates, though they are shown.
+func TestCatalogsFromAnOlderReleaseAreNotUpdates(t *testing.T) {
+	savedDate, savedChannel := version.BuildDate, version.Channel
+	t.Cleanup(func() { version.BuildDate, version.Channel = savedDate, savedChannel })
+	version.Channel = "nightly"
+	channel := newTestChannel(t) // its release is built 2026-10-11T00:00:00Z
+	channel.index.Channel = "release"
+	channel.publishImageCatalog([]byte(upstreamManifest))
+	run := newUpgradeRun(t, &upgradingServer{StaticServerSettings: StaticServerSettings{Channel: "release"}}, channel)
 
 	version.BuildDate = "2026-10-11T08:00:00Z"
 	status := getUpdateStatus(t, run)
@@ -283,6 +336,54 @@ func TestCatalogsFromAnOlderReleaseAreNotUpdates(t *testing.T) {
 	}
 	if c := newer.ImageCatalog; !c.UpdateAvailable {
 		t.Fatalf("image catalog from a newer release = %+v", c)
+	}
+}
+
+// GWKS-519: a server built from a branch after the channel's newest release
+// is not one of its releases. Build time alone called it newer, so the page
+// said "up to date" for the server and both catalogs and offered no version.
+// It is reported as unpublished: no update is announced for the server, every
+// channel release can be chosen, and the channel's catalogs stay on offer.
+func TestABuildTheChannelNeverPublishedIsNotUpToDate(t *testing.T) {
+	savedVersion, savedDate, savedChannel := version.Version, version.BuildDate, version.Channel
+	t.Cleanup(func() { version.Version, version.BuildDate, version.Channel = savedVersion, savedDate, savedChannel })
+	version.Version, version.BuildDate, version.Channel = "b5137981c", "2026-10-11T00:11:18Z", "nightly"
+	channel := newTestChannel(t) // its release rel-0001 is built 2026-10-11T00:00:00Z
+	earlier := channel.index.Server
+	earlier.ReleaseID, earlier.BuiltAt = "rel-0000", "2026-10-10T00:00:00Z"
+	channel.index.PreviousServers = []distribution.ServerRelease{earlier}
+	channel.publishImageCatalog([]byte(upstreamManifest))
+	server := &upgradingServer{StaticServerSettings: StaticServerSettings{Channel: "nightly"}}
+	run := newUpgradeRun(t, server, channel)
+
+	rec := run.do(http.MethodGet, "/api/v1/updates", "", "")
+	for _, want := range []string{
+		`"current":"b5137981c","latest":"rel-0001","built_at":"2026-10-11T00:00:00Z","update_available":false,"unpublished_build":true,"installable":true`,
+		`"image_catalog":{"current":"","latest":"2026-10-09.abcdef12","update_available":true,"compatible":true}`,
+	} {
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("updates = %d %s\nwant %s", rec.Code, rec.Body.String(), want)
+		}
+	}
+
+	rec = run.do(http.MethodGet, "/api/v1/updates/server/versions?channel=nightly", "", "")
+	var choices dto.ServerVersionChoices
+	if err := json.Unmarshal(rec.Body.Bytes(), &choices); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("choices = %d %s", rec.Code, rec.Body.String())
+	}
+	if len(choices.Versions) != 2 || choices.Versions[0].Version != "rel-0001" || !choices.Versions[0].Latest || choices.Versions[0].Reason != "" ||
+		choices.Versions[1].Version != "rel-0000" || choices.Versions[1].Latest {
+		t.Fatalf("choices = %+v", choices.Versions)
+	}
+
+	// "The latest" is not an update of this build; only a named release replaces it.
+	rec = run.do(http.MethodPost, "/api/v1/updates/server", "application/json", "")
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"code":"SERVER_NEWER_THAN_RELEASE"`) || len(server.archives) != 0 {
+		t.Fatalf("install without a choice = %d %s, archives=%v", rec.Code, rec.Body.String(), server.archives)
+	}
+	rec = run.do(http.MethodPost, "/api/v1/updates/server", "application/json", `{"channel":"nightly","version":"rel-0001"}`)
+	if rec.Code != http.StatusAccepted || len(server.archives) != 1 || server.archives[0] != "archive rel-0001" {
+		t.Fatalf("install the chosen release = %d %s, archives=%v", rec.Code, rec.Body.String(), server.archives)
 	}
 }
 

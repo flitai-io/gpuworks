@@ -47,6 +47,7 @@
   "stalled": {
     "title": "还没有节点接入",
     "intro": "集群已等了一阵，仍没有节点接入。先在集群里看 agent 的 DaemonSet 和 Pod：",
+    "introMore": "上面说得不够时，再看 agent 的 DaemonSet 和 Pod：",
     "causes": "常见原因",
     "pull": "Pod 处于 ImagePullBackOff：拉不到 agent 镜像。镜像在需要登录的仓库时，在命名空间里建好 docker-registry Secret，并在新建集群时填写“镜像拉取凭据”。",
     "selector": "DaemonSet 的 DESIRED 为 0：节点选择器没有选中任何节点。",
@@ -167,5 +168,8 @@
     "title_other": "已请求停止 {{count}} 个实例",
     "help": "这些实例所在的节点退出了选择，所以保存之前先请求停止它们。它们由各自的 agent 执行停止；没有节点可运行的部署会一直没有副本。",
     "item": "{{deployment}} · 实例 {{instance}}"
-  }
+  },
+  "check": {"copy": "复制", "fixLabel": "{{code}} 怎么处理", "copyCommand": "复制{{title}}", "verifyTitle": "apply 之后检查各节点", "verifyHint": "apply 之后在同一台机器上运行，需要 bash 和 curl，只读集群。", "codesTitle": "状态码说明", "codes": {"OK": {"text": "该节点通过检查。", "fixHelp": "预检查时表示拉到了镜像、连通了管理节点接入地址。apply 之后表示 agent 在运行，是否已接入以节点列表为准。"}, "IMAGE_PULL_FAILED": {"text": "该节点拉不到镜像，详情是 kubelet 给出的原因。", "fixHelp": "连接超时、无法解析或 no route to host，多半是节点访问不了该仓库（离线环境）：把镜像同步到节点能访问的内网仓库，在“agent 镜像”里填新地址。unauthorized 表示要登录：在命名空间里建 docker-registry Secret，填进“镜像拉取凭据”。not found 表示镜像名或 tag 不对。"}, "SERVER_UNREACHABLE": {"text": "该节点连不上管理节点接入地址（TCP）。", "fixHelp": "检查地址是否填对，以及节点到它的路由、防火墙和代理。地址要能从节点本身访问到，而不是从你的浏览器。"}, "PULL_SECRET_MISSING": {"text": "命名空间里没有填写的镜像拉取凭据 Secret。", "fixHelp": "先在该命名空间里建好 docker-registry 类型的 Secret，或清空“镜像拉取凭据”。"}, "NO_NODE_SELECTED": {"text": "节点选择器没有选中任何节点。", "fixHelp": "确认选择器里的标签确实在要接入的节点上。"}, "NOT_SCHEDULED": {"text": "调度器没有把 Pod 放到该节点，详情是它给出的原因。", "fixHelp": "多是节点的 CPU 或内存不足，按详情释放资源后再检查。"}, "POD_CREATE_FAILED": {"text": "DaemonSet 没能创建部分 Pod，详情是原因。", "fixHelp": "PodSecurity 拒绝时：正式的 manifest 会把命名空间标为 privileged，预检查不改已有命名空间的标签，apply 之后可能就没有这个问题。配额不够时放宽命名空间的 ResourceQuota。"}, "CONTAINER_FAILED": {"text": "容器退出或无法启动。", "fixHelp": "按详情里的命令查看容器日志。"}, "STILL_STARTING": {"text": "还没有结论，多半是镜像还在下载。", "fixHelp": "稍后再看：控制台里的表会自动刷新，脚本可以再运行一次。"}, "DAEMONSET_MISSING": {"text": "命名空间里没有 agent 的 DaemonSet。", "fixHelp": "先 apply 接入命令，或确认当前 kubeconfig 连的是同一个集群。"}, "APPLY_FAILED": {"text": "预检查的对象没有建成，详情是报错。", "fixHelp": "常见原因是当前账号没有创建 DaemonSet 或命名空间的权限。"}, "KUBECTL_MISSING": {"text": "运行脚本的机器上没有 kubectl。", "fixHelp": "在能访问集群的机器上安装 kubectl 后再运行。"}, "KUBECTL_FAILED": {"text": "kubectl 连不上集群，详情是它的报错。", "fixHelp": "检查 kubeconfig 和当前 context。"}}},
+  "precheck": {"open": "预检查", "title": "接入前预检查", "loading": "正在生成预检查脚本", "failed": "预检查脚本没有生成", "intro": "接入前可先运行这个脚本，逐个节点检查能否拉到镜像、连通管理节点。", "image": "拉取镜像", "server": "连通地址", "run": "在能用 kubectl 访问集群的机器上运行", "runHelp": "需要 bash 和 kubectl，使用当前的 kubeconfig context；最多等待 3 分钟。脚本结束（包括中途中断）时会删掉它创建的 DaemonSet，命名空间是它创建的也一并删除。每行输出是“节点 状态码 详情”，全部通过时退出码为 0。", "showScript": "查看脚本内容", "script": "预检查脚本", "copy": "复制脚本", "download": "下载脚本", "close": "关闭"},
+  "rollout": {"title": "各节点的 agent", "reading": "正在读取集群里 agent 的状态", "failed": "读不到集群里 agent 的状态", "retry": "重试", "waiting": "还有节点没有结论，{{seconds}} 秒后自动刷新。", "column": {"node": "节点", "state": "状态"}}
 }

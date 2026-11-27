@@ -107,8 +107,10 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
-func (m *Manager) readMounts() ([]MountEntry, error) {
-	f, err := os.Open(m.o.MountinfoPath)
+func (m *Manager) readMounts() ([]MountEntry, error) { return readMountsAt(m.o.MountinfoPath) }
+
+func readMountsAt(path string) ([]MountEntry, error) {
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}

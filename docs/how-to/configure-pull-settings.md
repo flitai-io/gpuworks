@@ -115,7 +115,7 @@
 
 | 登记来源 | 读取失败时 |
 |---|---|
-| Hugging Face / ModelScope | 仍可登记，但元数据可能缺失。页面提示 `MODEL_METADATA_UNREACHABLE` 或 `MODEL_METADATA_FORBIDDEN` 时，检查管理节点规则和出站访问；不能把登记成功当作模型已就绪 |
+| Hugging Face / ModelScope | 站点明确回答没有该仓库或该版本（`MODEL_REPO_NOT_FOUND` / `MODEL_REVISION_NOT_FOUND`）时拒绝登记，可在对话框里选 **仍然注册**。其他情况仍可登记，但元数据可能缺失。页面提示 `MODEL_METADATA_UNREACHABLE` 或 `MODEL_METADATA_FORBIDDEN` 时，检查管理节点规则和出站访问；不能把登记成功当作模型已就绪 |
 | HTTP 目录 URL | 管理节点必须先读取并解析目录，失败会阻止登记。目录地址不受站点规则改写，出站访问受管理节点代理控制，见[从 HTTP 目录导入](import-from-http.md) |
 
 Hugging Face 元数据也可由浏览器从同一套管理节点候选地址读取；只有实际取到内容才标为浏览器读取，未取到时由管理节点尝试。公共站点元数据暂不可达本身不会使部署准入失败，模型文件和其他部署条件仍须满足。

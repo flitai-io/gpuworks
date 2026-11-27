@@ -7,7 +7,7 @@ nohup 命令只有 `gpuworks serve --config <dir>/server.yaml`）。放在安装
 是为了数据库恢复到另一台机器时不会带着旧机器的地址。
 
 **正常安装不通过环境变量配置 server。** 面向运维的例外有
-`GPUWORKS_ADMIN_PASSWORD`（首次创建 admin 账户时提供初始密码）和 `GPUWORKS_USAGE_REPORT=off`（强制关闭使用情况上报）；旧安装另有下述兼容例外。
+`GPUWORKS_ADMIN_PASSWORD`（首次创建 admin 账户时提供初始密码）、`GPUWORKS_ALLOW_DEGRADED_AGENT_STARTUP`（Agent 还原失败时允许应急启动）和 `GPUWORKS_USAGE_REPORT=off`（强制关闭使用情况上报）；旧安装另有下述兼容例外。
 
 例外是
 `server.yaml` 之前的老安装：那时的单元用 `GPUWORKS_ADDR`、`GPUWORKS_DATA_DIR`、
@@ -70,7 +70,7 @@ usage_report: false        # 不发日报，自动检查不带节点数/GPU型�
 | `ssh_proxy` | 空 | 到节点的 SSH（含 agent 上传）走的 SOCKS5 代理 | — |
 | `update_channel` | 空（跟随构建：master 构建为 `nightly`，`v*` tag 构建为 `release`） | 检查更新、官方目录更新与升级读哪个发布渠道：`release`（正式发布版）或 `nightly`（滚动预览版）。设置页「版本与更新」切换渠道时写入本键并立即生效；`gpuworks upgrade` 不带 `--channel` 时也读它。发布通道之前的版本不认识这个键、会拒绝启动：降级到那些版本前先删掉这一行（`gpuworks upgrade --archive` 降级时旧版本起不来会自动回滚） | `gpuworks upgrade --channel` |
 | `auto_check_updates` | 空（开启） | 是否自动检测新版本：开启时打开控制台会触发检查（同时拉取发布方的[通知](usage-report.md#发布方通知)），`false` 时 server 不自动检查，只在设置页点「检查更新」时读取版本索引与通知。自动检查总会附带安装标识、server 版本与 agent 版本分布（用于统计装机数与版本），节点数与 GPU 型号只在加入改进计划（`usage_report`）时附带，见下文「更新检查报告什么」。设置页「版本与更新」的开关写入本键并立即生效，开启时删除该键。只有关闭时才写入；更早的版本不认识这个键、会拒绝启动，降级前先删掉这一行 | — |
-| `usage_report` | 空（加入） | 是否加入[用户体验改进计划](usage-report.md)：每天向发布方发送一份匿名日报，并在自动检查更新时附带节点数与 GPU 型号（见下文「更新检查报告什么」）。`false` 时不发日报、检查更新不再附带节点数与 GPU 型号；自动检查仍会附带安装标识与版本，要完全不发送还需关闭 `auto_check_updates`。设置页「用户体验改进计划」的开关写入本键并立即生效，开启时删除该键。**私有化交付在 server 首次启动前写入 `usage_report: false`**（首次启动会立刻发送一份）；环境变量 `GPUWORKS_USAGE_REPORT=off` 同样强制关闭。只有关闭时才写入；更早的版本不认识这个键、会拒绝启动，降级前先删掉这一行 | — |
+| `usage_report` | 空（加入） | 是否加入[用户体验改进计划](usage-report.md)：每天向发布方发送一份匿名日报，并在自动检查更新时附带节点数与 GPU 型号（见下文「更新检查报告什么」）。`false` 时不发日报、检查更新不再附带节点数与 GPU 型号；自动检查仍会附带安装标识与版本，要完全不发送还需关闭 `auto_check_updates`。设置页「用户体验改进计划」的开关写入本键并立即生效，开启时删除该键。**私有化交付在 server 首次启动前写入 `usage_report: false`**（首次启动会立刻发送一份）；环境变量 `GPUWORKS_ALLOW_DEGRADED_AGENT_STARTUP`、`GPUWORKS_USAGE_REPORT=off` 同样强制关闭。只有关闭时才写入；更早的版本不认识这个键、会拒绝启动，降级前先删掉这一行 | — |
 | `plugins` | 空 | 插件包的信任与站点策略：主机信任的证书签发者与只能收窄的策略，见下文[插件的信任与站点策略](#插件的信任与站点策略)。只能编辑文件，`gpuworks plugin` 子命令每次运行时读取；更早的版本不认识这个键、会拒绝启动，降级前先删掉整节 | `gpuworks plugin --config` |
 | `extensions.<名称>` | 空 | 单独构建的服务器所加模块的配置，每个模块一节、以模块名为键，由该模块按自己的格式严格解析；顶层其他键仍不认识即拒绝启动。没有模块认领的一节只在启动时记一条警告，不影响启动（在不同构建之间迁移数据目录时会遇到）。社区版不读其中任何内容；更早的版本不认识 `extensions` 这个键、会拒绝启动，降级前先删掉整节 | — |
 
@@ -341,13 +341,14 @@ server 启动时以及之后每 6 小时按这两个上限清理一次事件，�
 
 ## 环境变量
 
-环境变量只服务于 agent 和安装脚本；server 不把环境变量当作配置来源（例外是上文的 `GPUWORKS_ADMIN_PASSWORD`、强制关闭上报的 `GPUWORKS_USAGE_REPORT=off` 和老安装桥接变量）。变量分五类：server 读取的变量、面向运维的 agent 变量、其他工具读取的通用变量、测试专用变量、内部实现细节。
+Server 只读取下表列出的环境变量，常规配置通过 `server.yaml` 管理。变量分五类：server 读取的变量、面向运维的 agent 变量、其他工具读取的通用变量、测试专用变量、内部实现细节。
 
 ### Server 读取的变量
 
 | 变量 | 默认 | 作用 | 出处或相关命令 |
 |---|---|---|---|
 | `GPUWORKS_ADMIN_PASSWORD` | 无 | 首次创建 admin 账户时的初始密码；`gpuworks install` 也按 `--password` > 该变量 > 交互 > 随机 的顺序使用它。只在创建账户时读取 | `gpuworks serve`、`gpuworks install` |
+| `GPUWORKS_ALLOW_DEGRADED_AGENT_STARTUP` | `false` | 应急启动开关。默认在数据库迁移前因 Agent 准备失败退出。将 Server 进程环境变量设为 `true` 后，可用平台继续提供服务。错误日志给出失败平台、原因、恢复路径和预期 SHA256。将同一构建的完整 Agent 原子重命名为 `<data>/dl/<agent-name>`，下一次下载或升级读取即可恢复，无需重启。如果发布清单本身不可读，升级校验还需要配套的覆盖清单。修复后移除变量并重启。 | `gpuworks serve` |
 | `GPUWORKS_ADDR`、`GPUWORKS_DATA_DIR`、`GPUWORKS_TRUSTED_PROXIES` | 无 | 仅为 `server.yaml` 之前的老单元保留：命令行与 `server.yaml` 都没提供对应值时才生效，`install` 接管后不再使用 | `gpuworks serve` |
 | `GPUWORKS_DQLITE_BIN` | server 可执行文件旁边的 `gpuworks-dqlite` | 只在带 `dqlite` 标签的 Linux 构建里读取：数据库辅助程序的路径。集群安装把辅助程序放在 server 旁边，不需要设置。集群的存储档位不是环境变量或 `server.yaml` 的键：它在安装时确定并记录在成员的 `cluster-enrollment/config.json` 里，见[存储档位](../explanation/control-plane-cluster.md#存储档位) | [控制面集群的行为与边界](../explanation/control-plane-cluster.md) |
 

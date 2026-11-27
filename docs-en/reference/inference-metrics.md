@@ -137,7 +137,7 @@ The first token is the first nonempty `content`, `reasoning_content`, `reasoning
 
 `tpot_ms` requires a streaming response with `usage` and at least 2 output tokens. It measures from the first generated token observed by the gateway to the last text event, including network jitter. When the engine emits multiple tokens at once (speculative decoding), the time is still averaged by token count.
 
-The cache hit rate uses the same source mechanism but is not a histogram: see [Gateway Cache Hit Rate](#gateway-cache-hit-rate).
+The cache hit rate uses the same source mechanism but is not a histogram: see [Gateway Cache Hit Rate](#网关缓存命中率).
 
 `reported_*_ms` aggregates engine-reported values in responses ([per-request statistics](#逐请求统计)) into per-deployment distributions. If a response does not include a value, nothing is recorded.
 

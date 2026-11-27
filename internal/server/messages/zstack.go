@@ -20,3 +20,11 @@ const (
 	ErrorZStackNetworkUnconfirmed           = "ZSTACK_NETWORK_UNCONFIRMED"
 	ErrorZStackNetworkDiagnosticUnavailable = "ZSTACK_NETWORK_DIAGNOSTIC_UNAVAILABLE"
 )
+
+// Refusals from Cloud host inventory checks before agent installation.
+const (
+	ErrorZStackAgentHostType           = "ZSTACK_AGENT_HOST_TYPE"
+	ErrorZStackAgentHostHypervisor     = "ZSTACK_AGENT_HOST_HYPERVISOR"
+	ErrorZStackAgentHostAddressMissing = "ZSTACK_AGENT_HOST_ADDRESS_MISSING"
+	ErrorZStackAgentHostNotConnected   = "ZSTACK_AGENT_HOST_NOT_CONNECTED"
+)

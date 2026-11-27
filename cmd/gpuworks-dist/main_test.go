@@ -18,6 +18,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/distribution"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
+	"gpuworks.ai/gpuworks/internal/server/imagecatalog/manifest"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/seed"
 )
 
@@ -87,11 +88,14 @@ func TestAssembleWritesASignedTree(t *testing.T) {
 		t.Fatalf("SHA256SUMS = %q", sums)
 	}
 
-	// Both catalogs are the embedded ones, byte for byte, and the channel's
-	// manifest.json is the same file as its image catalog.
-	if !bytes.Equal(readTree(t, in.OutDir, index.ImageCatalog.Path), imagecatalog.SeedJSON()) ||
-		!bytes.Equal(readTree(t, in.OutDir, "nightly/manifest.json"), imagecatalog.SeedJSON()) {
-		t.Fatal("image catalog differs from the embedded seed")
+	// Online readers select the signed descriptor for their supported format.
+	legacy := readTree(t, in.OutDir, index.ImageCatalog.Path)
+	m, err := manifest.Parse(legacy)
+	if err != nil || m.SchemaVersion != 3 || m.CatalogVersion != index.ImageCatalog.Version || !bytes.Equal(legacy, readTree(t, in.OutDir, "nightly/manifest.json")) {
+		t.Fatalf("legacy catalog %s: %v", m.CatalogVersion, err)
+	}
+	if !bytes.Equal(readTree(t, in.OutDir, index.CurrentImageCatalog().Path), imagecatalog.SeedJSON()) {
+		t.Fatal("current catalog differs from seed")
 	}
 	if _, err := os.Stat(filepath.Join(in.OutDir, "manifest.json")); !os.IsNotExist(err) {
 		t.Fatalf("assemble wrote a root manifest.json (stat: %v); each channel has its own", err)

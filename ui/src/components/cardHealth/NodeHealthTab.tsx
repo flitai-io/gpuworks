@@ -10,14 +10,10 @@ import { useCardHealthChecks, useCardHealthRecords } from "./useCardHealth";
 
 type Selection = { card: CardHealthCard; check: string };
 
-/** What holds the whole table back: offline, stale, an old agent, no report yet. */
+/** Display the server's availability explanation without inferring capability. */
 export function HealthBanner({ data }: { data: CardHealthChecks }) {
   const { t } = useTranslation("nodes");
-  if (!data.online) return <Alert type="warning" showIcon message={t("cardHealth.banner.offline")} />;
-  if (!data.received_at) return <Alert type="info" showIcon message={t("cardHealth.banner.waiting")} />;
-  if (!data.reports) return <Alert type="info" showIcon message={t("cardHealth.banner.noReports")} />;
-  if (data.stale) return <Alert type="warning" showIcon message={t("cardHealth.banner.stale")} />;
-  return null;
+  return data.notice ? <Alert type={data.notice.level} showIcon message={t(`cardHealth.banner.${data.notice.code}`, { defaultValue: t("cardHealth.banner.unavailable") })} /> : null;
 }
 
 // NodeHealthTab is the node's health checks: a table of cards by checks on

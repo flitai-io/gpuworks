@@ -115,7 +115,11 @@ func TestRootCauseKeepsTheFinalErrorUnlessItIsAWrapper(t *testing.T) {
 		"final error is not a wrapper": {"ValueError: handled during load\nusage: vllm\nvllm: error: unrecognized arguments: --x\n", "vllm: error: unrecognized arguments: --x"},
 		"only wrappers":                {"RuntimeError: Engine core initialization failed. See root cause above.\n", "RuntimeError: Engine core initialization failed. See root cause above."},
 		"dotted exception under tag":   {"(Worker_TP0 pid=9) ERROR 11-05 13:00:00 [w.py:1] torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB\n(APIServer pid=1) RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}\n", "torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB"},
-		"nothing":                      {"INFO serving\n", ""},
+		// The server's line is GWKS-505's, as the failed instance reported it;
+		// the scheduler's exception above it is the shape SGLang prints.
+		"sglang child failed at launch":  {"[2026-11-24 18:07:29 TP0] Scheduler hit an exception: Traceback (most recent call last):\n  File \"scheduler.py\", line 1, in run\nRuntimeError: CUDA error: out of memory\n\n[2026-11-24 18:07:31 1] ERROR Received sigquit from a child process. It usually means the child failed.\n", "RuntimeError: CUDA error: out of memory"},
+		"sglang child left no exception": {"[2026-11-24 18:07:31 1] ERROR Received sigquit from a child process. It usually means the child failed.\n", "[2026-11-24 18:07:31 1] ERROR Received sigquit from a child process. It usually means the child failed."},
+		"nothing":                        {"INFO serving\n", ""},
 	} {
 		if got := RootCause(tc.logs); got != tc.want {
 			t.Errorf("%s: RootCause = %q, want %q", name, got, tc.want)

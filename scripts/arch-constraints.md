@@ -1094,7 +1094,7 @@ key='"[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){0,2}"'
 意图：内置镜像的 tag 一律是 `<backend><框架版本>[-<型号>]-<engine><版本>-rN`，文法只有一份
 （`cmd/gpuworks-image-manifest` 的 `releaseTagPattern`）。镜像目录里已经有 121 个不合文法的存量 tag
 （裸 `<id>`、`-<arch>-slotN`、`-rN-<arch>` 等），它们已经在用户的目录里，不能改名也不能删。生成器对写进
-目录的 tag 逐条过文法：不合文法的条目必须在 `build/runner-images/matrix.yaml` 的 `published` 里写
+目录的 tag 逐条过文法：不合文法的条目必须在 `build/runner-images/matrix.yaml` 的 `legacy_tags` 里写
 `legacy_reason`，否则 `make image-manifest` 失败；合文法的条目写了 `legacy_reason` 同样失败。所以声明的
 条数就是例外的条数。这条预算让例外只减不增：新 tag 取合规的名字，不是再加一条声明。计数单位是
 **`legacy_reason` 出现的次数**。

@@ -24,6 +24,9 @@
 #                              publish: path to a docker config.json holding the
 #                              registries' credentials (a CI file variable)
 #   GPUWORKS_DOCKER_BUILD_NETWORK  build: docker build --network (default "default")
+#   GPUWORKS_HOST_DOCKER_SOCK  publish: the daemon socket's path on the docker host,
+#                              bind-mounted into the buildx client container
+#                              (default /var/run/docker.sock)
 #   NERDCTL_VERSION, NERDCTL_URL_BASE, GPUWORKS_TOOL_CACHE, DEBIAN_MIRROR,
 #   GPUWORKS_DOCKER_CLI_IMAGE, GPUWORKS_BUILDKIT_IMAGE  overrides
 set -euo pipefail
@@ -132,7 +135,7 @@ case "$mode" in
     # client's session, never the image.
     # shellcheck disable=SC2046
     docker run --rm --network host \
-      -v /var/run/docker.sock:/var/run/docker.sock \
+      -v "${GPUWORKS_HOST_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock" \
       -v "$ctx:$ctx:ro" -w "$ctx" -v "$(realpath "$auth"):/run/gpuworks-registry-auth.json:ro" \
       -e BUILDKIT_IMAGE="$buildkit_image" -e DEBIAN_MIRROR="$DEBIAN_MIRROR" -e REVISION="$revision" \
       "$docker_cli_image" sh -euc '

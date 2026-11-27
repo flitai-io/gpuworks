@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { KubeCluster, KubeClusterRequest, KubeClusterUpdate, KubeDefaults, ProviderClusterPool } from "../../api";
+import type { KubeCluster, KubeClusterRequest, KubeClusterUpdate, KubeDefaults, KubePrecheckRequest, ProviderClusterPool } from "../../api";
 
 /**
  * A cluster entry made from a cloud account's cluster: what the form starts
@@ -136,6 +136,17 @@ export function requestOf(values: FormValues, defaults: KubeDefaults | null, poo
   }
   // Every empty field takes the server's default; an empty RuntimeClass is decided on each node.
   const optional = { runtime_class: values.runtime_class, image_pull_secret: values.image_pull_secret, namespace: values.namespace, state_dir: values.state_dir, agent_image: values.agent_image, agent_image_source: values.agent_image_source, node_selector: prefill ? "" : values.node_selector, containerd_socket: values.containerd_socket, api_server: values.api_server, engine_ports: values.engine_ports } as const;
+  for (const [key, value] of Object.entries(optional)) {
+    const text = (value ?? "").trim();
+    if (text) (request as unknown as Record<string, string>)[key] = text;
+  }
+  return request;
+}
+
+/** What a pre-check is rendered for: the fields that decide where the agents run, what they pull and what they dial. Empty ones take the server's defaults. */
+export function precheckRequestOf(values: FormValues): KubePrecheckRequest {
+  const request: KubePrecheckRequest = { server_url: values.server_url.trim() };
+  const optional = { namespace: values.namespace, agent_image: values.agent_image, agent_image_source: values.agent_image_source, node_selector: values.node_selector, image_pull_secret: values.image_pull_secret } as const;
   for (const [key, value] of Object.entries(optional)) {
     const text = (value ?? "").trim();
     if (text) (request as unknown as Record<string, string>)[key] = text;

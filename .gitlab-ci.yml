@@ -23,6 +23,9 @@ workflow:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+    # A release line's branch head gets the core gates and the release
+    # packages (see .release-build), never a publish.
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^release\/[0-9]+\.[0-9]+$/'
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "api"'
@@ -89,6 +92,7 @@ change-record:
     - ./scripts/check_ci_yaml.sh
     - python3 -B -m unittest discover -s scripts -p test_check_ci_yaml.py
     - python3 -B -m unittest discover -s scripts -p test_ci_disk_check.py
+    - python3 -B -m unittest discover -s scripts -p test_go_test_shard.py
     - CGO_ENABLED=0 go test -timeout 2m ./scripts/changerecord
     - CGO_ENABLED=0 go run ./scripts/changerecord
 
@@ -277,16 +281,11 @@ core-ui-test:
         rm -rf node_modules
         sleep 15
       done
-    - TEST_SHARD="$CI_NODE_INDEX/$CI_NODE_TOTAL" npm run test:coverage
-  artifacts:
-    when: always
-    # Only the reports: coverage/tmp holds c8's raw V8 dumps (one per test
-    # process, node_modules included), which made the archive outgrow the
-    # coordinator's upload limit (413) while adding nothing a reader uses.
-    paths:
-      - ui/coverage/lcov.info
-      - ui/coverage/lcov-report/
-    expire_in: 14 days
+    # Sharded plain run: c8 instrumented every test process and then scanned
+    # the sources for a report no gate reads, and that last step is what a
+    # loaded runner cut at the job timeout. `npm run test:coverage` stays for
+    # local runs and the QA suite.
+    - TEST_SHARD="$CI_NODE_INDEX/$CI_NODE_TOTAL" npm test
 
 # Walks the console in Chromium against a disposable experience environment
 # and fails on what a person would see as broken: covered or overlapping text,
@@ -360,7 +359,15 @@ ui-check:
       fi
     - python3 -m venv "$CI_PROJECT_DIR/.cache/ui-check-python"
     - export UI_BROWSER_PYTHON="$CI_PROJECT_DIR/.cache/ui-check-python/bin/python"
-    - '"$UI_BROWSER_PYTHON" -m pip install -r ui/tests/browser/requirements.txt'
+    # The Playwright wheel is ~48 MB and public PyPI kept cutting it off
+    # mid-download on the runners. Take it from the mirror docs-pdf uses and
+    # keep it in the runner's shared pip cache, so a cached wheel is not fetched
+    # again.
+    - |
+      "$UI_BROWSER_PYTHON" -m pip install --disable-pip-version-check \
+        --index-url "${GPUWORKS_PYPI_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}" \
+        --timeout 30 --retries 2 --cache-dir /host-go-cache/tools/pip \
+        -r ui/tests/browser/requirements.txt
     - ./scripts/ui_check_ci.sh
   artifacts:
     when: always
@@ -430,15 +437,13 @@ core-test:
   # hard-needs this job and gets skipped for the night. Persistent failures
   # still fail the pipeline; the retry only heals one-shot flakes.
   retry: 1
+  # The repository checks (time policy, architecture, CI yaml, the artifacts
+  # index, the coverage inventory) run in core-vet: they take seconds and do
+  # not need the test compile, so the longest job carries tests only.
   script:
     - make seed-manifest
     - SEED_CATALOG_MANIFEST=bin/seed-catalog/manifest.yaml make test-seed-catalog-build
     - if [ "${CHECK_CORE_IMAGE_SHELLCHECK:-}" = 1 ]; then ./scripts/test_slurmboot_shellcheck.sh; fi
-    - ./scripts/check_time_policy.sh
-    - ./scripts/check_architecture.sh
-    - ./scripts/check_ci_yaml.sh
-    - CGO_ENABLED=0 go run ./scripts/artifactsindex
-    - make test-e2e-coverage-check
     - test -f internal/server/webui/dist/index.html
     # -timeout: the 10m default is per package binary, and a starved runner
     # (a store package that takes 45 s alone ran 10 min on one) turns it into a
@@ -455,7 +460,10 @@ core-test:
       # the runner's 4 MB trace cap before the last packages report failures.
       mkdir -p .testlogs
       test_status=0
-      CGO_ENABLED=0 go test -v -timeout 30m -coverprofile=coverage-core.out ./... > .testlogs/core-test.log 2>&1 || test_status=$?
+      # -p bounds how many packages build and run at once. The default is one
+      # per CPU, and several jobs share the host; unbound, each of them
+      # competes with the other jobs for memory and makes all of them slower.
+      CGO_ENABLED=0 go test -v -timeout 30m -p 4 -coverprofile=coverage-core.out ./... > .testlogs/core-test.log 2>&1 || test_status=$?
       if [ "$test_status" -ne 0 ]; then
         grep -E '^[[:space:]]*--- FAIL:|^FAIL([[:space:]]|$)|^panic:|^fatal error:' .testlogs/core-test.log || true
         tail -n 120 .testlogs/core-test.log
@@ -470,6 +478,11 @@ core-test:
     # Build-tag suites are reported separately; compile them here so a
     # refactor cannot silently break an opt-in lane while core remains green.
     - make check-tagged-build
+    # Provider API/SSH contracts are tagged L4 code but use only faithful
+    # local fixtures: no cloud credentials, no allocation, no cleanup. They run
+    # here instead of in a job of their own, which had to build the server and
+    # four agents for the one test that inspects those binaries.
+    - make test-l4-compshare-offline-contracts GO_TEST_FLAGS='-coverpkg=./internal/...,./pkg/... -coverprofile=coverage-compshare-contracts.out'
   artifacts:
     when: always
     paths:
@@ -481,7 +494,14 @@ core-test:
 core-vet:
   extends: .go-core
   stage: core
+  # vet is a whole-tree compile of its own; the repository checks ride along so
+  # core-test only runs tests, and neither job waits for the other.
   script:
+    - ./scripts/check_time_policy.sh
+    - ./scripts/check_architecture.sh
+    - ./scripts/check_ci_yaml.sh
+    - CGO_ENABLED=0 go run ./scripts/artifactsindex
+    - make test-e2e-coverage-check
     - CGO_ENABLED=0 go vet ./...
     - (cd pkg/extapi && CGO_ENABLED=0 go vet ./...)
 
@@ -528,13 +548,20 @@ core-lint:
     # executor slot can clean the worktree, and use -modcacherw for future
     # cache updates.
     - export DOCKER_HOST_CACHE="$HOME/.cache/gpuworks-ci/$CI_PROJECT_ID"
+    # The docker CLI and daemon socket are the ones this runner uses, not
+    # fixed paths: a runner may keep docker outside /usr/bin and point
+    # DOCKER_HOST at a daemon reserved for CI on a host that also serves GPU
+    # workloads, where a bind mount of the default socket would reach the
+    # host's own daemon.
+    - export GPUWORKS_DOCKER_BIN="$(command -v docker)"
     - mkdir -p "$DOCKER_HOST_CACHE/go-mod" "$DOCKER_HOST_CACHE/go-build" "$DOCKER_HOST_CACHE/images" "$CI_PROJECT_DIR/.cache/home" "$CI_PROJECT_DIR/.tmp"
     # Share a short job-owned Unix endpoint with the non-root Go container.
     # Container PTYs require a local socket, and exec pins this exact daemon.
     - export GPUWORKS_CI_SOCKET_DIR="$CI_PROJECT_DIR/.tmp/gpuworks-e2e-$CI_JOB_ID"
     - mkdir -p "$GPUWORKS_CI_SOCKET_DIR"
     # A cancelled or killed job may skip after_script and leave its DinD
-    # running; each DinD also owns a ~1.6 GB anonymous /var/lib/docker volume.
+    # running; each DinD also owns a ~1.6 GB anonymous /var/lib/docker volume
+    # (or that much memory when it runs on tmpfs, below).
     # Reap labelled containers (and their volumes) older than 2h, well past
     # this template's 45m timeout, so a concurrent job is never touched.
     - |
@@ -546,12 +573,32 @@ core-lint:
           docker rm -f -v "$c" >/dev/null 2>&1 || true
         fi
       done
+    # Keep the DinD's /var/lib/docker in memory where the runner has plenty.
+    # Removing a container unmounts its overlay, and on the runners' 4.19
+    # kernel that unmount syncs the whole filesystem under the upper dir. On a
+    # disk the host shares with other tenants that sync waits for their dirty
+    # data and journal commits too: ppu1 stalled the inner dockerd for 45-110s
+    # at a time, every queued `docker run` with it, and L3/L2 waits timed out
+    # (dockerd stack: cleanup_mnt -> ovl_sync_fs -> sync_filesystem). On tmpfs
+    # that sync has nothing to write. A DinD holds ~2.5 GB, but tmpfs is RAM
+    # the host cannot hand to other jobs, and a pipeline runs up to three of
+    # them at once: 12g each leaves room for a build above the working set
+    # without reserving 24g per job. Only runners with 64 GiB available take
+    # this; GPUWORKS_CI_DIND_TMPFS=0 opts out.
+    - |
+      GPUWORKS_CI_DIND_STORAGE=""
+      avail_kb=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null)
+      if [ "${GPUWORKS_CI_DIND_TMPFS:-1}" != 0 ] && [ "${avail_kb:-0}" -ge 67108864 ]; then
+        GPUWORKS_CI_DIND_STORAGE="--tmpfs /var/lib/docker:rw,exec,suid,dev,size=12g"
+      fi
+      echo "DinD storage: ${GPUWORKS_CI_DIND_STORAGE:-anonymous volume on the host docker root}"
     # The host agent reclaims gpuworks-* names as managed workloads.
     # CI infrastructure must live outside that container namespace.
     - >
       docker run -d --privileged
       --name "ci-gpuworks-docker-core-dind-$CI_JOB_ID"
       --label gpuworks-ci-docker-core
+      $GPUWORKS_CI_DIND_STORAGE
       -e DOCKER_TLS_CERTDIR=
       -v "$CI_PROJECT_DIR:$CI_PROJECT_DIR"
       -v "$GPUWORKS_CI_SOCKET_DIR:/run/gpuworks-e2e"
@@ -628,7 +675,7 @@ core-lint:
       --label gpuworks-ci-docker-core
       --network "container:ci-gpuworks-docker-core-dind-$CI_JOB_ID"
       --user "$(id -u):$(id -g)"
-      -v /usr/bin/docker:/usr/bin/docker:ro
+      -v "$GPUWORKS_DOCKER_BIN":/usr/bin/docker:ro
       -v "$CI_PROJECT_DIR:$CI_PROJECT_DIR"
       -v "$GPUWORKS_CI_SOCKET_DIR:/run/gpuworks-e2e"
       --tmpfs /run/gpuworks-full-disk:rw,size=64m,mode=1777
@@ -820,22 +867,6 @@ l2-fleet-redeploy-churn:
   rules:
     - if: '$FLEET_REDEPLOY_CHURN == "1" && ($CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api")'
 
-# Provider API/SSH contracts are tagged L4 code but use only faithful local
-# fixtures. Run them as an automatic hermetic gate without cloud credentials or
-# cleanup calls; real CompShare allocation remains in explicit cloud jobs.
-core-compshare-offline-contracts:
-  extends: .go-core
-  variables:
-    GIT_DEPTH: "0" # This gate builds its own server before the seed artifact is available.
-  stage: core
-  script:
-    - make test-l4-compshare-offline-contracts GO_TEST_FLAGS='-coverpkg=./internal/...,./pkg/... -coverprofile=coverage-compshare-contracts.out'
-  artifacts:
-    when: always
-    paths:
-      - coverage-compshare-contracts.out
-    expire_in: 14 days
-
 release-docs-pdf:
   extends: .go-core
   stage: release
@@ -887,7 +918,6 @@ release-docs-pdf:
     - job: core-test
     - job: core-vet
     - job: core-lint
-    - job: core-compshare-offline-contracts
   script:
     # The zstd CLI packs the embedded agents ~10% smaller than the Go
     # encoder make falls back to; a mirror hiccup only costs that, not the build.
@@ -909,13 +939,30 @@ release-docs-pdf:
       fi
       dpkg -i "$ZSTD_DEBS"/zstd_*.deb >/dev/null 2>&1 || dpkg -i /var/cache/apt/archives/zstd_*.deb >/dev/null 2>&1 || echo "zstd unavailable; embedding the agents with the Go encoder"
     - make release-packages
+    # The build contract the offline provider tests used to carry: the server
+    # and agent binaries a hosted control plane uploads must be static x86-64.
+    # They exist only where this job built them, so the macOS and arm64
+    # builds report the check as not applicable instead of skipping silently.
+    - |
+      if [ -x bin/gpuworks-linux-amd64 ] && [ -x bin/dl/gpuworks-agent-linux-amd64 ]; then
+        CGO_ENABLED=0 go test -tags=cloudgpu,compshare -run '^TestBuiltRunnerBinariesAreStaticAMD64$' -timeout=5m ./test/l4
+      else
+        echo "static-binary contract: not applicable, this job built no linux/amd64 binaries"
+      fi
   artifacts:
     paths:
       - dist/
     expire_in: 30 days
-  # Keep these rules identical in .release-build and release-publish: the
+  # The default branch and release tag rules match release-publish's: the
   # default branch builds the nightly channel under its short commit, a
-  # release tag builds the release channel under the tag (ADR 0040).
+  # release tag builds the release channel under the tag (ADR 0040). The head
+  # of a release/YY.M branch is built too, under its short commit, so the
+  # packages of a line's unreleased fixes can be downloaded and tried before
+  # the next tag; release-publish has no such rule, so these builds never
+  # reach a distribution source or move a channel. They are built on the
+  # release channel so that, installed for testing, they are offered the
+  # line's next tag as an update rather than master's nightly; such a server
+  # reports itself as a development build.
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       variables:
@@ -924,6 +971,10 @@ release-docs-pdf:
     - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
       variables:
         GPUWORKS_RELEASE_ID: "$CI_COMMIT_TAG"
+        GPUWORKS_RELEASE_CHANNEL: "release"
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^release\/[0-9]+\.[0-9]+$/'
+      variables:
+        GPUWORKS_RELEASE_ID: "$CI_COMMIT_SHORT_SHA"
         GPUWORKS_RELEASE_CHANNEL: "release"
     - when: never
 
@@ -998,9 +1049,10 @@ release-publish:
     - export RCLONE="/host-go-cache/tools/rclone-$GPUWORKS_RCLONE_VERSION/rclone"
     - test -x "$RCLONE" || GOBIN="$(dirname "$RCLONE")" go install "github.com/rclone/rclone@$GPUWORKS_RCLONE_VERSION"
     - ./scripts/publish_dist.sh "$GPUWORKS_RELEASE_CHANNEL" dist
-  # Keep these rules identical in .release-build and release-publish: the
+  # Keep these rules identical to the first two of .release-build: the
   # default branch builds the nightly channel under its short commit, a
-  # release tag builds the release channel under the tag (ADR 0040).
+  # release tag builds the release channel under the tag (ADR 0040). Release
+  # branch builds are not published.
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       variables:
@@ -1047,14 +1099,21 @@ release-agent-image:
         exit 1
       fi
     - export TOOL_CACHE="$HOME/.cache/gpuworks-ci/$CI_PROJECT_ID"
+    # The docker CLI and daemon socket are the ones this runner uses, not
+    # fixed paths: a runner may keep docker outside /usr/bin and point
+    # DOCKER_HOST at a daemon reserved for CI on a host that also serves GPU
+    # workloads, where a bind mount of the default socket would reach the
+    # host's own daemon.
+    - export GPUWORKS_DOCKER_BIN="$(command -v docker)"
+    - export GPUWORKS_HOST_DOCKER_SOCK="${DOCKER_HOST:-unix:///var/run/docker.sock}" && export GPUWORKS_HOST_DOCKER_SOCK="${GPUWORKS_HOST_DOCKER_SOCK#unix://}"
     - mkdir -p "$TOOL_CACHE/go-mod" "$TOOL_CACHE/go-build" "$TOOL_CACHE/tools" "$CI_PROJECT_DIR/.tmp"
     - >
       docker run --rm
       --name "ci-gpuworks-agent-image-$CI_JOB_ID"
       --network host
-      --user "$(id -u):$(id -g)" --group-add "$(stat -c %g /var/run/docker.sock)"
-      -v /usr/bin/docker:/usr/bin/docker:ro
-      -v /var/run/docker.sock:/var/run/docker.sock
+      --user "$(id -u):$(id -g)" --group-add "$(stat -c %g "$GPUWORKS_HOST_DOCKER_SOCK")"
+      -v "$GPUWORKS_DOCKER_BIN":/usr/bin/docker:ro
+      -v "$GPUWORKS_HOST_DOCKER_SOCK":/var/run/docker.sock
       -v "$CI_PROJECT_DIR:$CI_PROJECT_DIR"
       -v "$TOOL_CACHE/go-mod:/go-cache/mod"
       -v "$TOOL_CACHE/go-build:/go-cache/build"
@@ -1069,12 +1128,13 @@ release-agent-image:
       -e NERDCTL_URL_BASE
       -e GPUWORKS_AGENT_IMAGE_REPOS
       -e GPUWORKS_AGENT_IMAGE_DOCKER_CONFIG
+      -e GPUWORKS_HOST_DOCKER_SOCK
       -e GPUWORKS_DOCKER_CLI_IMAGE=docker.m.daocloud.io/library/docker:29-cli
       -e GPUWORKS_BUILDKIT_IMAGE=docker.m.daocloud.io/moby/buildkit:v0.25.2
       "$DOCKER_GO_IMAGE"
       make agent-image-publish VERSION="$GPUWORKS_RELEASE_ID" COMMIT="$CI_COMMIT_SHA"
-  # Keep these rules identical in .release-build, release-publish and
-  # release-agent-image (ADR 0040).
+  # Keep these rules identical to release-publish's and to the first two of
+  # .release-build (ADR 0040); release branch builds publish no agent image.
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       variables:
@@ -1155,7 +1215,6 @@ release-agent-image:
     - job: core-test
     - job: core-vet
     - job: core-lint
-    - job: core-compshare-offline-contracts
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CLOUD_FULL == "1"'
       when: on_success
@@ -1309,7 +1368,6 @@ l4-ascend-pool-partition-inference:
     - job: core-test
     - job: core-vet
     - job: core-lint
-    - job: core-compshare-offline-contracts
   environment:
     name: cloud-test/ascend-primary
     action: prepare

@@ -93,6 +93,8 @@ var platformRecoveryRoutes = map[string]bool{
 	"POST /api/v1/slurm/enroll": true,
 	"GET /slurm/check.sh":       true,
 	"GET /slurm/token-status":   true,
+	// The check of a Kubernetes cluster's agents only reads the cluster.
+	"GET /kube/check.sh": true,
 }
 
 // platformRecoveryPrefixes are subtrees served under any limit: the
@@ -143,7 +145,9 @@ var platformReachingReads = map[string]bool{
 	"GET /api/v1/providers/{id}/instances":    true,
 	"GET /api/v1/providers/{id}/clusters":     true,
 	"GET /api/v1/providers/{id}/hpc-clusters": true,
-	"GET /api/v1/images/community/browse":     true,
+	// How a cloud cluster's agent pods stand, read from the cluster.
+	"GET /api/v1/kube/clusters/{uuid}/rollout": true,
+	"GET /api/v1/images/community/browse":      true,
 	// The server's public SSH key and a node's SSH settings without their
 	// secrets.
 	"GET /api/v1/ssh-key":          true,
@@ -176,6 +180,9 @@ var platformReadingPosts = map[string]bool{
 	"POST /api/v1/ai/configs/test":  true,
 	"POST /api/v1/benchmarks/probe": true,
 	"POST /api/v1/nodes/precheck":   true,
+	// The script that checks a Kubernetes cluster before it is connected:
+	// rendered and returned, run by the user.
+	"POST /api/v1/kube/precheck": true,
 	// Which notices this user has read: the user's own view, no resource.
 	"POST /api/v1/notices/read": true,
 }

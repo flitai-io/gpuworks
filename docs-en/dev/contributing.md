@@ -175,6 +175,7 @@ do not merely append a new rule at the end while retaining outdated conclusions 
 
 - Keep one complete definition of each fact, and refer to it from other pages through necessary summaries and links. When updating a definition, check whether referring pages also need changes.
 - Run `make check-doc-links` (already included in `make test-unit`) to validate relative links and `#anchors`, and reject `[[wiki]]` references under `docs/`.
+  Links under `docs-en/` are checked against the anchors the site assigns: an English page's headings keep the Chinese page's anchors (`preserve_heading_ids` in `docs-site/stage_docs.py`), so a link names the Chinese heading's anchor, `#认证` rather than `#authentication`.
   Also check image references and example syntax. Check separately that repository files exist and that published-site paths are valid. For presentation changes, check the build and preview, including name columns, wrapping, and horizontal scrolling in narrow-screen tables.
 - Review content against the original before editing to assess accuracy, scope completeness, and reading burden. For tutorials and how-to guides, check each of the following:
   whether the opening provides enough information to determine applicability, the intended outcome, and prerequisites; whether any necessary preparation is missing or a condition for one path has been expanded to the whole article;
@@ -208,6 +209,6 @@ do not copy the full decision into multiple guides.
 <!-- translation-source-sha256: 1dab26b020dd412bfa8a4c04ad872cee1a573c1b44817c13912f28f1a59507a0 ### Steps and Examples -->
 <!-- translation-source-sha256: e17cae7ca53ddb457c4327048918c86dd0514e1d35ddfbb679943e0185382eb4 ### Screenshots and Flowcharts -->
 <!-- translation-source-sha256: b7ac90ee96175ebe50f50f5b5e4b27d68eb34f634f3c620266330677aad37268 ### Style and Layout -->
-<!-- translation-source-sha256: 5d313689877c79ba4b2333ba74ec181cf810a0c17514acb879faf7ccd179509b ### Updates and Acceptance -->
+<!-- translation-source-sha256: 067603fe1d7ca5f9e61a70f0b672c48d58b3af1890bf46ab20decb1def9bf609 ### Updates and Acceptance -->
 <!-- translation-source-sha256: 3c68ce975e086f7e908b848f686e503cf42aa33d4a441d6139fc67c61157f14d ## ADRs -->
 <!-- translation-localized-code-block: 6ac2188471df1d13d3f555100a0be8446e1e7e797f8484dd9a8478a88ab5e2ff b5c81a401976b96af4b52f6d68e1178451469f2e31988ec96e9ef86319c56f5b Reviewed English writing-template prose: present-tense wording only; heading levels, placeholders, prerequisites and executable examples are unchanged. -->

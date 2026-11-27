@@ -15,7 +15,8 @@ export function storageStateLabel(t: TFunction, state: string): string {
 /** A reason code from the server (acquisition unavailable, location reasons) as text; unknown codes pass through. */
 export function storageReasonText(t: TFunction, code?: string): string {
   if (!code) return "";
-  return t(`storageReason.${code}`, { ns: "common", defaultValue: code });
+  // Reasons only the storage pages show are in the storage namespace.
+  return t(`storageReason.${code}`, { ns: ["common", "storage"], defaultValue: code });
 }
 
 /** A reason shown in parts where there is room: what is wrong, what the agent does or why it leaves the mount alone, and the ways out. */

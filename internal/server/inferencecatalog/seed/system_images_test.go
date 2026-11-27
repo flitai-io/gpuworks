@@ -58,8 +58,6 @@ func uncataloguedRunnerImages(t *testing.T) map[string]bool {
 // runner matrix without moving the templates would leave them with the
 // canonical Docker Hub reference as their only source, and nothing else would
 // notice. The check goes through the store, the way a deployment resolves it.
-// A runner image the matrix keeps out of the catalog has no row, so the specs
-// running it list its copies in image_sources themselves.
 func TestBuiltinTemplateSystemImagesResolveToImageCatalogRows(t *testing.T) {
 	catalog, err := Catalog()
 	if err != nil {
@@ -75,19 +73,22 @@ func TestBuiltinTemplateSystemImagesResolveToImageCatalogRows(t *testing.T) {
 	}
 
 	uncatalogued := uncataloguedRunnerImages(t)
+	prefixes := []string{systemImageRepository, "docker.io/" + systemImageRepository, "quay.io/" + systemImageRepository, "swr.cn-southwest-2.myhuaweicloud.com/" + systemImageRepository}
 	users := map[string][]string{}
 	for _, model := range catalog.Models {
 		for _, spec := range model.Specs {
-			if !strings.HasPrefix(spec.Image, systemImageRepository) {
-				continue
-			}
-			if uncatalogued[spec.Image] {
-				if len(spec.ImageSources) == 0 {
-					t.Errorf("%s/%s runs %s, which the image catalog does not list, without image_sources", model.ModelID, spec.Name, spec.Image)
+			for _, prefix := range prefixes {
+				if tag, ok := strings.CutPrefix(spec.Image, prefix); ok {
+					if uncatalogued[systemImageRepository+tag] {
+						if len(spec.ImageSources) == 0 {
+							t.Errorf("%s/%s runs uncatalogued %s without image_sources", model.ModelID, spec.Name, spec.Image)
+						}
+						break
+					}
+					users[spec.Image] = append(users[spec.Image], model.ModelID+"/"+spec.Name)
+					break
 				}
-				continue
 			}
-			users[spec.Image] = append(users[spec.Image], model.ModelID+"/"+spec.Name)
 		}
 	}
 	if len(users) == 0 {
@@ -114,6 +115,9 @@ func TestBuiltinTemplateSystemImagesResolveToImageCatalogRows(t *testing.T) {
 			if !imagecatalog.IsArchiveURL(source) {
 				registry++
 			}
+		}
+		if row.Deprecated || !row.Enabled {
+			t.Errorf("%s: template runner unavailable", image)
 		}
 		if registry == 0 {
 			t.Errorf("%s resolves to catalog row %s without registry sources; templates using it could only pull the canonical reference", image, row.ImageRef)

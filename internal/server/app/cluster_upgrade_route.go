@@ -76,7 +76,7 @@ func clusterUpgradeHandler(bundle *enrollmentBundle, session joinedRaftSession, 
 		}
 		switch {
 		case errors.Is(err, store.ErrClusterUpgradeRefused):
-			response.Refused, response.RefusedCode = err.Error(), store.ClusterUpgradeRefusalCode(err)
+			response.Refused = err.Error()
 		case err != nil:
 			response.Error = err.Error()
 		}

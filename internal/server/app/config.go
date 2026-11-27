@@ -14,6 +14,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/debuglog"
 	"gpuworks.ai/gpuworks/internal/securefile"
 	"gpuworks.ai/gpuworks/internal/selflog"
+	"gpuworks.ai/gpuworks/internal/server/agentbin"
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/distribution"
 	"gpuworks.ai/gpuworks/internal/server/proxy"
@@ -26,6 +27,9 @@ import (
 // Config holds server runtime configuration. The cli package fills it from
 // server.yaml and the command line; nothing here reads the environment.
 type Config struct {
+	// agents is prepared once at startup, including before HA business activation.
+	agents agentbin.Files
+
 	// SelfLog captures the server's own error-level slog records into the
 	// logstore under source=server. Nil disables that drain.
 	SelfLog *selflog.Collector

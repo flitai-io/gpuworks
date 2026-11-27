@@ -126,16 +126,39 @@ func countSchedulable(gpus []GPU) int {
 // held outside the platform is named before a fault: freeing it is the
 // quicker remedy, and it is not something a health alert would show. A
 // partition that could share such a card but sleeps is told that instead.
+// Cards an extension holds come next, also before a fault; such a card is
+// not named for its outside processes, since enabling scheduling on it,
+// which that refusal suggests, is refused while it is held.
 func noSchedulableGPUReason(req Request, node string, gpus []GPU) Reason {
 	if len(gpus) == 0 {
 		return Reason{Code: ReasonNoOwnedGPU}
 	}
 	for _, g := range gpus {
-		if g.HeldOutsidePlatform || g.withheld > 0 {
+		if (g.HeldOutsidePlatform || g.withheld > 0) && !g.HeldByHolder {
 			return heldReason(req, node, gpus, g)
 		}
 	}
+	if reason, ok := holderHeldReason(node, gpus); ok {
+		return reason
+	}
 	return Reason{Code: ReasonNoHealthyGPU}
+}
+
+// holderHeldReason names the cards an extension holds out of scheduling
+// (GPU.HeldByHolder), when there are any among gpus.
+func holderHeldReason(node string, gpus []GPU) (Reason, bool) {
+	var held []GPU
+	for _, g := range gpus {
+		if g.HeldByHolder {
+			held = append(held, g)
+		}
+	}
+	if len(held) == 0 {
+		return Reason{}, false
+	}
+	params := cardListParams(held)
+	params["node"] = node
+	return Reason{Code: ReasonGPUsHeld, Params: params}, true
 }
 
 // usableGPUs returns the GPUs that can host the request at the given per-GPU

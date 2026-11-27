@@ -73,7 +73,7 @@ func TestSelectedModelIsNeverSubstituted(t *testing.T) {
 			rt.Fatal(err)
 		}
 		if !w.NamesModel {
-			creates.add(checkTemplateReuse(rt, f, w, before, after, created, node))
+			creates.add(checkTemplateReuse(rt, f, w, before, after, created.Deployment, node))
 			return
 		}
 		if created.ModelID != f.selected.ID {

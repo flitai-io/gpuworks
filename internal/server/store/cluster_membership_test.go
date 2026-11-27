@@ -187,8 +187,16 @@ func TestGrantClusterMembershipRejectsChangingAndUnauthorizedTopology(t *testing
 	if _, err := st.RevokeClusterAdmission(t.Context(), id.ClusterID, admissions[1].KeyFingerprint); err != nil {
 		t.Fatal(err)
 	}
-	if revision, members, err := st.GrantClusterMembership(t.Context(), id, requester); err == nil || revision != 0 || members != nil {
-		t.Fatalf("revoked live member exported %d %#v %v", revision, members, err)
+	// The revoked member is still in the database's member list. It is not
+	// a member any more: the grant succeeds and leaves it out.
+	revision, members, err = st.GrantClusterMembership(t.Context(), id, requester)
+	if err != nil || revision == 0 || len(members) != len(base)-1 {
+		t.Fatalf("grant beside a revoked live member: %d %#v %v", revision, members, err)
+	}
+	for _, member := range members {
+		if member.KeyFingerprint == admissions[1].KeyFingerprint || member.Address == admissions[1].Address {
+			t.Fatalf("the revoked member was exported: %#v", members)
+		}
 	}
 	if _, err := st.RevokeClusterAdmission(t.Context(), id.ClusterID, requester); err != nil {
 		t.Fatal(err)
@@ -201,7 +209,7 @@ func TestGrantClusterMembershipRejectsChangingAndUnauthorizedTopology(t *testing
 func TestLiveClusterAdmissionBindingRejectsDuplicateKeysAndAddresses(t *testing.T) {
 	live := []cluster.Member{{ID: 1, Address: "one.example:9010", Role: "voter"}, {ID: 2, Address: "two.example:9010", Role: "spare"}}
 	valid := []ClusterAdmission{{KeyFingerprint: strings.Repeat("a", 64), Address: live[0].Address}, {KeyFingerprint: strings.Repeat("b", 64), Address: live[1].Address}}
-	for _, name := range []string{"key", "address", "invalid key", "invalid address", "revoked"} {
+	for _, name := range []string{"key", "address", "invalid key", "invalid address", "no admission"} {
 		t.Run(name, func(t *testing.T) {
 			admissions := slices.Clone(valid)
 			switch name {
@@ -213,12 +221,50 @@ func TestLiveClusterAdmissionBindingRejectsDuplicateKeysAndAddresses(t *testing.
 				admissions[1].KeyFingerprint = "invalid"
 			case "invalid address":
 				admissions[1].Address = "TWO.example:9010"
-			case "revoked":
-				now := time.Now()
-				admissions[1].RevokedAt = &now
+			case "no admission":
+				admissions = admissions[:1]
 			}
 			if members, err := bindLiveClusterAdmissions(live, admissions); err == nil || members != nil {
 				t.Fatalf("invalid admission binding %#v %v", members, err)
+			}
+		})
+	}
+	revokedAt := time.Now()
+	keyA, keyB, keyC := valid[0].KeyFingerprint, valid[1].KeyFingerprint, strings.Repeat("c", 64)
+	one := ClusterTransportMember{ID: 1, Address: live[0].Address, Role: "voter", KeyFingerprint: keyA}
+	for _, tc := range []struct {
+		name       string
+		admissions []ClusterAdmission
+		want       []ClusterTransportMember
+		fails      bool
+	}{
+		{"a revoked member still in the database is left out",
+			[]ClusterAdmission{valid[0], {KeyFingerprint: keyB, Address: live[1].Address, RevokedAt: &revokedAt}},
+			[]ClusterTransportMember{one}, false},
+		{"a member that joined again on the same address with a new key is bound to the new key",
+			[]ClusterAdmission{valid[0], {KeyFingerprint: keyB, Address: live[1].Address, RevokedAt: &revokedAt}, {KeyFingerprint: keyC, Address: live[1].Address}},
+			[]ClusterTransportMember{one, {ID: 2, Address: live[1].Address, Role: "spare", KeyFingerprint: keyC}}, false},
+		{"a member with no admission at all is unknown",
+			[]ClusterAdmission{valid[0]}, nil, true},
+		{"a revoked admission at another address does not excuse an unknown member",
+			[]ClusterAdmission{valid[0], {KeyFingerprint: keyB, Address: "gone.example:9010", RevokedAt: &revokedAt}}, nil, true},
+		{"address history: a later member at an address whose only admission is an old revoked one is left out, not refused",
+			[]ClusterAdmission{valid[0], {KeyFingerprint: keyC, Address: live[1].Address, RevokedAt: &revokedAt}},
+			[]ClusterTransportMember{one}, false},
+		{"every member revoked leaves nobody",
+			[]ClusterAdmission{{KeyFingerprint: keyA, Address: live[0].Address, RevokedAt: &revokedAt}, {KeyFingerprint: keyB, Address: live[1].Address, RevokedAt: &revokedAt}},
+			[]ClusterTransportMember{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			members, err := bindLiveClusterAdmissions(live, tc.admissions)
+			if tc.fails {
+				if err == nil || members != nil {
+					t.Fatalf("bound %#v %v", members, err)
+				}
+				return
+			}
+			if err != nil || !reflect.DeepEqual(members, tc.want) {
+				t.Fatalf("bound %#v %v, want %#v", members, err, tc.want)
 			}
 		})
 	}

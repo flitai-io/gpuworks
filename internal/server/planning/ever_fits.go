@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/nodelabel"
 	"gpuworks.ai/gpuworks/internal/server/scheduler"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -28,8 +29,7 @@ type NeverFits struct {
 // kinds costs three preview plans. build is the launch for a node; it is
 // planned as an unloaded preview (Input.Unloaded) with the template's
 // hardware contract (PlanTemplateLaunch). facts are the nodes' networks and
-// storages, each nil when reqs name none. The result is nil when some node
-// fits.
+// storages, each nil when reqs name none. When a shape fits, the result carries that plan’s warnings.
 //
 // A shape whose launch cannot be resolved on its node (LaunchResolveError:
 // the cards it gets do not match the stated parallelism, say) cannot run the
@@ -38,7 +38,7 @@ type NeverFits struct {
 // answer, as it was before other shapes were tried - it names what to change
 // more precisely than a refusal would. A canceled context, a failed build and
 // any other planning failure (a store read) stop the check as errors.
-func EverFits(ctx context.Context, st *store.Store, networks Networks, nodes []*store.Node, facts NodeFacts, reqs nodelabel.Requirements, build func(*store.Node) (LaunchRequest, deploy.CatalogSelection, error)) (*NeverFits, error) {
+func EverFits(ctx context.Context, st *store.Store, networks Networks, nodes []*store.Node, facts NodeFacts, reqs nodelabel.Requirements, build func(*store.Node) (LaunchRequest, deploy.CatalogSelection, error)) ([]messages.Warning, *NeverFits, error) {
 	shapes := map[string]bool{}
 	out := &NeverFits{}
 	var unresolved error
@@ -53,13 +53,13 @@ func EverFits(ctx context.Context, st *store.Store, networks Networks, nodes []*
 		}
 		shapes[shape] = true
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		req, layer, err := build(node)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		_, refusal, err := PlanTemplateLaunch(ctx, st, networks, node, req.UnloadedPreview(), layer)
+		plan, refusal, err := PlanTemplateLaunch(ctx, st, networks, node, req.UnloadedPreview(), layer)
 		var resolveErr *LaunchResolveError
 		if errors.As(err, &resolveErr) {
 			if unresolved == nil {
@@ -68,20 +68,20 @@ func EverFits(ctx context.Context, st *store.Store, networks Networks, nodes []*
 			continue
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if refusal == nil {
-			return nil, nil
+			return plan.Output.Warnings, nil, nil
 		}
 		if out.Node == "" {
 			out.Node, out.Reason = node.DisplayName(), *refusal
 		}
 	}
 	if unresolved != nil {
-		return nil, unresolved
+		return nil, nil, unresolved
 	}
 	out.Shapes = len(shapes)
-	return out, nil
+	return nil, out, nil
 }
 
 // UnloadedRefusal reads the unloaded plan of one node (req.UnloadedPreview

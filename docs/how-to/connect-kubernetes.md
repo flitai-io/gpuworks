@@ -13,7 +13,7 @@
   不需要按厂商各建一个条目（见下一节）。NVIDIA 节点的 NVIDIA 容器运行时可用：或者是 containerd 的
   默认运行时（托管 Kubernetes 如 DOKS、Nebius、ACK 都是），或者有名为 `nvidia` 的 RuntimeClass（k3s 会自动创建）；
   其他厂商只要求节点上装好厂商驱动，不需要厂商的容器运行时，也不需要厂商的 device plugin。
-- 要挂 NFS 存储的节点装有 `mount.nfs`（nfs-utils / nfs-common）：agent 在节点的挂载命名空间里用它挂载。
+- 要挂 NFS 存储的节点装有 `mount.nfs`（nfs-utils / nfs-common）：agent 在节点的挂载命名空间里用它挂载。挂载点要在默认挂载目录 `/mnt/gpuworks` 或 agent 的状态目录下：agent 的 Pod 只与节点共用这两个目录，在别处创建的挂载点节点上没有。挂载点在别处时该节点报「agent 与节点不共用这个目录」，不会挂载；这时在节点上自行挂载，并为这些节点选**使用已有挂载**。从不共用 `/mnt/gpuworks` 的版本升级后，要重新应用一次 manifest（`kubectl apply` 或「应用到集群」），NFS 存储才能在这些节点上挂载。
 - 能在集群里执行 `kubectl apply`，并允许一个 `privileged` 的 namespace（manifest 会给 namespace 打上
   Pod Security Admission 的 `privileged` 标签；Kyverno、Gatekeeper 一类的策略需另外放行）。
 
@@ -213,11 +213,40 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
    - 空闲归还（保存后立即生效）：借来的卡在最后一个实例停止后保留多久，默认 60 秒（每 30 秒检查一次，实际在 60 到 90 秒之间归还）；「常驻」表示一直不还，节点池整体交给 gpuworks。
    - 优先级：gpuworks 的占位 Pod 与实例 Pod 所用 PriorityClass（`gpuworks-inference-<命名空间>`）的数值，默认 10000，范围 0 到 1000000000，越大越优先；普通 Pod 是 0。它也决定节点内存、磁盘紧张时的驱逐顺序：优先级低的先被驱逐。
    - 允许抢占：默认关闭（PriorityClass 写 `preemptionPolicy: Never`），借卡放不下时占位 Pod 只会等待，调度器不会为它驱逐你的其他 Pod。开启后，HAMi 与 ACK 共享 GPU 模式下（占位 Pod 经调度器）调度器可能驱逐优先级更低的 Pod；普通 device plugin 模式的占位 Pod 与所有实例 Pod 直接绑定节点，不经调度器，不受这个开关影响。
-3. 点「接入」，弹窗里显示要在集群里执行的 `kubectl apply` 命令（按钮变为「关闭」），复制后在集群里执行：
+3. 预检查（推荐，不是必需的）：点「接入」前先点「预检查」，弹窗按表单当前填写的内容给出一个脚本 `gpuworks-precheck.sh`，可复制或下载，在能用
+   `kubectl` 访问集群的机器上执行：
+
+   ```bash
+   bash gpuworks-precheck.sh
+   ```
+
+   脚本在每个要接入的节点上起一个临时 Pod（DaemonSet `gpuworks-precheck`，节点选择、容忍、拉取凭据、主机网络与 DNS 都与正式的 agent 一致，不需要特权），
+   检查节点能否拉到 agent 镜像、能否连上管理节点接入地址（TCP），最多等 3 分钟，然后每个节点输出一行“节点 状态码 详情”，例如：
+
+   ```text
+   gpu-node-1                       OK
+   gpu-node-2                       IMAGE_PULL_FAILED    Failed to pull image "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1": … dial tcp …: i/o timeout
+   gpu-node-3                       SERVER_UNREACHABLE   10.0.0.5:8800
+   ```
+
+   拉取失败时详情取自 kubelet 的事件，是真实原因（连接超时、未授权、镜像不存在），而不是 Pod 状态里的 back-off。每个状态码的含义和处理办法在弹窗里列出；
+   其余的状态码说明选择器没选中节点、Pod 调度不上或创建不了（如 PodSecurity、配额）、拉取凭据 Secret 不存在、kubectl 连不上集群等。全部通过时退出码为 0。
+   脚本结束（包括中途中断）时删掉它创建的 DaemonSet，命名空间是它创建的也一并删除；脚本里没有接入令牌，也不会让任何节点接入。离线环境或连不上
+   SWR、Docker Hub、quay.io 时，先按上文把镜像放进内网仓库、填好「agent 镜像」，再预检查。从云账号接入的集群（按节点池选节点）没有预检查。
+4. 点「接入」，弹窗里显示要在集群里执行的 `kubectl apply` 命令（按钮变为「关闭」），复制后在集群里执行：
 
    ```bash
    kubectl apply -f 'https://server.example/kube/manifest.yaml?token=…'
    ```
+
+   命令下面是「apply 之后检查各节点」：
+
+   ```bash
+   curl -fsSL 'https://server.example/kube/check.sh?token=…' | bash
+   ```
+
+   它只读集群，按同样的格式逐个节点说明 agent 的 Pod 是否在运行、拉镜像是否失败（详情同样取自 kubelet 的事件）、调度不上或容器退出的原因；
+   Pod 都 `OK` 但节点没有出现在节点页时，多半是 agent 连不上管理节点接入地址，看 agent 的日志。
 
    被选中的节点会自动出现在节点页，带系统标签 `gpuworks.ai/kubernetes-cluster`（值是集群的 UUID，显示集群名）和 `gpuworks.ai/kubernetes-node`（Kubernetes 里的节点名），节点页可据此筛选，部署的节点条件也可以用它们限定在某个集群上；扩容出来的节点同样自动加入。
    集群在「已接入的外部平台」列表里占一行，「厂商」列显示「—」，「平台类型」列显示 Kubernetes，「已接入节点」列的数字点开是只列这些节点的
@@ -225,7 +254,7 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
    如“2 个节点 · NVIDIA ×2”，有节点时可点开「计算节点」页），还没有节点接入时下面是接入命令。集群名旁出现「命名空间重复」时，
    表示另有条目用了同一命名空间（见上文[与集群里的其他业务共存](#与集群里的其他业务共存)）。管理员在「操作」列直接点「编辑」「复制接入命令」，
    其余在「更多」菜单里：「查看 manifest」，分隔线下是「卸载」（见下文「卸载」）「吊销」「删除」；吊销、删除都先弹确认框。创建 5 分钟后仍没有
-   节点加入时，「状态」列改为「长时间未接入」，旁边的「排查」给出要执行的 `kubectl` 命令和常见原因（拉不到 agent 镜像、节点
+   节点加入时，「状态」列改为「长时间未接入」，旁边的「排查」先给出上面那条检查命令，再给出要执行的 `kubectl` 命令和常见原因（拉不到 agent 镜像、节点
    选择器没选中节点、agent 连不上 server）。
 
 命令里带着集群的接入令牌，只给管理员看。吊销接入令牌后新节点不能再加入，已加入的节点不受影响。

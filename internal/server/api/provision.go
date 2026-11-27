@@ -266,24 +266,21 @@ func serverDialInstallCheck(ctx context.Context, addr, secret string, dial func(
 	notConnected := func(evidence string) provision.CheckResult {
 		return provision.WarnCheck(provision.CheckIDServerDial, messages.CheckServerDialNotConnected, "queued for reconnection to "+addr, params).WithEvidence(evidence)
 	}
-	const attempts = 2
-	var lastErr error
-	for attempt := 0; attempt < attempts; attempt++ {
+	retryDelays := [...]time.Duration{2 * time.Second, 4 * time.Second}
+	for attempt := 0; ; attempt++ {
 		attemptCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		err := dial(attemptCtx, addr, secret)
 		cancel()
 		if err == nil {
 			return provision.PassCheck(provision.CheckIDServerDial, messages.CheckServerDialConnected, "connected to "+addr, params)
 		}
-		lastErr = err
-		if attempt+1 >= attempts {
-			break
+		if attempt == len(retryDelays) {
+			return notConnected(err.Error())
 		}
 		select {
 		case <-ctx.Done():
 			return notConnected(ctx.Err().Error())
-		case <-time.After(time.Second):
+		case <-time.After(retryDelays[attempt]):
 		}
 	}
-	return notConnected(lastErr.Error())
 }

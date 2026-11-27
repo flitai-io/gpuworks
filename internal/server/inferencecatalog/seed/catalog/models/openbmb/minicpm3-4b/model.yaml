@@ -36,6 +36,14 @@ specs:
   - --attention-backend
   - ascend
   - --trust-remote-code
+  # The SGLang child exits with SIGQUIT on 910B; graph capture is what
+  # aborts it on 910C, and the eager path is what ran there.
+  - --disable-cuda-graph
+  performance_tradeoffs:
+  - param: --disable-cuda-graph
+    reason: hardware_plugin_requires
+    detail_en: "MiniCPM3's SGLang child exits with SIGQUIT on 910B; on 910C graph capture aborts it and the eager path completed startup and a chat request."
+    detail_zh: "910B 上 MiniCPM3 的 SGLang 子进程以 SIGQUIT 退出；910C 上图捕获会使其中止，eager 路径完成了启动和一次对话请求。"
   placement:
     language: starlark
     resolver: "def resolve(gpu):\n    if gpu.min_memory_gib < 32: return reject(\"\

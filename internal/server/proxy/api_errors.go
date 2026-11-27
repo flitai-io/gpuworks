@@ -37,6 +37,7 @@ const (
 	ErrorInstanceNotRunning          = "INSTANCE_NOT_RUNNING"
 	ErrorInstanceOffline             = "INSTANCE_OFFLINE"
 	ErrorModelNotReady               = "MODEL_NOT_READY"
+	ErrorModelBusy                   = "MODEL_BUSY"
 	ErrorModelNodeOffline            = "MODEL_NODE_OFFLINE"
 	ErrorDeploymentStartFailed       = "DEPLOYMENT_START_FAILED"
 	ErrorPDPlacementUnreadable       = "PD_PLACEMENT_UNREADABLE"
@@ -98,11 +99,14 @@ var gatewayErrors = map[string]gatewayError{
 	ErrorInstanceModelMismatch: {http.StatusNotFound, typeNotFound, "model", "instance {instance} does not serve {model}"},
 	// The leading "model is asleep; wake it first" stays as it was, for
 	// clients that match on it.
-	ErrorModelAsleep:              {http.StatusServiceUnavailable, typeServer, "", "model is asleep; wake it first (console, or POST /api/v1/deployments/{deployment_id}/wake; a schedule or a waiting wake may also wake it)"},
-	ErrorInstanceAsleep:           {http.StatusServiceUnavailable, typeServer, "", "instance {instance} does not take requests while its deployment sleeps; wake it first"},
-	ErrorInstanceNotRunning:       {http.StatusServiceUnavailable, typeServer, "", "instance {instance} is not awake and running"},
-	ErrorInstanceOffline:          {http.StatusServiceUnavailable, typeServer, "", "instance {instance} is offline"},
-	ErrorModelNotReady:            {http.StatusServiceUnavailable, typeServer, "", "no reachable running instance for {model}; check deployment status and node connectivity"},
+	ErrorModelAsleep:        {http.StatusServiceUnavailable, typeServer, "", "model is asleep; wake it first (console, or POST /api/v1/deployments/{deployment_id}/wake; a schedule or a waiting wake may also wake it)"},
+	ErrorInstanceAsleep:     {http.StatusServiceUnavailable, typeServer, "", "instance {instance} does not take requests while its deployment sleeps; wake it first"},
+	ErrorInstanceNotRunning: {http.StatusServiceUnavailable, typeServer, "", "instance {instance} is not awake and running"},
+	ErrorInstanceOffline:    {http.StatusServiceUnavailable, typeServer, "", "instance {instance} is offline"},
+	ErrorModelNotReady:      {http.StatusServiceUnavailable, typeServer, "", "no reachable running instance for {model}; check deployment status and node connectivity"},
+	// A request that asked not to wait (X-GPUWorks-If-Busy: reject) found
+	// no free run slot; it carries Retry-After (busy_reject.go).
+	ErrorModelBusy:                {http.StatusTooManyRequests, typeInvalidRequest, "", "every replica of {model} is busy and the request asked not to wait; send it again later, elsewhere, or without X-GPUWorks-If-Busy"},
 	ErrorModelNodeOffline:         {http.StatusServiceUnavailable, typeServer, "", "{model} has a running instance, but its node has no live agent connection; check the node"},
 	ErrorDeploymentStartFailed:    {http.StatusServiceUnavailable, typeServer, "", "deployment for {model} failed to start; see the deployment list"},
 	ErrorPDPlacementUnreadable:    {http.StatusServiceUnavailable, typeServer, "", "the deployment's PD placement cannot be read"},

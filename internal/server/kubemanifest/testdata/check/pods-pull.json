@@ -1,0 +1,525 @@
+{
+ "apiVersion": "v1",
+ "items": [
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "creationTimestamp": "2026-11-26T03:29:53Z",
+    "generateName": "pull-",
+    "generation": 1,
+    "labels": {
+     "app.kubernetes.io/name": "pull",
+     "controller-revision-hash": "6bb8d5f899",
+     "pod-template-generation": "1"
+    },
+    "name": "pull-2wljm",
+    "namespace": "fx",
+    "ownerReferences": [
+     {
+      "apiVersion": "apps/v1",
+      "blockOwnerDeletion": true,
+      "controller": true,
+      "kind": "DaemonSet",
+      "name": "pull",
+      "uid": "bcb0e381-c286-46ad-aff7-fe61a87af6f6"
+     }
+    ],
+    "resourceVersion": "1529",
+    "uid": "7f56cce4-a182-4023-9c87-d97e5f6b577d"
+   },
+   "spec": {
+    "affinity": {
+     "nodeAffinity": {
+      "requiredDuringSchedulingIgnoredDuringExecution": {
+       "nodeSelectorTerms": [
+        {
+         "matchFields": [
+          {
+           "key": "metadata.name",
+           "operator": "In",
+           "values": [
+            "gwks-precheck-control-plane"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    "containers": [
+     {
+      "command": [
+       "/bin/bash",
+       "-c",
+       "true"
+      ],
+      "image": "10.255.255.1:5000/gpuworks/gpuworks-agent:r1",
+      "imagePullPolicy": "IfNotPresent",
+      "name": "check",
+      "readinessProbe": {
+       "exec": {
+        "command": [
+         "test",
+         "-f",
+         "/tmp/reachable"
+        ]
+       },
+       "failureThreshold": 3,
+       "periodSeconds": 2,
+       "successThreshold": 1,
+       "timeoutSeconds": 1
+      },
+      "resources": {
+       "requests": {
+        "memory": "16Mi"
+       }
+      },
+      "terminationMessagePath": "/dev/termination-log",
+      "terminationMessagePolicy": "File",
+      "volumeMounts": [
+       {
+        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "name": "kube-api-access-v9xcv",
+        "readOnly": true
+       }
+      ]
+     }
+    ],
+    "dnsPolicy": "ClusterFirst",
+    "enableServiceLinks": true,
+    "nodeName": "gwks-precheck-control-plane",
+    "preemptionPolicy": "PreemptLowerPriority",
+    "priority": 0,
+    "restartPolicy": "Always",
+    "schedulerName": "default-scheduler",
+    "securityContext": {},
+    "serviceAccount": "default",
+    "serviceAccountName": "default",
+    "terminationGracePeriodSeconds": 0,
+    "tolerations": [
+     {
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/not-ready",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/unreachable",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/disk-pressure",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/memory-pressure",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/pid-pressure",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/unschedulable",
+      "operator": "Exists"
+     }
+    ],
+    "volumes": [
+     {
+      "name": "kube-api-access-v9xcv",
+      "projected": {
+       "defaultMode": 420,
+       "sources": [
+        {
+         "serviceAccountToken": {
+          "expirationSeconds": 3607,
+          "path": "token"
+         }
+        },
+        {
+         "configMap": {
+          "items": [
+           {
+            "key": "ca.crt",
+            "path": "ca.crt"
+           }
+          ],
+          "name": "kube-root-ca.crt"
+         }
+        },
+        {
+         "downwardAPI": {
+          "items": [
+           {
+            "fieldRef": {
+             "apiVersion": "v1",
+             "fieldPath": "metadata.namespace"
+            },
+            "path": "namespace"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:58Z",
+      "observedGeneration": 1,
+      "status": "True",
+      "type": "PodReadyToStartContainers"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "observedGeneration": 1,
+      "status": "True",
+      "type": "Initialized"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "message": "containers with unready status: [check]",
+      "observedGeneration": 1,
+      "reason": "ContainersNotReady",
+      "status": "False",
+      "type": "Ready"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "message": "containers with unready status: [check]",
+      "observedGeneration": 1,
+      "reason": "ContainersNotReady",
+      "status": "False",
+      "type": "ContainersReady"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "observedGeneration": 1,
+      "status": "True",
+      "type": "PodScheduled"
+     }
+    ],
+    "containerStatuses": [
+     {
+      "image": "10.255.255.1:5000/gpuworks/gpuworks-agent:r1",
+      "imageID": "",
+      "lastState": {},
+      "name": "check",
+      "ready": false,
+      "restartCount": 0,
+      "started": false,
+      "state": {
+       "waiting": {
+        "message": "failed to pull and unpack image \"10.255.255.1:5000/gpuworks/gpuworks-agent:r1\": failed to resolve reference \"10.255.255.1:5000/gpuworks/gpuworks-agent:r1\": failed to do request: Head \"https://10.255.255.1:5000/v2/gpuworks/gpuworks-agent/manifests/r1\": dial tcp 10.255.255.1:5000: connect: no route to host",
+        "reason": "ErrImagePull"
+       }
+      },
+      "volumeMounts": [
+       {
+        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "name": "kube-api-access-v9xcv",
+        "readOnly": true,
+        "recursiveReadOnly": "Disabled"
+       }
+      ]
+     }
+    ],
+    "hostIP": "172.18.0.2",
+    "hostIPs": [
+     {
+      "ip": "172.18.0.2"
+     }
+    ],
+    "observedGeneration": 1,
+    "phase": "Pending",
+    "podIP": "10.244.0.8",
+    "podIPs": [
+     {
+      "ip": "10.244.0.8"
+     }
+    ],
+    "qosClass": "Burstable",
+    "startTime": "2026-11-26T03:29:53Z"
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "creationTimestamp": "2026-11-26T03:29:53Z",
+    "generateName": "pull-",
+    "generation": 1,
+    "labels": {
+     "app.kubernetes.io/name": "pull",
+     "controller-revision-hash": "6bb8d5f899",
+     "pod-template-generation": "1"
+    },
+    "name": "pull-4b6jv",
+    "namespace": "fx",
+    "ownerReferences": [
+     {
+      "apiVersion": "apps/v1",
+      "blockOwnerDeletion": true,
+      "controller": true,
+      "kind": "DaemonSet",
+      "name": "pull",
+      "uid": "bcb0e381-c286-46ad-aff7-fe61a87af6f6"
+     }
+    ],
+    "resourceVersion": "1518",
+    "uid": "83821c02-9a06-4c13-aa57-beb27b47c5e7"
+   },
+   "spec": {
+    "affinity": {
+     "nodeAffinity": {
+      "requiredDuringSchedulingIgnoredDuringExecution": {
+       "nodeSelectorTerms": [
+        {
+         "matchFields": [
+          {
+           "key": "metadata.name",
+           "operator": "In",
+           "values": [
+            "gwks-precheck-worker"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    "containers": [
+     {
+      "command": [
+       "/bin/bash",
+       "-c",
+       "true"
+      ],
+      "image": "10.255.255.1:5000/gpuworks/gpuworks-agent:r1",
+      "imagePullPolicy": "IfNotPresent",
+      "name": "check",
+      "readinessProbe": {
+       "exec": {
+        "command": [
+         "test",
+         "-f",
+         "/tmp/reachable"
+        ]
+       },
+       "failureThreshold": 3,
+       "periodSeconds": 2,
+       "successThreshold": 1,
+       "timeoutSeconds": 1
+      },
+      "resources": {
+       "requests": {
+        "memory": "16Mi"
+       }
+      },
+      "terminationMessagePath": "/dev/termination-log",
+      "terminationMessagePolicy": "File",
+      "volumeMounts": [
+       {
+        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "name": "kube-api-access-8r5bk",
+        "readOnly": true
+       }
+      ]
+     }
+    ],
+    "dnsPolicy": "ClusterFirst",
+    "enableServiceLinks": true,
+    "nodeName": "gwks-precheck-worker",
+    "preemptionPolicy": "PreemptLowerPriority",
+    "priority": 0,
+    "restartPolicy": "Always",
+    "schedulerName": "default-scheduler",
+    "securityContext": {},
+    "serviceAccount": "default",
+    "serviceAccountName": "default",
+    "terminationGracePeriodSeconds": 0,
+    "tolerations": [
+     {
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/not-ready",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/unreachable",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/disk-pressure",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/memory-pressure",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/pid-pressure",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/unschedulable",
+      "operator": "Exists"
+     }
+    ],
+    "volumes": [
+     {
+      "name": "kube-api-access-8r5bk",
+      "projected": {
+       "defaultMode": 420,
+       "sources": [
+        {
+         "serviceAccountToken": {
+          "expirationSeconds": 3607,
+          "path": "token"
+         }
+        },
+        {
+         "configMap": {
+          "items": [
+           {
+            "key": "ca.crt",
+            "path": "ca.crt"
+           }
+          ],
+          "name": "kube-root-ca.crt"
+         }
+        },
+        {
+         "downwardAPI": {
+          "items": [
+           {
+            "fieldRef": {
+             "apiVersion": "v1",
+             "fieldPath": "metadata.namespace"
+            },
+            "path": "namespace"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:57Z",
+      "observedGeneration": 1,
+      "status": "True",
+      "type": "PodReadyToStartContainers"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "observedGeneration": 1,
+      "status": "True",
+      "type": "Initialized"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "message": "containers with unready status: [check]",
+      "observedGeneration": 1,
+      "reason": "ContainersNotReady",
+      "status": "False",
+      "type": "Ready"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "message": "containers with unready status: [check]",
+      "observedGeneration": 1,
+      "reason": "ContainersNotReady",
+      "status": "False",
+      "type": "ContainersReady"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "observedGeneration": 1,
+      "status": "True",
+      "type": "PodScheduled"
+     }
+    ],
+    "containerStatuses": [
+     {
+      "image": "10.255.255.1:5000/gpuworks/gpuworks-agent:r1",
+      "imageID": "",
+      "lastState": {},
+      "name": "check",
+      "ready": false,
+      "restartCount": 0,
+      "started": false,
+      "state": {
+       "waiting": {
+        "message": "failed to pull and unpack image \"10.255.255.1:5000/gpuworks/gpuworks-agent:r1\": failed to resolve reference \"10.255.255.1:5000/gpuworks/gpuworks-agent:r1\": failed to do request: Head \"https://10.255.255.1:5000/v2/gpuworks/gpuworks-agent/manifests/r1\": dial tcp 10.255.255.1:5000: connect: no route to host",
+        "reason": "ErrImagePull"
+       }
+      },
+      "volumeMounts": [
+       {
+        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "name": "kube-api-access-8r5bk",
+        "readOnly": true,
+        "recursiveReadOnly": "Disabled"
+       }
+      ]
+     }
+    ],
+    "hostIP": "172.18.0.3",
+    "hostIPs": [
+     {
+      "ip": "172.18.0.3"
+     }
+    ],
+    "observedGeneration": 1,
+    "phase": "Pending",
+    "podIP": "10.244.1.5",
+    "podIPs": [
+     {
+      "ip": "10.244.1.5"
+     }
+    ],
+    "qosClass": "Burstable",
+    "startTime": "2026-11-26T03:29:53Z"
+   }
+  }
+ ],
+ "kind": "List",
+ "metadata": {
+  "resourceVersion": ""
+ }
+}

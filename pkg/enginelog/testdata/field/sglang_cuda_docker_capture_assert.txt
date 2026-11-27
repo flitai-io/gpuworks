@@ -1,0 +1,184 @@
+[2026-11-25 03:36:33 TP2] Load weight begin. avail mem=23.15 GB
+[2026-11-25 03:36:33 TP3] Load weight begin. avail mem=23.15 GB
+[2026-11-25 03:36:33 TP1] Load weight begin. avail mem=23.15 GB
+[2026-11-25 03:36:33 TP0] Load weight begin. avail mem=23.15 GB
+[2026-11-25 03:36:33 TP1] Multimodal attention backend not set. Use triton_attn.
+[2026-11-25 03:36:33 TP0] Multimodal attention backend not set. Use triton_attn.
+[2026-11-25 03:36:33 TP2] Multimodal attention backend not set. Use triton_attn.
+[2026-11-25 03:36:33 TP3] Multimodal attention backend not set. Use triton_attn.
+[2026-11-25 03:36:33 TP2] Using triton_attn as multimodal attention backend.
+[2026-11-25 03:36:33 TP0] Using triton_attn as multimodal attention backend.
+[2026-11-25 03:36:33 TP1] Using triton_attn as multimodal attention backend.
+[2026-11-25 03:36:33 TP3] Using triton_attn as multimodal attention backend.
+[2026-11-25 03:36:33 TP1] using attn output gate!
+[2026-11-25 03:36:33 TP0] using attn output gate!
+[2026-11-25 03:36:33 TP2] using attn output gate!
+[2026-11-25 03:36:33 TP3] using attn output gate!
+Multi-thread loading shards: 100% Completed | 11/11 [00:22<00:00,  2.01s/it]
+[2026-11-25 03:36:56 TP0] Load weight end. elapsed=162.91 s, type=Qwen3_5ForConditionalGeneration, avail mem=10.10 GB, mem usage=13.05 GB.
+[2026-11-25 03:36:56 TP2] Load weight end. elapsed=162.98 s, type=Qwen3_5ForConditionalGeneration, avail mem=10.10 GB, mem usage=13.05 GB.
+[2026-11-25 03:36:56 TP3] Load weight end. elapsed=162.98 s, type=Qwen3_5ForConditionalGeneration, avail mem=10.10 GB, mem usage=13.05 GB.
+[2026-11-25 03:36:56 TP1] Load weight end. elapsed=162.98 s, type=Qwen3_5ForConditionalGeneration, avail mem=10.10 GB, mem usage=13.05 GB.
+[2026-11-25 03:36:57 TP0] Reserving 0.10 GB of the KV budget for post-sizing multimodal allocations (feature-transport pools + embedding cache).
+[2026-11-25 03:36:57 TP3] Reserving 0.10 GB of the KV budget for post-sizing multimodal allocations (feature-transport pools + embedding cache).
+[2026-11-25 03:36:57 TP2] Reserving 0.10 GB of the KV budget for post-sizing multimodal allocations (feature-transport pools + embedding cache).
+[2026-11-25 03:36:57 TP1] Reserving 0.10 GB of the KV budget for post-sizing multimodal allocations (feature-transport pools + embedding cache).
+[2026-11-25 03:36:57 TP2] max_running_requests is capped to 18 by the mamba state cache (max_mamba_cache_size=93, 5 state slots per request). To raise it: increase --mamba-full-memory-ratio or --max-mamba-cache-size, or halve the state size
+[2026-11-25 03:36:57 TP3] max_running_requests is capped to 18 by the mamba state cache (max_mamba_cache_size=93, 5 state slots per request). To raise it: increase --mamba-full-memory-ratio or --max-mamba-cache-size, or halve the state size
+[2026-11-25 03:36:57 TP1] max_running_requests is capped to 18 by the mamba state cache (max_mamba_cache_size=93, 5 state slots per request). To raise it: increase --mamba-full-memory-ratio or --max-mamba-cache-size, or halve the state size
+[2026-11-25 03:36:57 TP0] max_running_requests is capped to 18 by the mamba state cache (max_mamba_cache_size=93, 5 state slots per request). To raise it: increase --mamba-full-memory-ratio or --max-mamba-cache-size, or halve the state size
+[2026-11-25 03:36:57 TP2] Mamba Cache is allocated. max_mamba_cache_size: 93, conv_state size: 0.06GB, ssm_state size: 3.30GB 
+[2026-11-25 03:36:57 TP3] Mamba Cache is allocated. max_mamba_cache_size: 93, conv_state size: 0.06GB, ssm_state size: 3.30GB 
+[2026-11-25 03:36:57 TP1] Mamba Cache is allocated. max_mamba_cache_size: 93, conv_state size: 0.06GB, ssm_state size: 3.30GB 
+[2026-11-25 03:36:57 TP0] Mamba Cache is allocated. max_mamba_cache_size: 93, conv_state size: 0.06GB, ssm_state size: 3.30GB 
+[2026-11-25 03:36:59 TP2] Warmed fused Mamba slot copy kernel in 1665.403 ms
+[2026-11-25 03:36:59 TP3] Warmed fused Mamba slot copy kernel in 1666.340 ms
+[2026-11-25 03:36:59 TP0] Warmed fused Mamba slot copy kernel in 1666.827 ms
+[2026-11-25 03:36:59 TP1] Warmed fused Mamba slot copy kernel in 1666.942 ms
+[2026-11-25 03:36:59 TP2] KV Cache is allocated. dtype: torch.bfloat16, #tokens: 249915, K size: 1.91 GB, V size: 1.91 GB
+[2026-11-25 03:36:59 TP3] KV Cache is allocated. dtype: torch.bfloat16, #tokens: 249915, K size: 1.91 GB, V size: 1.91 GB
+[2026-11-25 03:36:59 TP2] Memory pool end. avail mem=2.82 GB
+[2026-11-25 03:36:59 TP3] Memory pool end. avail mem=2.82 GB
+[2026-11-25 03:36:59 TP0] KV Cache is allocated. dtype: torch.bfloat16, #tokens: 249915, K size: 1.91 GB, V size: 1.91 GB
+[2026-11-25 03:36:59 TP1] KV Cache is allocated. dtype: torch.bfloat16, #tokens: 249915, K size: 1.91 GB, V size: 1.91 GB
+[2026-11-25 03:36:59 TP0] Memory pool end. avail mem=2.82 GB
+[2026-11-25 03:36:59 TP1] Memory pool end. avail mem=2.82 GB
+Capturing prefill shape (num_tokens=2048 avail_mem=1.39 GB):  16%|█▌        | 8/50 [01:25<04:29,  6.42s/it]/op
+Capturing prefill shape (num_tokens=16 avail_mem=0.11 GB):  92%|█████████▏| 46/50 [02:35<00:02,  1.86it/s]/opt
+Capturing prefill shape (num_tokens=4 avail_mem=0.02 GB):  98%|█████████▊| 49/50 [02:37<00:03,  3.22s/it]
+[2026-11-25 03:41:58 TP3] RuntimeError: num_active_captures_ > 0 INTERNAL ASSERT FAILED at "/__w/pytorch/pytorch/c10/cuda/CUDACachingAllocator.cpp":3209, please report a bug to PyTorch. markCaptureEnd called with no captures in progress
+Fail when using backend: breakable for prefill runner.
+Possible suggestions:
+1. disable the prefill CUDA graph by --cuda-graph-backend-prefill=disabled
+2. if it is an OOM problem, set --mem-fraction-static to a smaller value (e.g., 0.8 or 0.7) or set --cuda-graph-max-bs-prefill to a smaller value (e.g., 2048)
+Open an issue on GitHub https://github.com/sgl-project/sglang/issues/new/choose 
+
+[2026-11-25 03:41:58 TP2] RuntimeError: num_active_captures_ > 0 INTERNAL ASSERT FAILED at "/__w/pytorch/pytorch/c10/cuda/CUDACachingAllocator.cpp":3209, please report a bug to PyTorch. markCaptureEnd called with no captures in progress
+Fail when using backend: breakable for prefill runner.
+Possible suggestions:
+1. disable the prefill CUDA graph by --cuda-graph-backend-prefill=disabled
+2. if it is an OOM problem, set --mem-fraction-static to a smaller value (e.g., 0.8 or 0.7) or set --cuda-graph-max-bs-prefill to a smaller value (e.g., 2048)
+Open an issue on GitHub https://github.com/sgl-project/sglang/issues/new/choose 
+
+[2026-11-25 03:41:58 TP1] RuntimeError: num_active_captures_ > 0 INTERNAL ASSERT FAILED at "/__w/pytorch/pytorch/c10/cuda/CUDACachingAllocator.cpp":3209, please report a bug to PyTorch. markCaptureEnd called with no captures in progress
+Fail when using backend: breakable for prefill runner.
+Possible suggestions:
+1. disable the prefill CUDA graph by --cuda-graph-backend-prefill=disabled
+2. if it is an OOM problem, set --mem-fraction-static to a smaller value (e.g., 0.8 or 0.7) or set --cuda-graph-max-bs-prefill to a smaller value (e.g., 2048)
+Open an issue on GitHub https://github.com/sgl-project/sglang/issues/new/choose 
+
+[2026-11-25 03:41:58 TP0] RuntimeError: num_active_captures_ > 0 INTERNAL ASSERT FAILED at "/__w/pytorch/pytorch/c10/cuda/CUDACachingAllocator.cpp":3209, please report a bug to PyTorch. markCaptureEnd called with no captures in progress
+Fail when using backend: breakable for prefill runner.
+Possible suggestions:
+1. disable the prefill CUDA graph by --cuda-graph-backend-prefill=disabled
+2. if it is an OOM problem, set --mem-fraction-static to a smaller value (e.g., 0.8 or 0.7) or set --cuda-graph-max-bs-prefill to a smaller value (e.g., 2048)
+Open an issue on GitHub https://github.com/sgl-project/sglang/issues/new/choose 
+
+[2026-11-25 03:41:58 TP1] Scheduler hit an exception: Traceback (most recent call last):
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner_backend/breakable_cuda_graph_backend.py", line 164, in capture_one
+    out = forward_fn()
+          ^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner/prefill_cuda_graph_runner.py", line 1805, in run_once
+    return self._run_forward(forward_batch, num_tokens)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner/prefill_cuda_graph_runner.py", line 883, in _run_forward
+    output = self.layer_model.forward(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/models/qwen3_5.py", line 1947, in forward
+    hidden_states = layer(
+                    ^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1783, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1794, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/models/qwen3_5.py", line 1664, in forward
+    hidden_states = self.self_attention(
+                    ^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/models/qwen3_5.py", line 1633, in self_attention
+    attn_output = self.attn(q, k, v, forward_batch)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1783, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1794, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/layers/radix_attention.py", line 154, in forward
+    self._eager_attention(
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner_backend_utils/breakable_cuda_graph/breakable_cuda_graph.py", line 232, in __call__
+    return self._graph_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner_backend_utils/breakable_cuda_graph/breakable_cuda_graph.py", line 278, in wrapper
+    capture._end_current_segment()
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner_backend_utils/breakable_cuda_graph/breakable_cuda_graph.py", line 453, in _end_current_segment
+    graph.capture_end()
+  File "/opt/sglang/lib/python3.12/site-packages/torch/cuda/graphs.py", line 665, in capture_end
+    self.instantiate()
+  File "/opt/sglang/lib/python3.12/site-packages/torch/cuda/graphs.py", line 675, in instantiate
+    super().instantiate()
+torch.AcceleratorError: CUDA error: out of memory
+Search for `cudaErrorMemoryAllocation' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+The CUDA driver logged these messages, which may provide useful details:
+Failed to instantiate EVENT_RECORD node 0x7366fde0
+Returning 2 (CUDA_ERROR_OUT_OF_MEMORY) from cuGraphInstantiateWithFlags
+
+
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/sgl-workspace/sglang/python/sglang/srt/managers/scheduler.py", line 6362, in run_scheduler_process
+    scheduler = Scheduler(server_args, port_args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/managers/scheduler.py", line 568, in __init__
+    self.init_model_worker()
+  File "/sgl-workspace/sglang/python/sglang/srt/managers/scheduler.py", line 1146, in init_model_worker
+    self.init_all_cuda_graphs()
+  File "/opt/sglang/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/managers/scheduler.py", line 1124, in init_all_cuda_graphs
+    self.tp_worker.init_cuda_graphs()
+  File "/sgl-workspace/sglang/python/sglang/srt/managers/tp_worker.py", line 435, in init_cuda_graphs
+    self.model_runner.init_cuda_graphs(
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/model_runner.py", line 1192, in init_cuda_graphs
+    capture = capture_cuda_graphs(
+              ^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/model_runner_components/cuda_graph_setup.py", line 424, in capture_cuda_graphs
+    prefill = capture_prefill_graph(
+              ^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/model_runner_components/cuda_graph_setup.py", line 690, in capture_prefill_graph
+    prefill_runner = PrefillCudaGraphRunner(model_runner)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner/prefill_cuda_graph_runner.py", line 700, in __init__
+    self.capture()
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner/prefill_cuda_graph_runner.py", line 1685, in capture
+    self._capture()
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner/prefill_cuda_graph_runner.py", line 1700, in _capture
+    self._capture_one_stream()
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner/prefill_cuda_graph_runner.py", line 1736, in _capture_one_stream
+    self.capture_one_shape(num_tokens)
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner/prefill_cuda_graph_runner.py", line 1832, in capture_one_shape
+    self.backend.capture_one(
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner_backend/breakable_cuda_graph_backend.py", line 143, in capture_one
+    BreakableCUDAGraphCapture(
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner_backend_utils/breakable_cuda_graph/breakable_cuda_graph.py", line 401, in __exit__
+    self._end_current_segment()
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner_backend_utils/breakable_cuda_graph/breakable_cuda_graph.py", line 453, in _end_current_segment
+    graph.capture_end()
+  File "/opt/sglang/lib/python3.12/site-packages/torch/cuda/graphs.py", line 649, in capture_end
+    self.capture_end_pre()
+  File "/opt/sglang/lib/python3.12/site-packages/torch/cuda/graphs.py", line 630, in capture_end_pre
+    super().capture_end_pre()
+RuntimeError: num_active_captures_ > 0 INTERNAL ASSERT FAILED at "/__w/pytorch/pytorch/c10/cuda/CUDACachingAllocator.cpp":3209, please report a bug to PyTorch. markCaptureEnd called with no captures in progress
+
+[2026-11-25 03:41:58] Received sigquit from a child process. It usually means the child failed.
+[2026-11-25 03:41:58] kill_process_tree called: parent_pid=1, include_parent=True, pid=1

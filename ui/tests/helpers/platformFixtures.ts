@@ -73,6 +73,7 @@ export const UNINSTALL_AGENTS_COMMAND = "curl -fsSL 'https://gpuworks.example/sl
 export const REMOVE_CHECK_COMMAND = "curl -fsSL 'https://gpuworks.example/slurm/setup.sh?token=secret-token' | sudo sh -s -- --remove";
 
 export const APPLY_COMMAND = "kubectl apply -f 'https://gpuworks.example/kube/manifest.yaml?token=secret-token'";
+export const VERIFY_COMMAND = "curl -fsSL 'https://gpuworks.example/kube/check.sh?token=secret-token' | bash";
 
 /** Where an entry stands, as kubeClusterState derives it: revoked, stalled, pending until a node joined, else active. */
 export function entryState(cluster: Pick<KubeCluster, "revoked" | "stalled" | "cluster_uid">): KubeClusterState {
@@ -95,7 +96,7 @@ export function kubeEntry(overrides: Partial<KubeCluster> = {}): KubeCluster {
     node_selector: "nvidia.com/gpu.present=true", runtime_class: "", image_pull_secret: "",
     containerd_socket: "", api_server: "", engine_ports: "40000-42767", idle_return_seconds: 600, priority: 10000, allow_preemption: false,
     cluster_uid: "7f3c2a10-aaaa-bbbb-cccc-0123456789ab", revoked: false, node_count: 3, vendors: [{ vendor: "nvidia", nodes: 3 }],
-    created_at: "2026-10-19T08:30:00Z", apply_command: APPLY_COMMAND, stalled: false, pool_ids: [], namespace_shared_with: [],
+    created_at: "2026-10-19T08:30:00Z", apply_command: APPLY_COMMAND, verify_command: VERIFY_COMMAND, stalled: false, pool_ids: [], namespace_shared_with: [],
     can_apply: false, can_remove: false, operation_blocked: "no_source",
     category: KUBERNETES_CATEGORY.id, resources: [{ type: "kubernetes" }], ...overrides,
   };
@@ -187,6 +188,7 @@ export const KUBE_DEFAULTS: KubeDefaults = {
   agent_image: "gpuworks/gpuworks-agent:v1", stalled_after_seconds: 300, agent_image_source: "dockerhub",
   agent_image_sources: [{ id: "dockerhub", image: "gpuworks/gpuworks-agent:v1" }, { id: "swr", image: "swr.example/gpuworks-agent:v1" }],
   priority: 10000, priority_max: 1000000000, allow_preemption: false,
+  check_codes: { precheck: ["OK", "IMAGE_PULL_FAILED", "SERVER_UNREACHABLE", "PULL_SECRET_MISSING", "NO_NODE_SELECTED", "NOT_SCHEDULED", "POD_CREATE_FAILED", "CONTAINER_FAILED", "STILL_STARTING", "APPLY_FAILED", "KUBECTL_MISSING", "KUBECTL_FAILED"], verify: ["OK", "IMAGE_PULL_FAILED", "NO_NODE_SELECTED", "NOT_SCHEDULED", "POD_CREATE_FAILED", "CONTAINER_FAILED", "STILL_STARTING", "DAEMONSET_MISSING", "KUBECTL_MISSING", "KUBECTL_FAILED"] },
 };
 
 // GET /api/v1/slurm/defaults.

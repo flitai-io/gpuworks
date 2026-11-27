@@ -1,3 +1,4 @@
+import type { ProductMessage } from "../apiError";
 import type { ListPage } from "./http";
 import type { GPUHealthField, GPUHealthGuide } from "./cardHealth";
 
@@ -38,6 +39,10 @@ export interface GPU {
   scheduling_allowed?: boolean;
   /** What an operator may do to the card now, decided by the server. */
   scheduling_actions?: CardScheduling[];
+  /** The extension source that holds the card out of scheduling; absent when none does. */
+  scheduling_held_by?: string;
+  /** Why an extension holds the card out of scheduling; it cannot be made schedulable meanwhile. */
+  scheduling_hold?: ProductMessage;
   health_status?: string;
   health_code?: string;
   health_message?: string;
@@ -155,6 +160,10 @@ export interface PhysicalGPU {
   scheduling_allowed?: boolean;
   /** What an operator may do to the card now, decided by the server. */
   scheduling_actions?: CardScheduling[];
+  /** The extension source that holds the card out of scheduling; absent when none does. */
+  scheduling_held_by?: string;
+  /** Why an extension holds the card out of scheduling; it cannot be made schedulable meanwhile. */
+  scheduling_hold?: ProductMessage;
   allocation_state: "available" | "partial" | "allocated" | "unusable" | "unknown";
   allocated_bytes: number;
   /** The residue sleeping instances keep. What is left of the total after

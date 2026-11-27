@@ -52,9 +52,10 @@ func stateIndex(state string) int {
 // order of their start, so a stretch that overlaps the one before adds only
 // what runs past it).
 type depAcc struct {
-	name string
-	ms   [4]int64
-	end  [4]int64
+	name    string
+	deleted bool
+	ms      [4]int64
+	end     [4]int64
 	// asleep splits the asleep time by the sleep level the segments carry
 	// (those with none known are left out), counted like ms.
 	asleep map[int]*levelAcc
@@ -104,7 +105,7 @@ type bucketAcc struct {
 func (b *bucketAcc) add(seg dto.TimelineSegment, from, to int64) {
 	d := b.deps[seg.DeploymentID]
 	if d == nil {
-		d = &depAcc{name: seg.Deployment}
+		d = &depAcc{name: seg.Deployment, deleted: seg.DeploymentDeleted}
 		b.deps[seg.DeploymentID] = d
 	}
 	i := stateIndex(seg.State)
@@ -256,7 +257,7 @@ func (b *bucketAcc) wire(from, to time.Time) dto.TimelineSummary {
 		d := b.deps[id]
 		state, level := d.dominantState()
 		out.Deployments[i] = dto.TimelineSummaryDeployment{
-			DeploymentID: id, Deployment: d.name, State: state, Level: level,
+			DeploymentID: id, Deployment: d.name, DeploymentDeleted: d.deleted, State: state, Level: level,
 			AwakeSeconds: roundedSeconds(d.ms[0]), AsleepSeconds: roundedSeconds(d.ms[1]),
 			SwitchingSeconds: roundedSeconds(d.ms[2]), StartingSeconds: roundedSeconds(d.ms[3]),
 		}

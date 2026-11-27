@@ -104,7 +104,7 @@ unknown/0 to avoid overcommitting.
 Runtime disk space is reserved only when an image actually needs to be pulled. If a live inspect by the agent confirms that the target node already caches the image,
 the image size is no longer deducted. Unknown cache status, due to an offline agent or a timeout, is conservatively treated as uncached.
 
-When a template declares managed writable directories (`dirs`), the disk holding them (reported by the agent as `managed_dirs`) must hold the sum of the declared ceilings, the KV disk tier's ceiling (the same kind of managed directory) and the disk reserve, and also the weights to download and the image to unpack when it shares the models root's or the runtime image store's disk; otherwise the node is refused with `insufficient_managed_dir_disk` ([Managed Writable Directories](../reference/inference-catalog-spec.md#dirs-managed-writable-directories)).
+When a template declares managed writable directories (`dirs`), the disk holding them (reported by the agent as `managed_dirs`) must hold the sum of the declared ceilings, the KV disk tier's ceiling (the same kind of managed directory) and the disk reserve, and also the weights to download and the image to unpack when it shares the models root's or the runtime image store's disk; otherwise the node is refused with `insufficient_managed_dir_disk` ([Managed Writable Directories](../reference/inference-catalog-spec.md#dirs托管的可写目录)).
 
 Parallelism is a runtime fact: ordinary specs derive tp from the number of allocated GPUs; multi-node or special topologies express it explicitly through args. This
 avoids duplicating tp/nodes in the catalog, where they could conflict with the actual GPU set, and lets the preview and actual controller share ResolveLaunch.

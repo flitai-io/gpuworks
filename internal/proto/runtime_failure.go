@@ -138,9 +138,14 @@ const (
 	// ErrorDistributedNetworkUnavailable: no network interface could be
 	// chosen for a multi-node engine (Detail).
 	ErrorDistributedNetworkUnavailable = "DISTRIBUTED_NETWORK_UNAVAILABLE"
-	// ErrorModelPathUnavailable: a model directory is missing or does not
-	// answer (Resource is the path, Detail the error).
+	// ErrorModelPathUnavailable: a model directory does not answer or is not
+	// a directory (Resource is the path, Detail the error).
 	ErrorModelPathUnavailable = "MODEL_PATH_UNAVAILABLE"
+	// ErrorModelPathMissing: the node looked and a model directory is not
+	// there (Resource is the path). The server takes it as the node's word
+	// that the copy it recorded at that path is gone
+	// (store.RetractMissingModelFiles).
+	ErrorModelPathMissing = "MODEL_PATH_MISSING"
 	// ErrorEnginePortRefused: a host port the server allocated was already
 	// taken as the launch began (Port). The agent checks the ports before it
 	// pulls an image or creates a container, so such an attempt started

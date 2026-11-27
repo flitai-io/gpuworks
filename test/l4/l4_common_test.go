@@ -298,7 +298,7 @@ func setupCloudNodeWithInstance(t *testing.T, env *testenv.Env, p cloudprovider.
 		state.Tunnel = tunnel
 		tunnel.SetLogf(t.Logf)
 		t.Cleanup(func() { tunnel.SetLogf(nil) })
-		if err := installCloudAgent(setupCtx, instance, env.URL(), state.NodeToken); err != nil {
+		if err := installCloudAgent(setupCtx, t.TempDir(), instance, env.URL(), state.NodeToken); err != nil {
 			if topologyCloudTest(t) && isCloudCapacityError(err) {
 				skipOrFailExternal(t, "cloud SSH session unavailable during agent install: %v", err)
 			}

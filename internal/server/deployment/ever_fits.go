@@ -17,9 +17,9 @@ import (
 // checkCreateCanEverFit applies checkPoolCanEverFit to a create: only a
 // single-node deployment is placed from a pool; a multi-node or PD one names
 // its nodes rank by rank and is checked where they are.
-func (s *Service) checkCreateCanEverFit(ctx context.Context, req *dto.DeployRequest, pd bool, reqs map[string][]string, engine deploy.Engine, model *store.Model, selection templateSelection, placement planning.Placement, quick deploy.LaunchConfig, userExtraArgs []string, modelMount string, componentMounts []proto.MountSpec) error {
+func (s *Service) checkCreateCanEverFit(ctx context.Context, req *dto.DeployRequest, pd bool, reqs map[string][]string, engine deploy.Engine, model *store.Model, selection templateSelection, placement planning.Placement, quick deploy.LaunchConfig, userExtraArgs []string, modelMount string, componentMounts []proto.MountSpec) ([]messages.Warning, error) {
 	if pd || req.NNodes > 1 {
-		return nil
+		return nil, nil
 	}
 	overrides, _ := RequestContainerOverrides(req.ContainerOverrides)
 	return s.checkPoolCanEverFit(ctx, req, reqs, engine, model, selection, placement, quick, userExtraArgs, strings.TrimSpace(req.ServedName), modelMount, componentMounts, overrides)
@@ -31,7 +31,7 @@ func (s *Service) checkCreateCanEverFit(ctx context.Context, req *dto.DeployRequ
 // Such a deployment would wait forever; the request is the moment to say so.
 // What only waiting fixes - cards taken, a card unhealthy, a disk full, a node
 // offline - never refuses here (planning.Input.Unloaded).
-func (s *Service) checkPoolCanEverFit(ctx context.Context, req *dto.DeployRequest, reqs map[string][]string, engine deploy.Engine, model *store.Model, selection templateSelection, placement planning.Placement, quick deploy.LaunchConfig, userExtraArgs []string, servedName, modelMount string, componentMounts []proto.MountSpec, overrides deploy.ContainerOverrides) error {
+func (s *Service) checkPoolCanEverFit(ctx context.Context, req *dto.DeployRequest, reqs map[string][]string, engine deploy.Engine, model *store.Model, selection templateSelection, placement planning.Placement, quick deploy.LaunchConfig, userExtraArgs []string, servedName, modelMount string, componentMounts []proto.MountSpec, overrides deploy.ContainerOverrides) ([]messages.Warning, error) {
 	if _, pinned := planning.PinnedNode(reqs); !pinned {
 		placement.GPUIndexes = nil // the pool's scheduler picks cards
 	}
@@ -132,17 +132,14 @@ func (s *Service) markNeverFitting(ctx context.Context, eligible []dto.EligibleN
 
 // checkEverFits is planning.EverFits over every node, as the product error a
 // request is refused with.
-func (s *Service) checkEverFits(ctx context.Context, reqs map[string][]string, build func(*store.Node) (planning.LaunchRequest, deploy.CatalogSelection, error)) error {
+func (s *Service) checkEverFits(ctx context.Context, reqs map[string][]string, build func(*store.Node) (planning.LaunchRequest, deploy.CatalogSelection, error)) ([]messages.Warning, error) {
 	nodes, err := s.CandidateNodes(reqs)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	never, err := planning.EverFits(ctx, s.d.Store, s.networks(), nodes, s.resolveForRequirements(nodes, reqs), reqs, build)
+	warnings, never, err := planning.EverFits(ctx, s.d.Store, s.networks(), nodes, s.resolveForRequirements(nodes, reqs), reqs, build)
 	if err != nil || never == nil {
-		return err
-	}
-	if err := dgpuStartupMemoryError(never.Reason); err != nil {
-		return err
+		return warnings, err
 	}
 	params := map[string]any{"pool": never.Pool, "shapes": never.Shapes}
 	if never.Node != "" {
@@ -154,7 +151,7 @@ func (s *Service) checkEverFits(ctx context.Context, reqs map[string][]string, b
 	if hint, _ := never.Reason.Params[scheduler.ParamMemoryContractHint].(bool); hint {
 		params[scheduler.ParamMemoryContractHint] = true
 	}
-	return productError(messages.ErrorDeploymentNeverFits, "no node the deployment may run on could fit a replica even with nothing else on it", params)
+	return nil, productError(messages.ErrorDeploymentNeverFits, "no node the deployment may run on could fit a replica even with nothing else on it", params)
 }
 
 // CandidateNodes reads the nodes reqs may admit, which is every node unless
@@ -188,7 +185,7 @@ func (s *Service) CheckStoredCanEverFit(ctx context.Context, dep *store.Deployme
 	if err != nil {
 		return err
 	}
-	return s.checkEverFits(ctx, reqs, func(node *store.Node) (planning.LaunchRequest, deploy.CatalogSelection, error) {
+	_, err = s.checkEverFits(ctx, reqs, func(node *store.Node) (planning.LaunchRequest, deploy.CatalogSelection, error) {
 		launch, layer, _, err := planning.DeploymentLaunch(dep, reqs, node, model, nil)
 		if err != nil {
 			return launch, layer, err
@@ -199,4 +196,5 @@ func (s *Service) CheckStoredCanEverFit(ctx context.Context, dep *store.Deployme
 		launch.Topology, err = planning.RankTopology(node, nil, planning.GroupRank{Ranks: 1})
 		return launch, layer, err
 	})
+	return err
 }

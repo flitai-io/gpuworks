@@ -201,6 +201,14 @@ func (d *Downloader) FetchAll(ctx context.Context, ref Ref, descs []Descriptor, 
 	}
 	wg.Wait()
 	if firstErr != nil {
+		// A caller that canceled is told so, even when a sibling transfer
+		// recorded its own failure (a refused connection, say) first: the
+		// cancellation is why the pull stopped. Only the caller's ctx counts;
+		// a span that gives up cancels its siblings through a derived one,
+		// which leaves this ctx live and keeps that span's error.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		return firstErr
 	}
 	if d.Chown != nil {

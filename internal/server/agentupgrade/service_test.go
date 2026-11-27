@@ -438,8 +438,13 @@ func TestLateReconnectPreservesTimeoutEvenWithoutIntermediatePoll(t *testing.T) 
 	if i.Phase != "unconfirmed" || i.Reason != "confirmation_timeout" || i.VerifiedAt == nil || i.VerificationCode != "target_registered" {
 		t.Fatalf("late reconnect rewrote timeout history: %+v", i)
 	}
-	if f.tr.count() != 1 || f.item(t, r.Record.ID, "n2").Phase != "queued" {
-		t.Fatal("late evidence automatically resumed paused queue")
+	// The timeout stays in the history, and the batch goes on by itself: the
+	// attempt is settled, so nothing holds the slot and n2 is dispatched.
+	if n2 := f.item(t, r.Record.ID, "n2"); !activePhase(n2.Phase) {
+		t.Fatalf("the batch did not go on to n2 once n1 was settled: %+v", n2)
+	}
+	if run, err := f.st.AgentUpgradeRun(r.Record.ID); err != nil || run.PauseReason != "" {
+		t.Fatalf("run = %+v, %v; an unconfirmed attempt must not pause its batch", run, err)
 	}
 }
 
@@ -644,8 +649,8 @@ func TestRemovedNodeSettlesItsUnconfirmedAttempt(t *testing.T) {
 // An attempt still in flight when its node is removed is not settled early:
 // a deleted Kubernetes or Slurm node's agent keeps running and enrolls again,
 // and the upgrade it was given may still be applying. It waits out its
-// deadline like any attempt, and is settled then; its run stays paused for
-// an administrator with the rest of its queue.
+// deadline like any attempt, and is settled then; its batch goes on to the
+// next node without waiting for an administrator.
 func TestRemovedNodeSettlesItsAttemptOnlyAfterTheDeadline(t *testing.T) {
 	f := newFixture(t, 3, true)
 	r := f.create(t, "first", []string{"n1", "n2"}, 0)
@@ -669,24 +674,21 @@ func TestRemovedNodeSettlesItsAttemptOnlyAfterTheDeadline(t *testing.T) {
 	if i.Phase != "unconfirmed" || i.Reason != "confirmation_timeout" || i.VerifiedAt == nil || i.VerificationCode != ReasonNodeRemoved {
 		t.Fatalf("after the deadline = %+v", i)
 	}
-	if n2 := f.item(t, r.Record.ID, "n2"); n2.Phase != "queued" {
-		t.Fatalf("the paused run went on to n2: %+v", n2)
-	}
 	run, err := f.st.AgentUpgradeRun(r.Record.ID)
-	if err != nil || run.PauseReason != "confirmation_required" {
-		t.Fatalf("run = %+v, %v; want paused for an administrator", run, err)
+	if err != nil || run.PauseReason != "" {
+		t.Fatalf("run = %+v, %v; an unconfirmed attempt must not pause its batch", run, err)
 	}
-	// Nothing unconfirmed holds the slot any more: what is left is the paused
-	// run's own queue, which continuing or stopping it settles.
-	if b, err := f.st.AgentUpgradeBlocker(f.s.heldSince()); err != nil || b != nil {
-		t.Fatalf("still blocked by %+v, %v", b, err)
+	// The removed node's attempt is settled, so it holds nothing, and the
+	// batch went on to its next node in the same pass.
+	if n2 := f.item(t, r.Record.ID, "n2"); !activePhase(n2.Phase) {
+		t.Fatalf("the batch did not go on to n2: %+v", n2)
 	}
 }
 
 // An attempt that missed its deadline holds the slot only for
 // UnconfirmedHold: by then its agent has confirmed or rolled back, so other
 // nodes may be upgraded; the attempt stays unconfirmed and unverified until
-// its node says how it ended, and its run stays paused.
+// its node says how it ended.
 func TestUnconfirmedAttemptHoldsTheSlotOnlyForAWhile(t *testing.T) {
 	f := newFixture(t, 2, true)
 	r := f.create(t, "first", []string{"n1"}, 0)
@@ -794,7 +796,291 @@ func TestAFailureIsTheAttemptInFlightsNotAnOlderUnconfirmedOnes(t *testing.T) {
 	if i := f.item(t, again.Record.ID, "n1"); i.Phase != "failed" || i.Error != "no space left" {
 		t.Fatalf("the new attempt = %+v; want its own failure", i)
 	}
-	if i := f.item(t, old.Record.ID, "n1"); i.Phase != "unconfirmed" || i.VerifiedAt != nil {
+	// The old attempt is settled by what the node itself shows (still
+	// connected on its old session and version past the hold), never by the
+	// new attempt's failure.
+	if i := f.item(t, old.Record.ID, "n1"); i.Phase != "unconfirmed" || i.VerificationCode != ReasonStillOnOldVersion || i.VerificationNote != "" {
 		t.Fatalf("the old attempt took the new one's failure: %+v", i)
+	}
+}
+
+// One node that never confirms does not stop its batch: after the hold the
+// next node is dispatched with nobody continuing, verifying or noting
+// anything, and the unconfirmed attempt stays in the history as it ended.
+func TestBatchGoesOnPastANodeThatNeverConfirms(t *testing.T) {
+	f := newFixture(t, 3, true)
+	r := f.create(t, "all", nil, 0)
+	f.tick(t)
+	f.tr.mu.Lock()
+	delete(f.tr.connections, "n1") // n1 drops off and never comes back
+	f.tr.mu.Unlock()
+	f.now = f.now.Add(3 * time.Minute)
+	f.tick(t)
+	if i := f.item(t, r.Record.ID, "n1"); i.Phase != "unconfirmed" || i.VerifiedAt != nil {
+		t.Fatalf("n1 = %+v; want unconfirmed and unverified", i)
+	}
+	if n2 := f.item(t, r.Record.ID, "n2"); n2.Phase != "queued" {
+		t.Fatalf("n2 was dispatched within the hold: %+v", n2)
+	}
+	if run, err := f.s.Get(context.Background(), r.Record.ID); err != nil || run.State != "running" || run.Record.PauseReason != "" {
+		t.Fatalf("run = %+v, %v; want running, not paused", run, err)
+	}
+	f.now = f.now.Add(f.s.cfg.UnconfirmedHold + time.Second)
+	f.tick(t)
+	if n2 := f.item(t, r.Record.ID, "n2"); !activePhase(n2.Phase) {
+		t.Fatalf("the batch did not go on to n2 after the hold: %+v", n2)
+	}
+	f.tr.set("n2", Connection{SessionID: "new-n2", Version: "target", Ready: true})
+	f.tick(t)
+	f.tick(t)
+	if n3 := f.item(t, r.Record.ID, "n3"); !activePhase(n3.Phase) {
+		t.Fatalf("the batch did not go on to n3: %+v", n3)
+	}
+	if i := f.item(t, r.Record.ID, "n1"); i.Phase != "unconfirmed" || i.Reason != "confirmation_timeout" {
+		t.Fatalf("n1's history was rewritten: %+v", i)
+	}
+}
+
+// A server upgrade waits only for what is really going on, and its refusal
+// says what and for how long: an attempt in flight or within its hold (both
+// end by themselves), or a batch that will still dispatch nodes. A queue
+// whose batch is stopped, paused or interrupted dispatches nothing, so the
+// upgrade does not wait for an administrator to settle it.
+func TestServerUpgradeWaitsOnlyForUpgradesThatAreGoingOn(t *testing.T) {
+	f := newFixture(t, 3, true)
+	r := f.create(t, "all", nil, 0)
+	f.tick(t)
+	_, err := f.s.BeginServerUpgrade()
+	var refusal *Error
+	if !errors.As(err, &refusal) || refusal.Code != "AGENT_UPGRADE_ACTIVE" {
+		t.Fatalf("in flight = %v; want a refusal", err)
+	}
+	// n1 is in flight and two more nodes wait behind it: the server waits
+	// for the batch, so the refusal must not promise n1's few minutes.
+	if _, run, queued, _, ok := refusal.ServerUpgradeWait(); !ok || run != r.Record.ID || queued != 2 {
+		t.Fatalf("in flight with a queue waits for run=%d queued=%d ok=%v; want the batch with 2 queued", run, queued, ok)
+	}
+
+	f.tr.mu.Lock()
+	delete(f.tr.connections, "n1")
+	f.tr.mu.Unlock()
+	f.now = f.now.Add(3 * time.Minute)
+	f.tick(t) // n1 unconfirmed, within its hold
+	_, err = f.s.BeginServerUpgrade()
+	if !errors.As(err, &refusal) {
+		t.Fatalf("within the hold = %v; want a refusal", err)
+	}
+	if _, run, queued, _, ok := refusal.ServerUpgradeWait(); !ok || run != r.Record.ID || queued != 2 {
+		t.Fatalf("within the hold with a queue waits for run=%d queued=%d ok=%v; want the batch with 2 queued", run, queued, ok)
+	}
+
+	// Past the hold the unconfirmed attempt holds nothing, though nobody
+	// verified it; what is left is the batch's live queue.
+	f.now = f.now.Add(f.s.cfg.UnconfirmedHold + time.Second)
+	_, err = f.s.BeginServerUpgrade()
+	if !errors.As(err, &refusal) {
+		t.Fatalf("live queue = %v; want a refusal", err)
+	}
+	if _, run, queued, _, ok := refusal.ServerUpgradeWait(); !ok || run != r.Record.ID || queued != 2 {
+		t.Fatalf("live queue waits for run=%d queued=%d ok=%v; want %d with 2 queued", run, queued, ok, r.Record.ID)
+	}
+
+	// A paused batch dispatches nothing: its queue does not hold the server.
+	if err := f.st.PauseAgentUpgrade(r.Record.ID, "artifact_unavailable"); err != nil {
+		t.Fatal(err)
+	}
+	done, err := f.s.BeginServerUpgrade()
+	if err != nil {
+		t.Fatalf("paused queue held the server upgrade: %v", err)
+	}
+	done(false)
+	if i := f.item(t, r.Record.ID, "n1"); i.Phase != "unconfirmed" || i.VerifiedAt != nil {
+		t.Fatalf("n1 = %+v; the server upgrade must not need it verified", i)
+	}
+}
+
+// A batch an older server paused because one node went unconfirmed goes on
+// when this server starts; a batch paused for another reason stays paused.
+func TestBatchPausedForVerificationByAnOlderServerGoesOn(t *testing.T) {
+	f := newFixture(t, 3, true)
+	old := f.create(t, "old", []string{"n1", "n2"}, 0)
+	if err := f.st.PauseAgentUpgrade(old.Record.ID, "confirmation_required"); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := New(f.st, f.cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := restarted.Get(context.Background(), old.Record.ID)
+	if err != nil || run.Record.PauseReason != "" || run.State != "running" {
+		t.Fatalf("run = %+v, %v; want it going on", run, err)
+	}
+	if err := restarted.reconcile(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if i := f.item(t, old.Record.ID, "n1"); !activePhase(i.Phase) {
+		t.Fatalf("the batch did not dispatch its next node: %+v", i)
+	}
+
+	if err := f.st.PauseAgentUpgrade(old.Record.ID, "artifact_unavailable"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(f.st, f.cfg); err != nil {
+		t.Fatal(err)
+	}
+	if run, err := f.st.AgentUpgradeRun(old.Record.ID); err != nil || run.PauseReason != "artifact_unavailable" {
+		t.Fatalf("run = %+v, %v; a batch paused for missing artifacts must stay paused", run, err)
+	}
+}
+
+// With nothing queued behind it, an attempt names its node and at most how
+// long it still holds the slot: until its current deadline plus the hold
+// while in flight, what is left of the hold once unconfirmed.
+func TestServerUpgradeRefusalNamesTheLastNodeAndHowLongItCanLast(t *testing.T) {
+	f := newFixture(t, 1, true)
+	r := f.create(t, "one", nil, 0)
+	f.tick(t)
+	_, err := f.s.BeginServerUpgrade()
+	var refusal *Error
+	if !errors.As(err, &refusal) {
+		t.Fatalf("in flight = %v; want a refusal", err)
+	}
+	// The push has been handed over, so the attempt waits ConfirmTimeout for
+	// the agent to register, then holds the slot for the hold.
+	want := int((f.s.cfg.ConfirmTimeout + f.s.cfg.UnconfirmedHold + time.Minute - 1) / time.Minute)
+	if node, run, queued, minutes, ok := refusal.ServerUpgradeWait(); !ok || node != "n1" || run != r.Record.ID || queued != 0 || minutes != want {
+		t.Fatalf("in flight waits for node=%q run=%d queued=%d minutes=%d ok=%v; want n1 for %d minutes", node, run, queued, minutes, ok, want)
+	}
+	f.tr.mu.Lock()
+	delete(f.tr.connections, "n1")
+	f.tr.mu.Unlock()
+	f.now = f.now.Add(f.s.cfg.TransferTimeout + f.s.cfg.ConfirmTimeout)
+	f.tick(t)
+	_, err = f.s.BeginServerUpgrade()
+	if !errors.As(err, &refusal) {
+		t.Fatalf("within the hold = %v; want a refusal", err)
+	}
+	if node, _, queued, minutes, ok := refusal.ServerUpgradeWait(); !ok || node != "n1" || queued != 0 || minutes != 5 {
+		t.Fatalf("within the hold waits for node=%q queued=%d minutes=%d ok=%v; want n1 for 5 minutes", node, queued, minutes, ok)
+	}
+	f.now = f.now.Add(f.s.cfg.UnconfirmedHold + time.Second)
+	done, err := f.s.BeginServerUpgrade()
+	if err != nil {
+		t.Fatalf("after the hold = %v; an unverified outcome must not hold the server upgrade", err)
+	}
+	done(false)
+}
+
+// A queue left on an interrupted batch (the build changed under it) or on a
+// stopped one dispatches nothing, so neither holds a server upgrade.
+func TestQueueOfAnInterruptedBatchDoesNotHoldTheServerUpgrade(t *testing.T) {
+	f := newFixture(t, 2, true)
+	r := f.create(t, "all", nil, 0)
+	if err := f.st.InterruptAgentUpgrade(r.Record.ID, "artifact_changed"); err != nil {
+		t.Fatal(err)
+	}
+	if items, err := f.st.AgentUpgradeItems(r.Record.ID); err != nil || len(items) != 2 || items[0].Phase != "queued" || items[1].Phase != "queued" {
+		t.Fatalf("items = %+v, %v; want both still queued on the interrupted batch", items, err)
+	}
+	done, err := f.s.BeginServerUpgrade()
+	if err != nil {
+		t.Fatalf("an interrupted batch's queue held the server upgrade: %v", err)
+	}
+	done(false)
+}
+
+// Two nodes in a row with an unknown outcome pause the batch with its own
+// reason: one silent node is that node's matter, two say something about the
+// build or the network, and going on would take the fleet's agents away one
+// by one. A node later seen on the target did succeed and does not count.
+func TestTwoUnknownOutcomesInARowPauseTheBatch(t *testing.T) {
+	silent := func(f *fixture, uuid string) {
+		f.tr.mu.Lock()
+		delete(f.tr.connections, uuid)
+		f.tr.mu.Unlock()
+	}
+	t.Run("two in a row pause", func(t *testing.T) {
+		f := newFixture(t, 3, true)
+		r := f.create(t, "all", nil, 0)
+		f.tick(t)
+		silent(f, "n1")
+		f.now = f.now.Add(3 * time.Minute)
+		f.tick(t)
+		f.now = f.now.Add(f.s.cfg.UnconfirmedHold + time.Second)
+		f.tick(t)
+		if i := f.item(t, r.Record.ID, "n2"); !activePhase(i.Phase) {
+			t.Fatalf("the batch did not go on past one silent node: %+v", i)
+		}
+		silent(f, "n2")
+		f.now = f.now.Add(3 * time.Minute)
+		f.tick(t)
+		run, err := f.s.Get(context.Background(), r.Record.ID)
+		if err != nil || run.State != "paused" || run.Record.PauseReason != PauseRepeatedUnknownOutcome {
+			t.Fatalf("run = %+v, %v; want paused for repeated unknown outcomes", run, err)
+		}
+		f.now = f.now.Add(f.s.cfg.UnconfirmedHold + time.Second)
+		f.tick(t)
+		if i := f.item(t, r.Record.ID, "n3"); i.Phase != "queued" {
+			t.Fatalf("the paused batch went on to n3: %+v", i)
+		}
+		// The pause is this server's own decision, not the older rule's:
+		// a restart does not undo it.
+		if _, err := New(f.st, f.cfg); err != nil {
+			t.Fatal(err)
+		}
+		if saved, err := f.st.AgentUpgradeRun(r.Record.ID); err != nil || saved.PauseReason != PauseRepeatedUnknownOutcome {
+			t.Fatalf("after a restart run = %+v, %v; want still paused", saved, err)
+		}
+		// Continuing offers the node not yet tried and the two whose outcome is unknown.
+		p, err := f.s.ContinuePreview(context.Background(), r.Record.ID)
+		if err != nil || len(p.NodeUUIDs) != 3 {
+			t.Fatalf("continue preview = %+v, %v; want all three nodes", p.NodeUUIDs, err)
+		}
+	})
+	t.Run("a late success in between does not count", func(t *testing.T) {
+		f := newFixture(t, 3, true)
+		r := f.create(t, "all", nil, 0)
+		f.tick(t)
+		f.now = f.now.Add(3 * time.Minute)
+		f.tr.set("n1", Connection{SessionID: "late-n1", Version: "target", Ready: true})
+		f.tick(t) // n1 times out, then is seen on the target; n2 is dispatched
+		if i := f.item(t, r.Record.ID, "n1"); i.Phase != "unconfirmed" || i.VerificationCode != "target_registered" {
+			t.Fatalf("n1 = %+v", i)
+		}
+		silent(f, "n2")
+		f.now = f.now.Add(3 * time.Minute)
+		f.tick(t)
+		if run, err := f.st.AgentUpgradeRun(r.Record.ID); err != nil || run.PauseReason != "" {
+			t.Fatalf("run = %+v, %v; one unknown outcome after a late success must not pause", run, err)
+		}
+	})
+}
+
+// An unknown outcome past its hold does not keep its node, or its batch,
+// shown as being upgraded; and a node that stayed connected on its old
+// session and version is settled as not having taken the upgrade, so the
+// attempt does not stay open for as long as the node stays up.
+func TestUnknownOutcomePastItsHoldHoldsNothingAndSettlesByWhatTheNodeShows(t *testing.T) {
+	f := newFixture(t, 1, true)
+	r := f.create(t, "one", nil, 0)
+	f.tick(t)
+	f.now = f.now.Add(3 * time.Minute)
+	f.tick(t)
+	nodes, err := f.st.ListNodes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fleet, err := f.s.Fleet(context.Background(), nodes)
+	if err != nil || fleet.RunID != r.Record.ID || fleet.Eligibility["n1"] != "busy" {
+		t.Fatalf("within the hold fleet = %+v, %v; want n1 busy in its batch", fleet, err)
+	}
+	f.now = f.now.Add(f.s.cfg.UnconfirmedHold + time.Second)
+	fleet, err = f.s.Fleet(context.Background(), nodes)
+	if err != nil || fleet.RunID != 0 || fleet.Eligibility["n1"] == "busy" {
+		t.Fatalf("past the hold fleet = %+v, %v; want nothing running and n1 free", fleet, err)
+	}
+	f.tick(t)
+	if i := f.item(t, r.Record.ID, "n1"); i.Phase != "unconfirmed" || i.VerifiedBy != "system" || i.VerificationCode != ReasonStillOnOldVersion {
+		t.Fatalf("n1 = %+v; want settled as still on its old version", i)
 	}
 }

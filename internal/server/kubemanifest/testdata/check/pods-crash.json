@@ -1,0 +1,577 @@
+{
+ "apiVersion": "v1",
+ "items": [
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "creationTimestamp": "2026-11-26T03:29:53Z",
+    "generateName": "crash-",
+    "generation": 1,
+    "labels": {
+     "app.kubernetes.io/name": "crash",
+     "controller-revision-hash": "58987fb6cf",
+     "pod-template-generation": "1"
+    },
+    "name": "crash-pzks7",
+    "namespace": "fx",
+    "ownerReferences": [
+     {
+      "apiVersion": "apps/v1",
+      "blockOwnerDeletion": true,
+      "controller": true,
+      "kind": "DaemonSet",
+      "name": "crash",
+      "uid": "cb99b08e-2b79-4b75-8807-f913cf700a56"
+     }
+    ],
+    "resourceVersion": "1475",
+    "uid": "2b4ce095-cd07-4294-a4e7-c44a8a1e9c8e"
+   },
+   "spec": {
+    "affinity": {
+     "nodeAffinity": {
+      "requiredDuringSchedulingIgnoredDuringExecution": {
+       "nodeSelectorTerms": [
+        {
+         "matchFields": [
+          {
+           "key": "metadata.name",
+           "operator": "In",
+           "values": [
+            "gwks-precheck-worker"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    "containers": [
+     {
+      "command": [
+       "/bin/bash",
+       "-c",
+       "exit 42"
+      ],
+      "image": "gpuworks/gpuworks-agent:l3kind",
+      "imagePullPolicy": "IfNotPresent",
+      "name": "check",
+      "readinessProbe": {
+       "exec": {
+        "command": [
+         "test",
+         "-f",
+         "/tmp/reachable"
+        ]
+       },
+       "failureThreshold": 3,
+       "periodSeconds": 2,
+       "successThreshold": 1,
+       "timeoutSeconds": 1
+      },
+      "resources": {
+       "requests": {
+        "memory": "16Mi"
+       }
+      },
+      "terminationMessagePath": "/dev/termination-log",
+      "terminationMessagePolicy": "File",
+      "volumeMounts": [
+       {
+        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "name": "kube-api-access-4d4kv",
+        "readOnly": true
+       }
+      ]
+     }
+    ],
+    "dnsPolicy": "ClusterFirst",
+    "enableServiceLinks": true,
+    "nodeName": "gwks-precheck-worker",
+    "preemptionPolicy": "PreemptLowerPriority",
+    "priority": 0,
+    "restartPolicy": "Always",
+    "schedulerName": "default-scheduler",
+    "securityContext": {},
+    "serviceAccount": "default",
+    "serviceAccountName": "default",
+    "terminationGracePeriodSeconds": 0,
+    "tolerations": [
+     {
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/not-ready",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/unreachable",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/disk-pressure",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/memory-pressure",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/pid-pressure",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/unschedulable",
+      "operator": "Exists"
+     }
+    ],
+    "volumes": [
+     {
+      "name": "kube-api-access-4d4kv",
+      "projected": {
+       "defaultMode": 420,
+       "sources": [
+        {
+         "serviceAccountToken": {
+          "expirationSeconds": 3607,
+          "path": "token"
+         }
+        },
+        {
+         "configMap": {
+          "items": [
+           {
+            "key": "ca.crt",
+            "path": "ca.crt"
+           }
+          ],
+          "name": "kube-root-ca.crt"
+         }
+        },
+        {
+         "downwardAPI": {
+          "items": [
+           {
+            "fieldRef": {
+             "apiVersion": "v1",
+             "fieldPath": "metadata.namespace"
+            },
+            "path": "namespace"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:55Z",
+      "observedGeneration": 1,
+      "status": "True",
+      "type": "PodReadyToStartContainers"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "observedGeneration": 1,
+      "status": "True",
+      "type": "Initialized"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "message": "containers with unready status: [check]",
+      "observedGeneration": 1,
+      "reason": "ContainersNotReady",
+      "status": "False",
+      "type": "Ready"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "message": "containers with unready status: [check]",
+      "observedGeneration": 1,
+      "reason": "ContainersNotReady",
+      "status": "False",
+      "type": "ContainersReady"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "observedGeneration": 1,
+      "status": "True",
+      "type": "PodScheduled"
+     }
+    ],
+    "containerStatuses": [
+     {
+      "allocatedResources": {
+       "memory": "16Mi"
+      },
+      "containerID": "containerd://26a313b43247f275269fe743c414555b6970399cbd59854f9c99ba57679a0169",
+      "image": "docker.io/gpuworks/gpuworks-agent:l3kind",
+      "imageID": "sha256:61f4e11e0a42b88e83e4e1cf279376ab647f71d53a7d4a9f5e3f8741a3f82252",
+      "lastState": {
+       "terminated": {
+        "containerID": "containerd://26a313b43247f275269fe743c414555b6970399cbd59854f9c99ba57679a0169",
+        "exitCode": 42,
+        "finishedAt": "2026-11-26T03:30:10Z",
+        "reason": "Error",
+        "startedAt": "2026-11-26T03:30:10Z"
+       }
+      },
+      "name": "check",
+      "ready": false,
+      "resources": {
+       "requests": {
+        "memory": "16Mi"
+       }
+      },
+      "restartCount": 2,
+      "started": false,
+      "state": {
+       "waiting": {
+        "message": "back-off 20s restarting failed container=check pod=crash-pzks7_fx(2b4ce095-cd07-4294-a4e7-c44a8a1e9c8e)",
+        "reason": "CrashLoopBackOff"
+       }
+      },
+      "user": {
+       "linux": {
+        "gid": 0,
+        "supplementalGroups": [
+         0
+        ],
+        "uid": 0
+       }
+      },
+      "volumeMounts": [
+       {
+        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "name": "kube-api-access-4d4kv",
+        "readOnly": true,
+        "recursiveReadOnly": "Disabled"
+       }
+      ]
+     }
+    ],
+    "hostIP": "172.18.0.3",
+    "hostIPs": [
+     {
+      "ip": "172.18.0.3"
+     }
+    ],
+    "observedGeneration": 1,
+    "phase": "Running",
+    "podIP": "10.244.1.6",
+    "podIPs": [
+     {
+      "ip": "10.244.1.6"
+     }
+    ],
+    "qosClass": "Burstable",
+    "startTime": "2026-11-26T03:29:53Z"
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "creationTimestamp": "2026-11-26T03:29:53Z",
+    "generateName": "crash-",
+    "generation": 1,
+    "labels": {
+     "app.kubernetes.io/name": "crash",
+     "controller-revision-hash": "58987fb6cf",
+     "pod-template-generation": "1"
+    },
+    "name": "crash-zkjn9",
+    "namespace": "fx",
+    "ownerReferences": [
+     {
+      "apiVersion": "apps/v1",
+      "blockOwnerDeletion": true,
+      "controller": true,
+      "kind": "DaemonSet",
+      "name": "crash",
+      "uid": "cb99b08e-2b79-4b75-8807-f913cf700a56"
+     }
+    ],
+    "resourceVersion": "1497",
+    "uid": "e1c2ef69-8e47-439d-9680-6c59a8c06bac"
+   },
+   "spec": {
+    "affinity": {
+     "nodeAffinity": {
+      "requiredDuringSchedulingIgnoredDuringExecution": {
+       "nodeSelectorTerms": [
+        {
+         "matchFields": [
+          {
+           "key": "metadata.name",
+           "operator": "In",
+           "values": [
+            "gwks-precheck-control-plane"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    "containers": [
+     {
+      "command": [
+       "/bin/bash",
+       "-c",
+       "exit 42"
+      ],
+      "image": "gpuworks/gpuworks-agent:l3kind",
+      "imagePullPolicy": "IfNotPresent",
+      "name": "check",
+      "readinessProbe": {
+       "exec": {
+        "command": [
+         "test",
+         "-f",
+         "/tmp/reachable"
+        ]
+       },
+       "failureThreshold": 3,
+       "periodSeconds": 2,
+       "successThreshold": 1,
+       "timeoutSeconds": 1
+      },
+      "resources": {
+       "requests": {
+        "memory": "16Mi"
+       }
+      },
+      "terminationMessagePath": "/dev/termination-log",
+      "terminationMessagePolicy": "File",
+      "volumeMounts": [
+       {
+        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "name": "kube-api-access-fpx5b",
+        "readOnly": true
+       }
+      ]
+     }
+    ],
+    "dnsPolicy": "ClusterFirst",
+    "enableServiceLinks": true,
+    "nodeName": "gwks-precheck-control-plane",
+    "preemptionPolicy": "PreemptLowerPriority",
+    "priority": 0,
+    "restartPolicy": "Always",
+    "schedulerName": "default-scheduler",
+    "securityContext": {},
+    "serviceAccount": "default",
+    "serviceAccountName": "default",
+    "terminationGracePeriodSeconds": 0,
+    "tolerations": [
+     {
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/not-ready",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/unreachable",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/disk-pressure",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/memory-pressure",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/pid-pressure",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoSchedule",
+      "key": "node.kubernetes.io/unschedulable",
+      "operator": "Exists"
+     }
+    ],
+    "volumes": [
+     {
+      "name": "kube-api-access-fpx5b",
+      "projected": {
+       "defaultMode": 420,
+       "sources": [
+        {
+         "serviceAccountToken": {
+          "expirationSeconds": 3607,
+          "path": "token"
+         }
+        },
+        {
+         "configMap": {
+          "items": [
+           {
+            "key": "ca.crt",
+            "path": "ca.crt"
+           }
+          ],
+          "name": "kube-root-ca.crt"
+         }
+        },
+        {
+         "downwardAPI": {
+          "items": [
+           {
+            "fieldRef": {
+             "apiVersion": "v1",
+             "fieldPath": "metadata.namespace"
+            },
+            "path": "namespace"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:55Z",
+      "observedGeneration": 1,
+      "status": "True",
+      "type": "PodReadyToStartContainers"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "observedGeneration": 1,
+      "status": "True",
+      "type": "Initialized"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "message": "containers with unready status: [check]",
+      "observedGeneration": 1,
+      "reason": "ContainersNotReady",
+      "status": "False",
+      "type": "Ready"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "message": "containers with unready status: [check]",
+      "observedGeneration": 1,
+      "reason": "ContainersNotReady",
+      "status": "False",
+      "type": "ContainersReady"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-11-26T03:29:53Z",
+      "observedGeneration": 1,
+      "status": "True",
+      "type": "PodScheduled"
+     }
+    ],
+    "containerStatuses": [
+     {
+      "allocatedResources": {
+       "memory": "16Mi"
+      },
+      "containerID": "containerd://c6ab2645efef48a8807795928b513ebcbcd895f6dc2430a05020844cf606678d",
+      "image": "docker.io/gpuworks/gpuworks-agent:l3kind",
+      "imageID": "sha256:61f4e11e0a42b88e83e4e1cf279376ab647f71d53a7d4a9f5e3f8741a3f82252",
+      "lastState": {
+       "terminated": {
+        "containerID": "containerd://c6ab2645efef48a8807795928b513ebcbcd895f6dc2430a05020844cf606678d",
+        "exitCode": 42,
+        "finishedAt": "2026-11-26T03:30:13Z",
+        "reason": "Error",
+        "startedAt": "2026-11-26T03:30:13Z"
+       }
+      },
+      "name": "check",
+      "ready": false,
+      "resources": {
+       "requests": {
+        "memory": "16Mi"
+       }
+      },
+      "restartCount": 2,
+      "started": false,
+      "state": {
+       "waiting": {
+        "message": "back-off 20s restarting failed container=check pod=crash-zkjn9_fx(e1c2ef69-8e47-439d-9680-6c59a8c06bac)",
+        "reason": "CrashLoopBackOff"
+       }
+      },
+      "user": {
+       "linux": {
+        "gid": 0,
+        "supplementalGroups": [
+         0
+        ],
+        "uid": 0
+       }
+      },
+      "volumeMounts": [
+       {
+        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "name": "kube-api-access-fpx5b",
+        "readOnly": true,
+        "recursiveReadOnly": "Disabled"
+       }
+      ]
+     }
+    ],
+    "hostIP": "172.18.0.2",
+    "hostIPs": [
+     {
+      "ip": "172.18.0.2"
+     }
+    ],
+    "observedGeneration": 1,
+    "phase": "Running",
+    "podIP": "10.244.0.9",
+    "podIPs": [
+     {
+      "ip": "10.244.0.9"
+     }
+    ],
+    "qosClass": "Burstable",
+    "startTime": "2026-11-26T03:29:53Z"
+   }
+  }
+ ],
+ "kind": "List",
+ "metadata": {
+  "resourceVersion": ""
+ }
+}

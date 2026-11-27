@@ -340,7 +340,7 @@ func TestCompshareGPUSelectionPrefers3090AndFallsBackTo4090(t *testing.T) {
 	}
 }
 
-func TestHostedBuiltBinariesAreStaticAMD64(t *testing.T) {
+func TestBuiltRunnerBinariesAreStaticAMD64(t *testing.T) {
 	root, err := hostedRepoRoot()
 	if err != nil {
 		t.Fatal(err)

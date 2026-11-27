@@ -19,8 +19,8 @@ func (d *Driver) prepareHostForAgent(ctx context.Context, creds provider.Credent
 		if resource.ExternalID != hostID {
 			continue
 		}
-		if evaluateHostOnboarding(resource) != hostOnboardingCandidate {
-			return fmt.Errorf("Cloud host is not eligible for agent installation")
+		if err := checkHostOnboarding(resource); err != nil {
+			return err
 		}
 		node, err := d.store.NodeByTokenHash(store.HashToken(nodeToken))
 		if err != nil {

@@ -1,6 +1,6 @@
 # OpenAI-Compatible Gateway
 
-The server's `/v1/*` endpoints require API key authentication by default; see [Authentication](#authentication) below. The `model` field in the request body specifies the model name exposed for inference (the served model). The server uses it to find the deployment, instance, and node, then forwards the request to the local port through the agent tunnel. Management APIs use JWTs; a management JWT cannot replace a gateway key.
+The server's `/v1/*` endpoints require API key authentication by default; see [Authentication](#认证) below. The `model` field in the request body specifies the model name exposed for inference (the served model). The server uses it to find the deployment, instance, and node, then forwards the request to the local port through the agent tunnel. Management APIs use JWTs; a management JWT cannot replace a gateway key.
 
 ## Authentication
 
@@ -13,7 +13,7 @@ The only exception is an explicit administrator switch: the `inference_open_acce
 - An unreadable setting counts as off: a failed read never lets a request without a key through; the request is treated as one that must carry a key.
 - Revoking a key does not change the decision: revoking the last key does not reopen the gateway, and `/v1` refuses every request until another key is created or an administrator turns the switch on.
 
-The rule covers every `/v1` route, including `/v1/models`, `/v1/files`, `/v1/batches`, `/v1/tokenize`, and `/v1/detokenize`. The 401 code depends on the entry point: gateway routes return `INVALID_API_KEY` (`type` `authentication_error`; see [Errors](#errors)), while Files and Batches return the OpenAI-format `invalid_api_key`.
+The rule covers every `/v1` route, including `/v1/models`, `/v1/key`, `/v1/files`, `/v1/batches`, `/v1/tokenize`, and `/v1/detokenize`. The 401 code depends on the entry point: gateway routes return `INVALID_API_KEY` (`type` `authentication_error`; see [Errors](#错误)), while Files and Batches return the OpenAI-format `invalid_api_key`.
 
 `GET /v1/models` lists the served names the gateway can route right now (read from the gateway's event-driven route table, not the database): active deployments only, each served name once, in name order; a scoped key sees only the served names of deployments it may call. A deployment just created or stopped appears or disappears once the route table rebuilds: at most about 0.5 s after the deployment's event, and every 2 s regardless.
 
@@ -75,9 +75,71 @@ You can disable tokenization forwarding for each deployment: set `tokenize_enabl
 
 ## Request Priority
 
-The gateway decides a request's priority: from the priority class its API key is bound to, and the class the client names with the request header `X-GPUWorks-Priority-Class: <name>` within what the key allows; batch requests run at the class their batch was created with, and a batch created through `/v1/batches` always at the `batch` class. A name that matches no class returns 400. The response header `X-GPUWorks-Priority-Class` names the class the request ran at.
+The gateway decides a request's priority: from the priority class its API key is bound to, and the class the client names with the request header `X-GPUWorks-Priority-Class: <name>` within what the key allows; batch requests run at the class their batch was created with, and a batch created through `/v1/batches` always at the `batch` class. A name that matches no class returns 400 `PRIORITY_CLASS_UNKNOWN`, under all three key policies (fixed included); anonymous access without a key does not read the header. The response header `X-GPUWorks-Priority-Class` names the class the request ran at.
 
 For a deployment with request priority on, the gateway writes the class value into the body's `priority` in the engine's direction; otherwise it sets an existing `priority` to `0`. A client's own `priority` field and `X-Vllm-Priority` header never reach the engine, whether the model is named in the body, in `?model=` or in `X-GPUWorks-Model`, and whatever Content-Type the body declares; a body declared as JSON or text must be UTF-8, or the request gets a 400. See [Request Priority](../explanation/request-priority.md).
+
+The response header `X-GPUWorks-Priority-Scheduling` says whether the engine scheduled the request by that class: `on` when the instance that took the request was launched with priority scheduling, the request is on a generating path and the gateway wrote the engine's `priority`; `off` otherwise (the deployment has it off, the instance was launched without it, an auxiliary route such as `/v1/tokenize`, or a body the gateway does not rewrite such as a multipart upload). The gateway writes it when it chooses the instance; a resend after a connection failure goes only to a replica that schedules as the first choice does, so the value always describes the instance that actually took the request.
+
+### Key Information
+
+`GET /v1/key` returns the key information of the API key that calls it, so that a gateway in front of GPUWorks can decide, before it forwards, which priority header to send and for which models the busy declaration works. Authentication, the key's scope and open access work as for `/v1/models`; any other method returns 405 `METHOD_NOT_ALLOWED` with `Allow: GET`. It is not inference traffic: it does not count toward the gateway's requests, leaves no request record, and answers from the route table and the class snapshot without reading the deployments table.
+
+```json
+{
+  "object": "key",
+  "features": ["priority_scheduling_header", "busy_reject"],
+  "priority": {
+    "own": {"name": "normal", "value": 0},
+    "ceiling": {"name": "critical", "value": 40},
+    "reachable": [
+      {"name": "critical", "value": 40},
+      {"name": "high", "value": 20},
+      {"name": "normal", "value": 0},
+      {"name": "low", "value": -20},
+      {"name": "batch", "value": -40}
+    ]
+  },
+  "models": [
+    {"id": "qwen3-8b", "priority_scheduling": "all", "busy_reject": true}
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `features` | Gateway capabilities this server has; a listed one is never removed. `priority_scheduling_header`: answers carry `X-GPUWorks-Priority-Scheduling`; `busy_reject`: `X-GPUWorks-If-Busy` is honoured, see [Busy Rejection](#busy-rejection) |
+| `priority` | The key's priority binding; `null` for anonymous access without a key |
+| `priority.own` | The class a request runs at without `X-GPUWorks-Priority-Class` |
+| `priority.reachable` | Every class the header can run at (`own` included), highest value first |
+| `priority.ceiling` | The class a request runs at when the header names a class not in `reachable`. Equal to `own` under the "fixed" and "down only" policies |
+| `models` | The models the key may call, with the same `id` as `/v1/models`, in name order |
+| `models[].priority_scheduling` | How many running replicas schedule by priority: `all`, `some` or `none` (also `none` with no running replica) |
+| `models[].busy_reject` | Whether a request with the busy declaration is refused when the model is busy: `true` when no deployment of the model the key may call is PD-disaggregated or multi-node and every running replica has known run slots (its launch arguments state a concurrent-sequence cap and a data-parallel size of 1); `false` with no running replica |
+
+A caller resolves a class by one rule: as named when it is in `reachable`, at `ceiling` otherwise; it does not need to reimplement the gateway's policies. Fields are only added, never changed, and a caller should ignore fields it does not know. An older server without this route treats it as a model request that names no model and, with a valid key, answers 400 `MODEL_REQUIRED`: a caller takes a 404, and a 400 whose `error.code` is `MODEL_REQUIRED`, both as "this version does not provide it", a 401 or 403 as an invalid or unauthorized key, and any other failure as temporarily unreadable. Changes to classes and key bindings take effect as for requests (see [Request Priority](../explanation/request-priority.md)).
+
+### Busy Rejection
+
+A caller with somewhere else to send a request (a gateway in front of GPUWorks, say) can add `X-GPUWorks-If-Busy: reject` to a model request to declare "do not queue it when busy": when GPUWorks judges it cannot take the request now, it answers at once with 429 `MODEL_BUSY` and `Retry-After: 1`, and the caller can send it elsewhere straight away; when it can, the request is forwarded as usual. Without the header, or with any value other than `reject`, nothing changes. The header never reaches the engine.
+
+```json
+{"error": {"message": "every replica of qwen3-8b is busy and the request asked not to wait; send it again later, elsewhere, or without X-GPUWorks-If-Busy", "type": "invalid_request_error", "code": "MODEL_BUSY", "param": null, "params": {"model": "qwen3-8b"}}}
+```
+
+A caller recognizes the refusal by the status and `error.code` only, never by matching `message`, and does not rely on the rule below: it may become more precise between versions while the meaning stays.
+
+The current rule: the gateway judges at the moment it chooses a replica and takes a place on it, so two concurrent requests never both get the last free place. A replica's run slots are the concurrent-sequence cap its instance's launch arguments state (vLLM `--max-num-seqs`, SGLang `--max-running-requests`); a replica has no free place when the in-flight requests this one would wait behind reach its run slots. On a replica that schedules by priority those are the ones of this request's priority or higher (the engine runs this request first, so lower ones do not count); any other replica runs requests in arrival order, so every in-flight request counts. When the replica the deployment's routing policy (`least_request`, `prefix_affinity`, `failover`) prefers has no free place but another eligible one does, the request goes to that one; it is refused only when no eligible replica has a free place.
+
+These are never refused, and are forwarded or handled by the existing rules:
+
+- a deployment with a running replica whose launch arguments state no concurrent-sequence cap (GPUWorks does not guess the engine's default), or state a data-parallel size above 1: its `models[].busy_reject` is `false`, and it is not refused even when that replica drains or its node is offline and only replicas that state a cap are left to choose from;
+- PD-disaggregated and multi-node deployments;
+- a deployment that sleeps or is waking: it waits for the wake or gets 503 `MODEL_ASLEEP` as before;
+- the resend to another replica after a connection failure, and the replay after preemption;
+- auxiliary routes such as `/v1/tokenize`, and playground requests (the declaration is dropped).
+
+A refusal counts toward the deployment's gateway requests in the 429 class, leaves no request record and does not update the deployment's last request time. The steps that make a deployment take part are in [Connecting an Upstream Gateway](../explanation/request-priority.md#connecting-an-upstream-gateway), and the design trade-offs in [ADR 0083](../adr/0083-busy-rejection-for-upstream-gateways.md). With several servers each counts only the in-flight requests it forwarded, so a request may go unrefused when it should have been refused, but is never refused wrongly. [Key Information](#key-information) lists `busy_reject` in `features` when the server honours the declaration, and `models[].busy_reject` says which models refuse.
 
 ## Trace Context
 
@@ -195,13 +257,14 @@ Errors the gateway gives itself (refusals before forwarding, failed connections 
 | `param` | The request field the error is about, `null` for none |
 | `params` | The values filled into `message`, for clients that localize it; omitted when there are none |
 
-Every `/v1` response, including a request refused before forwarding, carries `X-Request-ID`. The engine's own error responses are forwarded unchanged when that is safe, in the engine's shape; Files and Batches answer in OpenAI's format with its lower-case codes, see [REST API Reference](api.md#batches).
+Every `/v1` response, including a request refused before forwarding, carries `X-Request-ID`. The engine's own error responses are forwarded unchanged when that is safe, in the engine's shape; Files and Batches answer in OpenAI's format with its lower-case codes, see [REST API Reference](api.md#batches批处理任务).
 
 | `code` | Status | `type` | `param` | Meaning |
 |---|---|---|---|---|
 | `INVALID_API_KEY` | 401 | `authentication_error` | — | The API key is missing or invalid |
 | `MODEL_ACCESS_DENIED` | 403 | `permission_error` | `model` | This API key may not call the model (`params.model`) |
 | `MODEL_REQUIRED` | 400 | `invalid_request_error` | `model` | The request names no `model` |
+| `PRIORITY_CLASS_UNKNOWN` | 400 | `invalid_request_error` | — | The name in header `params.header` (`X-GPUWorks-Priority-Class`) is no priority class; refused under every key policy, without forwarding or waking a sleeping deployment |
 | `REQUEST_BODY_INVALID` | 400 | `invalid_request_error` | — | The request body cannot be read (multipart without a boundary, not a JSON object); `params.detail` says why |
 | `REQUEST_TOO_LARGE` | 413 | `invalid_request_error` | — | The request body exceeds the limit (`params.max_bytes`) |
 | `METHOD_NOT_ALLOWED` | 405 | `invalid_request_error` | — | The route only accepts `params.method` (such as `GET /v1/tokenize`); the response carries `Allow` |
@@ -213,6 +276,7 @@ Every `/v1` response, including a request refused before forwarding, carries `X-
 | `ROUTE_NOT_FOUND` | 404 | `not_found_error` | — | This listening address does not serve `/v1` (only the console or agent function) |
 | `INSTANCE_NOT_FOUND` | 404 | `not_found_error` | — | The pinned instance does not exist |
 | `INSTANCE_MODEL_MISMATCH` | 404 | `not_found_error` | `model` | The pinned instance does not serve the model |
+| `MODEL_BUSY` | 429 | `invalid_request_error` | — | The request carried `X-GPUWorks-If-Busy: reject` and model `params.model` cannot take it now; carries `Retry-After: 1`. Send it elsewhere or again later, see [Busy Rejection](#busy-rejection) |
 | `MODEL_ASLEEP` | 503 | `server_error` | — | The deployment sleeps; wake deployment `params.deployment_id`, or wait for its schedule or a waiting wake; may carry `Retry-After` |
 | `INSTANCE_ASLEEP` | 503 | `server_error` | — | The pinned instance's deployment sleeps |
 | `INSTANCE_NOT_RUNNING` | 503 | `server_error` | — | The pinned instance is not running |
@@ -247,20 +311,22 @@ The gateway does not emulate all OpenAI product APIs. For the exact capabilities
 
 | Status code | What to check |
 |---|---|
-| 401 `INVALID_API_KEY` | Check `Authorization: Bearer <key>` first. When no key is sent at all, confirm whether anonymous access is really wanted (see [Authentication](#authentication)); `/v1` refuses every request without a key by default |
+| 401 `INVALID_API_KEY` | Check `Authorization: Bearer <key>` first. When no key is sent at all, confirm whether anonymous access is really wanted (see [Authentication](#认证)); `/v1` refuses every request without a key by default |
 | 404 `MODEL_NOT_FOUND` / `MODEL_ROUTE_NOT_EXPOSED` | Check the `model` name; for Playground, also check the contract |
-| 503 | Look up the `code` in [Errors](#errors): asleep, starting, node offline, or data lane reconnecting |
+| 503 | Look up the `code` in [Errors](#错误): asleep, starting, node offline, or data lane reconnecting |
 | 502 `UPSTREAM_UNAVAILABLE` | Check tunnel and engine logs |
 
 Streaming SSE and binary responses (such as WAV) are forwarded with their original content type without truncation.
 
 <!-- translation-source-sha256: 146ba1db59f6915d93d5c0497a63492d4efae6d2c61d64e6ba4f34e24120be14 # OpenAI-Compatible Gateway -->
-<!-- translation-source-sha256: 3419573a4fd81544ccdec8647a87d11ee1ec1ccf5113453070fb944603190c79 ## Authentication -->
+<!-- translation-source-sha256: 23afbdf6e1aaa11bba6e18766c8c87d5d70dfa4bca56f6e4f64a5226d7952cb9 ## Authentication -->
 <!-- translation-source-sha256: 389d4b5522a5bd3216a5041c7dac412010d158cc57bd4bb5ad5788145d664111 ## Supported Operations -->
 <!-- translation-source-sha256: 7bf01655b1c8196029d9b3ac65802f9f07b54314ee15dfcd83cb02319629c518 ## Replica Selection and Retries -->
 <!-- translation-source-sha256: 6acb770e47b044aaa2f5ae020be8de5399e18f1c1a2ca8766b6335625d6cff3b ## Batches (Files and Batches) -->
 <!-- translation-source-sha256: 475124ec8de50b9072b50ee962f92870520b5df325b80187af159d220745f2a7 ## Tokenization (tokenize) -->
-<!-- translation-source-sha256: b04cb3cd49891b8cf9a25bb166f063ce5af28e7721601eb94fa2fff50353569d ## Request Priority -->
+<!-- translation-source-sha256: 6707b9b4bec6dd88b719c1d260bc22dba78d2352b88c2d96573d3dd3dea27d8b ## Request Priority -->
+<!-- translation-source-sha256: 26998c9ef1e302a2a4ddbd6f45429e1725c54581e43ba8378da32b4e5a24cfff ### Key Information -->
+<!-- translation-source-sha256: 6e97ae6f455ad45d0470eb7705c8eafdd48053c7e80c02db70da3b91a77f8373 ### Busy Rejection -->
 <!-- translation-source-sha256: 91d6198ea9bcfb40d784f10fa77320acb27b0b45bcb8fdb958cf4d46554ea647 ## Trace Context -->
 <!-- translation-source-sha256: 2b9c4f0c8955d7d09cb9fc312559725988923ab947e97e8e4f21fbe931ef9cdf ### Trace Identifiers and Request IDs -->
 <!-- translation-source-sha256: 19589bf0b20be8387b262c114cb369861640ef81042c8ac4039bd2b51d39dafe ### Connect to the Caller's Trace -->
@@ -268,6 +334,6 @@ Streaming SSE and binary responses (such as WAV) are forwarded with their origin
 <!-- translation-source-sha256: 9c37d4f05b6f03c9e6aff79e566c378a64251aaa8a9fdb9a0f2af24fb3a2745d ### Obtain Usage for Streaming Requests -->
 <!-- translation-source-sha256: b1aad95e9d7e77247af93d91aabebaafbbdcd7f28bfb207c6b8fec973a997271 ### Usage for Messages and Responses -->
 <!-- translation-source-sha256: 1e99cb203865e1dc47e85e652d668709bf98e039c55d60b02f03d99d54a77696 ### Source of Cache Hit Counts in PD Disaggregation Deployments -->
-<!-- translation-source-sha256: e7f31181b01ee976e4b99e6b3d226da30de2d87a01421059370b45457fa8a71e ## Errors -->
+<!-- translation-source-sha256: fee33bb944cca4be6e883637cc154ca3c2e95c63807b4c4b1dd283d858c465ae ## Errors -->
 <!-- translation-source-sha256: 8ae89817b16c25868b3a33ebd10d60695c312cb82bf517b25aef2b73b85182c8 ## Playground -->
 <!-- translation-source-sha256: 9923f454eda93d5f4500f52ff744daba8ddd4870a4f1564e373d004af15c11b7 ## Differences and Troubleshooting -->

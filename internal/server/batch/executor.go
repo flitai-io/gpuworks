@@ -10,15 +10,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
-)
-
-// Why a batch's dispatch stopped early.
-const (
-	causeNone int32 = iota
-	causeCancel
-	causeExpired
 )
 
 // execute runs one batch to its end, or to the service's shutdown, from
@@ -46,8 +38,6 @@ type run struct {
 	b   Batch
 	h   *handle
 	p   *partial
-
-	cause atomic.Int32
 }
 
 func (r *run) log(msg string, args ...any) {
@@ -75,44 +65,8 @@ func (r *run) execute(ctx context.Context) {
 	}
 	r.p = p
 
-	sendCtx, cancelSend := context.WithCancel(ctx)
-	defer cancelSend()
-	dispCtx, cancelDisp := context.WithCancel(sendCtx)
-	defer cancelDisp()
-	finished := make(chan struct{})
-	var watch sync.WaitGroup
-	watch.Add(1)
-	go func() {
-		defer watch.Done()
-		r.watch(finished, cancelDisp, cancelSend)
-	}()
-	if r.b.Status == StatusCancelling {
-		r.cause.CompareAndSwap(causeNone, causeCancel)
-		cancelDisp()
-	}
-	// A batch resumed after its deadline (the server was down when it passed)
-	// is stopped here, before the first request. The watch's timer would fire
-	// at once too, but from another goroutine: the dispatch could send first.
-	if !s.cfg.Clock.Now().Before(r.b.ExpiresAt) && r.cause.CompareAndSwap(causeNone, causeExpired) {
-		cancelDisp()
-		cancelSend()
-	}
-
-	stopCheckpoints := make(chan struct{})
-	var checkpoints sync.WaitGroup
-	checkpoints.Add(1)
-	go func() {
-		defer checkpoints.Done()
-		r.checkpointLoop(stopCheckpoints)
-	}()
-
-	dispatchErr := r.dispatch(dispCtx, sendCtx)
-
-	close(finished)
-	watch.Wait()
-	close(stopCheckpoints)
-	checkpoints.Wait()
-	if dispatchErr == nil && ctx.Err() == nil && r.cause.Load() == causeExpired {
+	status, dispatchErr := r.dispatchUntilStopped(ctx)
+	if dispatchErr == nil && ctx.Err() == nil && status == StatusExpired {
 		dispatchErr = r.expireRest()
 	}
 	r.checkpoint()
@@ -123,36 +77,66 @@ func (r *run) execute(ctx context.Context) {
 		return // the service is stopping; the checkpoint is where a restart resumes
 	case dispatchErr != nil:
 		r.fail(s.cfg.Clock.Now(), "input_file_unreadable", "the input file cannot be read: "+dispatchErr.Error())
-	case r.cause.Load() == causeExpired:
-		r.finish(StatusExpired)
-	case r.cause.Load() == causeCancel:
-		r.finish(StatusCancelled)
 	default:
-		r.finish(StatusCompleted)
+		r.finish(status)
 	}
 }
 
-// watch turns a cancel and the batch's expiry into the stop of its requests.
-func (r *run) watch(finished <-chan struct{}, stopDispatch, stopSend context.CancelFunc) {
-	s := r.svc
-	untilExpiry := r.b.ExpiresAt.Sub(s.cfg.Clock.Now())
-	select {
-	case <-finished:
-	case <-r.h.cancel:
-		if r.cause.CompareAndSwap(causeNone, causeCancel) {
-			stopDispatch()
-		}
-		// Requests in flight finish, for a while.
+// dispatchUntilStopped decides whether the batch can start and how dispatch
+// ends. An expired resume goes straight to finalization with its checkpoint.
+func (r *run) dispatchUntilStopped(ctx context.Context) (string, error) {
+	sendCtx, stopSend := context.WithCancel(ctx)
+	defer stopSend()
+	dispCtx, stopDispatch := context.WithCancel(sendCtx)
+	defer stopDispatch()
+	if r.b.Status == StatusCancelling {
+		// Keep the input-file check on a cancelled resume, with dispatch stopped.
+		stopDispatch()
+		return StatusCancelled, r.dispatch(dispCtx, sendCtx)
+	}
+	clock := r.svc.cfg.Clock
+	remaining := r.b.ExpiresAt.Sub(clock.Now())
+	if remaining <= 0 {
+		return StatusExpired, nil
+	}
+	expiry := clock.After(remaining)
+
+	finished := make(chan struct{})
+	var workers sync.WaitGroup
+	var dispatchErr error
+	workers.Go(func() {
+		defer close(finished)
+		dispatchErr = r.dispatch(dispCtx, sendCtx)
+	})
+	workers.Go(func() { r.checkpointLoop(finished) })
+
+	status := r.watch(finished, expiry)
+	switch status {
+	case StatusExpired:
+		stopDispatch()
+		stopSend()
+	case StatusCancelled:
+		stopDispatch()
+		// Give requests already in flight their cancellation grace.
 		select {
 		case <-finished:
-		case <-s.cfg.Clock.After(s.cfg.CancelGrace):
+		case <-clock.After(r.svc.cfg.CancelGrace):
 			stopSend()
 		}
-	case <-s.cfg.Clock.After(max(untilExpiry, 0)):
-		if r.cause.CompareAndSwap(causeNone, causeExpired) {
-			stopDispatch()
-			stopSend()
-		}
+	}
+	workers.Wait()
+	return status, dispatchErr
+}
+
+// watch reports which event ended the active batch to its executor.
+func (r *run) watch(finished <-chan struct{}, expiry <-chan time.Time) string {
+	select {
+	case <-finished:
+		return StatusCompleted
+	case <-r.h.cancel:
+		return StatusCancelled
+	case <-expiry:
+		return StatusExpired
 	}
 }
 

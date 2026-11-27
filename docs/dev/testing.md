@@ -257,7 +257,7 @@ target。先以 `make help`/Makefile 确认目标，再只运行所需的测试�
   `modelscope-public-download`）**不进定时任务**：这个资源池几乎排不到机器，阿里云用例接替它们。
   需要时从 web/api 流水线带 `COMPSHARE_VM=1` 手动触发，或在 MR 里手动点。CompShare 的容器用例
   （`l4-compshare-server-dial-node-onboarding-container`）和离线契约
-  （`core-compshare-offline-contracts`）照常运行。
+  （并进 `core-test`）照常运行。
 
 云端 L4 的 CI job 都带 `environment: {name: cloud-test/<provider>/<lane>, action: prepare}`：环境作用域的
 变量（`cloud-test/<provider>/*` 下的凭据）照常注入，但 `action: prepare` 不创建 deployment。
@@ -304,8 +304,8 @@ Slurm 接入脚本在两个 CI 中都跑 `scripts/test_slurmboot_shellcheck.sh`�
 - L2/L3 与 GitLab 的 `.docker-core` 同形：每个 job 一个 DinD daemon，暴露在专用的 `gpuworks-e2e` socket
   上，suite 跑在 golang 容器里。直接用 runner VM 的 Docker 不行：VM 有 systemd，console upgrade 用例会把它
   当成服务管理器；真实终端用例只接受专用 daemon。fixture 基础镜像在 suite 前预拉进 DinD。
-- UI suite 在 2 核 runner 上一次只跑一个测试文件，不拆要一个多小时；按 4 片并行，`npm run test:coverage`
-  读可选的 `TEST_SHARD`（如 `2/4`）传给 `--test-shard`，不设时与原命令相同。
+- UI suite 在 2 核 runner 上一次只跑一个测试文件，不拆要一个多小时；按 4 片并行，CI 跑 `npm test`（与 `test:coverage` 同一套用例，不带 c8），
+  读可选的 `TEST_SHARD`（如 `2/4`）传给 `--test-shard`，不设时与原命令相同；覆盖率不入 CI 门禁，需要时本地或 QA 侧跑 `npm run test:coverage`。
 - untagged Go suite 按包分 3 片：`scripts/go_package_shard.sh <i>/<n> ./...` 把 `go list` 的包按导入路径排序后
   轮流分配，最重的 `server/api` 与两个 integrationtest 包恰好落在不同片里。L2 与 GitLab 的 `core-l2` 一样按
   `L2_SHARD` 分 3 片。check 脚本、`go vet`、`make lint`、CompShare 离线契约与 `check-tagged-build` 合在一个

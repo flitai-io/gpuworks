@@ -79,6 +79,9 @@
     "deployments": "Deployments using it",
     "noDeployments": "None"
   },
+  "storageReason": {
+    "not_shared_with_node": "The agent runs in a Pod and does not share this directory with its node. Use a mount point under the default mount directory and apply the cluster's manifest again, or mount the export on the node and choose Use an existing NFS mount."
+  },
   "nodes": {
     "search": "Search nodes",
     "empty": "No node matches",

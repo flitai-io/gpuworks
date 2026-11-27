@@ -95,6 +95,16 @@ func TestEvaluateAcquisitionWireContract(t *testing.T) {
 	if _, ok := image["peers"]; ok {
 		t.Fatalf("removed image.peers present: %s", b)
 	}
+	labelled, err := json.Marshal(ImageOption{Image: "sglang:test", Reason: "catalog_match", Compatible: true, Engine: "sglang", EngineVersion: "0.5.21", SelectsEngine: "sglang"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"image":"sglang:test","reason":"catalog_match","compatible":true,"engine":"sglang","engine_version":"0.5.21","selects_engine":"sglang"}`; string(labelled) != want {
+		t.Fatalf("catalog image option = %s, want %s", labelled, want)
+	}
+	if !strings.Contains(string(b), `"options":[{"image":"vllm:test","reason":"catalog_match","compatible":true}]`) {
+		t.Fatalf("an option outside the catalog states an engine: %s", b)
+	}
 	option := image["options"].([]any)[0].(map[string]any)
 	if option["image"] != "vllm:test" || option["reason"] != "catalog_match" || option["compatible"] != true {
 		t.Fatalf("image option wire contract=%#v", option)

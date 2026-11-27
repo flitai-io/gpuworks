@@ -43,7 +43,7 @@ PACKAGE_PREFIX ?= gpuworks
 
 BIN       := bin
 TEST_LOG_DIR ?= .testlogs
-PLATFORMS := linux/amd64 linux/arm64 darwin/arm64
+PLATFORMS := linux/arm64 linux/amd64 darwin/arm64
 
 # Build the lint tool with the same Go version that loads this module. A
 # globally installed binary can be too old to analyze the repo's Go syntax.
@@ -162,26 +162,15 @@ agent: check-libvgpu
 
 AGENTBIN := internal/server/agentbin/dl
 
-## cross-agents: cross-compile agents into $(BIN)/dl and embed each in the server
-## zstd-compressed (so the single server binary serves them at /dl/ for curl|sh
-## install — no download host). The zstd CLI at -19 packs about 10% smaller
-## than the Go encoder (scripts/zstdpack), which is the fallback without it;
-## the server reads either.
+## cross-agents: embed the requested agents as a verified dictionary and delta frames.
 cross-agents: check-libvgpu
 	@mkdir -p $(AGENTBIN) $(BIN)/dl
-	@rm -f $(AGENTBIN)/gpuworks-agent-* $(AGENTBIN)/agent-manifest.json
 	@for p in $(PLATFORMS); do \
 		os=$${p%/*}; arch=$${p#*/}; name=gpuworks-agent-$$os-$$arch; \
-		echo "  embed agent $$os/$$arch"; \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" \
 			-o $(BIN)/dl/$$name ./cmd/gpuworks-agent || exit 1; \
-		if command -v zstd >/dev/null 2>&1; then \
-			zstd -19 -q -f -o $(AGENTBIN)/$$name.zst $(BIN)/dl/$$name || exit 1; \
-		else \
-			CGO_ENABLED=0 $(GO) run ./scripts/zstdpack -o $(AGENTBIN)/$$name.zst $(BIN)/dl/$$name || exit 1; \
-		fi; \
 	done
-	CGO_ENABLED=0 $(GO) run ./scripts/agentmanifest -version "$(VERSION)" -o $(AGENTBIN)/agent-manifest.json $(addprefix $(BIN)/dl/gpuworks-agent-,$(subst /,-,$(PLATFORMS)))
+	GO="$(GO)" VERSION="$(VERSION)" ./scripts/pack_agents.sh $(AGENTBIN) $(addprefix $(BIN)/dl/gpuworks-agent-,$(subst /,-,$(PLATFORMS)))
 
 .PHONY: cross
 ## cross: alias kept for the demo (the plain agents are in $(BIN)/dl)
@@ -548,6 +537,7 @@ check-api-conventions:
 check-ci-yaml:
 	./scripts/check_ci_yaml.sh
 	python3 -B -m unittest discover -s scripts -p test_check_ci_yaml.py
+	python3 -B -m unittest discover -s scripts -p test_go_test_shard.py
 
 .PHONY: check-artifacts
 ## check-artifacts: verify plan-doc frontmatter (status/dates/summary) across
@@ -667,9 +657,13 @@ fake-model:
 ## limit stays well inside the job's own 45m so a real hang still fails here.
 L2_TIMEOUT ?= 30m
 
-## L2_SHARD=<index>/<total> runs one round-robin share of the suite's
-## top-level tests (scripts/go_test_shard.sh); CI splits the suite this way.
+## L2_SHARD=<index>/<total> runs one share of the suite's top-level tests
+## (scripts/go_test_shard.sh); CI splits the suite this way. The share is
+## balanced by measured duration when test/l2/shard-weights.txt is present
+## (GPUWORKS_SHARD_WEIGHTS overrides the file), and round-robin by name
+## otherwise.
 L2_SHARD ?=
+L2_SHARD_WEIGHTS ?= $(if $(wildcard test/l2/shard-weights.txt),test/l2/shard-weights.txt)
 
 .PHONY: test-l2
 test-l2:
@@ -677,7 +671,7 @@ test-l2:
 	mkdir -p $(TEST_LOG_DIR); \
 	run_flag=""; \
 	if [ -n "$(L2_SHARD)" ]; then \
-		pattern="$$(GO="$(GO)" CGO_ENABLED=0 ./scripts/go_test_shard.sh "$(L2_SHARD)" -tags=multiproc ./test/l2/...)"; \
+		pattern="$$(GO="$(GO)" CGO_ENABLED=0 GPUWORKS_SHARD_WEIGHTS="$(L2_SHARD_WEIGHTS)" ./scripts/go_test_shard.sh "$(L2_SHARD)" -tags=multiproc ./test/l2/...)"; \
 		run_flag="-run=$$pattern"; \
 		echo "l2 shard $(L2_SHARD): $$pattern"; \
 	fi; \
@@ -854,7 +848,7 @@ prepare-compshare-golden-image:
 	CGO_ENABLED=0 $(GO) run ./test/l4/cmd/prepare-compshare-golden
 
 .PHONY: test-l4-compshare-offline-contracts
-test-l4-compshare-offline-contracts: server-linux-amd64-prebuilt-ui
+test-l4-compshare-offline-contracts:
 	GPUWORKS_TEST_STRICT=1 CGO_ENABLED=0 $(GO) test $(GO_TEST_FLAGS) -v -count=1 -tags=cloudgpu,compshare -run '^(TestCurrentCloudStartupAttempt|TestCloudStartupCommandDoesNotExposeProcessArguments|TestHosted.*|TestOneVMLogical.*|TestCompshareDockerInstall.*|TestCompshareGPUSelection.*|TestCompshareEngine.*)$$' -timeout=20m ./test/l4
 
 .PHONY: test-l4-compshare-single-vm-tp2-dgpu

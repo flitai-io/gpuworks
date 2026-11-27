@@ -22,7 +22,7 @@ const { default: AgentUpgradeManager } = await import("../src/components/agentUp
 const originals = {
   agentUpgradePreview: api.agentUpgradePreview, createAgentUpgrade: api.createAgentUpgrade,
   agentUpgradeRuns: api.agentUpgradeRuns, agentUpgradeRun: api.agentUpgradeRun, agentUpgradeItems: api.agentUpgradeItems,
-  stopAgentUpgrade: api.stopAgentUpgrade, continueAgentUpgradePreview: api.continueAgentUpgradePreview, releaseAgentUpgrade: api.releaseAgentUpgrade,
+  stopAgentUpgrade: api.stopAgentUpgrade, continueAgentUpgradePreview: api.continueAgentUpgradePreview,
 };
 const originalFetch = globalThis.fetch;
 afterEach(() => { cleanup(); Object.assign(api, originals); globalThis.fetch = originalFetch; Events.listeners.clear(); });
@@ -36,7 +36,7 @@ function preview(): AgentUpgradePreview {
   return { target_version: "dev-target", manifest_fingerprint: "sha256:sealed", node_uuids: nodes.map((node) => node.node_uuid), nodes, counts: { eligible: 25 } };
 }
 function backend(initial: AgentUpgradeRun[] = []) {
-  const state = { runs: initial, items: [item()], previews: [] as unknown[], created: [] as AgentUpgradeCreate[], stopped: 0, released: [] as string[] };
+  const state = { runs: initial, items: [item()], previews: [] as unknown[], created: [] as AgentUpgradeCreate[], stopped: 0 };
   api.agentUpgradeRuns = async () => ({ items: state.runs, total: state.runs.length, page: 1, page_size: 20, blocked_by_item: state.runs.find((r) => r.blocked_by_item)?.blocked_by_item });
   api.agentUpgradeRun = async (id) => { const value = state.runs.find((r) => r.id === id); if (!value) throw new Error("batch missing"); return value; };
   api.agentUpgradeItems = async (_id, page = 1, pageSize = 20, phase = "") => {
@@ -47,7 +47,6 @@ function backend(initial: AgentUpgradeRun[] = []) {
   api.createAgentUpgrade = async (body) => { state.created.push(body); const value = run(); state.runs = [value]; return value; };
   api.stopAgentUpgrade = async () => { state.stopped++; const value = run({ state: "stopping", stop_requested_at: "2026-10-29T00:00:00Z", counts: counts({ queued: 0, cancelled: 1, processed: 1 }) }); state.runs = [value]; return value; };
   api.continueAgentUpgradePreview = async () => preview();
-  api.releaseAgentUpgrade = async (_id, _uuid, note) => { state.released.push(note); state.runs = [run({ state: "finished", counts: counts({ total: 1, processed: 1, unconfirmed: 1, active: 0, queued: 0 }) })]; state.items = [item({ phase: "unconfirmed", verified_at: "2026-10-29T01:00:00Z", verification_note: note })]; };
   return state;
 }
 function mount(isAdmin = true, requestedRunID?: number, selectedNodeUUIDs = preview().node_uuids, onStarted?: () => void) {
@@ -111,7 +110,6 @@ test("persisted partial results survive remount and read-only users can inspect 
   const details = screen.getAllByRole("button", { name: k.details }); await user.click(details[0]);
   await screen.findByText("node outside current page");
   assert.ok(!screen.queryByRole("button", { name: k.stop }));
-  assert.ok(!screen.queryByRole("button", { name: k.release }));
   view.unmount(); mount(false);
   await user.click(screen.getByRole("button", { name: k.history }));
   assert.ok(await screen.findByText(k.processingNotSuccess));
@@ -129,24 +127,34 @@ test("stop cancels only queued nodes and preserves the active observation", asyn
   assert.ok(await screen.findByText(k.phase.waiting_registration));
 });
 
-test("unconfirmed release requires an inspection note and failed release retains the form", async () => {
-  const blocker = { run_id: 7, node_uuid: "node-a", name: "unconfirmed node", reason: "unconfirmed" };
-  const state = backend([run({ state: "finished", blocked_by_item: blocker, counts: counts({ total: 1, processed: 1, unconfirmed: 1, active: 0, queued: 0 }) })]);
-  state.items = [item({ phase: "unconfirmed" })];
-  const release = api.releaseAgentUpgrade; let calls = 0;
-  api.releaseAgentUpgrade = async (...args) => { calls++; if (calls === 1) throw new Error("node still busy"); return release(...args); };
+test("a node whose outcome is unknown asks nothing of the administrator, and the batch is shown going on", async () => {
+  const blocker = { run_id: 7, node_uuid: "node-a", name: "silent node", reason: "unconfirmed" };
+  const state = backend([run({ state: "running", blocked_by_item: blocker, counts: counts({ total: 3, processed: 1, unconfirmed: 1, active: 0, queued: 2 }) })]);
+  state.items = [item({ name: "silent node", phase: "unconfirmed", reason: "confirmation_timeout" }), item({ node_uuid: "next", name: "next node", phase: "queued" })];
+  mount(true, 7);
+  const row = (await screen.findByText("silent node")).closest("tr")!;
+  const drawer = screen.getByRole("dialog", { name: i18n.t("nodes:batchUpgrade.runTitle", { id: 7 }) });
+  // What happened and what the platform does next, in one line each; nothing to verify, note or release.
+  assert.ok(within(row).getByText(k.phase.unconfirmed));
+  assert.ok(within(row).getByText(k.reason.confirmation_timeout));
+  assert.ok(within(drawer).getByText(k.blocked.replace("{{name}}", "silent node")));
+  assert.equal(within(row).queryAllByRole("button").length, 0, "an unknown outcome offers the administrator no action");
+  assert.equal(within(drawer).queryAllByRole("textbox").length, 0);
+  assert.ok(within(drawer).getByText(k.runState.running), "one silent node does not pause its batch");
+  assert.ok(within(drawer).getByRole("button", { name: k.stop }), "stopping the rest stays one click away");
+});
+
+test("a batch paused after two unknown outcomes in a row says why and offers to continue with the unfinished nodes", async () => {
+  const state = backend([run({ state: "paused", pause_reason: "repeated_unknown_outcome", counts: counts({ total: 3, processed: 2, unconfirmed: 2, active: 0, queued: 1 }) })]);
+  state.items = [item({ name: "silent one", phase: "unconfirmed", reason: "confirmation_timeout" }), item({ node_uuid: "b", name: "silent two", phase: "unconfirmed", reason: "confirmation_timeout" }), item({ node_uuid: "c", name: "waiting", phase: "queued" })];
+  let continued = 0;
+  api.continueAgentUpgradePreview = async () => { continued++; return preview(); };
   const user = userEvent.setup(); mount(true, 7);
-  await user.click(await screen.findByRole("button", { name: k.release }));
-  const modal = screen.getAllByRole("dialog").at(-1)!;
-  await user.click(within(modal).getByRole("button", { name: k.release }));
-  assert.ok(await within(modal).findByText(k.noteRequired)); assert.equal(calls, 0);
-  const note = "Checked process and logs: previous operation ended";
-  await user.type(within(modal).getByRole("textbox", { name: k.releaseNote }), note);
-  await user.click(within(modal).getByRole("button", { name: k.release }));
-  await within(modal).findByText("node still busy");
-  assert.equal((within(modal).getByRole("textbox") as HTMLTextAreaElement).value, note);
-  await user.click(within(modal).getByRole("button", { name: k.release }));
-  await waitFor(() => assert.deepEqual(state.released, [note]));
+  await screen.findByText("silent one");
+  const drawer = screen.getByRole("dialog", { name: i18n.t("nodes:batchUpgrade.runTitle", { id: 7 }) });
+  assert.ok(within(drawer).getByText(k.pausedRepeatedUnknown), "the pause states its cause and the next step on the page");
+  await user.click(within(drawer).getByRole("button", { name: k.continue }));
+  await waitFor(() => assert.equal(continued, 1));
 });
 
 test("query and preview failures expose retry, and SSE refreshes the persisted results", async () => {
@@ -176,7 +184,6 @@ test("a paused run can preview an atomic handoff after all uncertain attempts ar
   await screen.findByText("node outside current page");
   const button = screen.getByRole("button", { name: k.continue }) as HTMLButtonElement;
   assert.equal(button.disabled, false, "the source run's own queued reservation must not deadlock handoff");
-  assert.ok(!screen.queryByText(k.unconfirmedHelp), "normal reservations are not unconfirmed results");
   await user.click(button);
   const modal = screen.getAllByRole("dialog").at(-1)!;
   await within(modal).findByText("fleet-0");
@@ -301,7 +308,6 @@ test("finished result rows distinguish full start and finish times and omit an u
   mount(true, 7);
   const name = await screen.findByText("completed node");
   const drawer = screen.getByRole("dialog", { name: i18n.t("nodes:batchUpgrade.runTitle", { id: 7 }) });
-  assert.ok(!within(drawer).queryByRole("columnheader", { name: k.columns.action }));
   const timeIndex = within(drawer).getAllByRole("columnheader").findIndex((cell) => cell.textContent === k.columns.time);
   assert.ok(timeIndex >= 0);
   const completed = within(name.closest("tr")!).getAllByRole("cell")[timeIndex];
@@ -313,36 +319,6 @@ test("finished result rows distinguish full start and finish times and omit an u
   assert.equal((skipped.textContent?.match(/—/g) ?? []).length, 2, "missing start and finish each have an explicit placeholder");
 });
 
-test("the result action column appears only for unresolved rows and disappears after verification", async () => {
-  const state = backend([run({ state: "finished", counts: counts({ total: 2, processed: 2, succeeded: 1, unconfirmed: 1, queued: 0, active: 0 }) })]);
-  state.items = [
-    item({ node_uuid: "uncertain", name: "needs inspection", phase: "unconfirmed" }),
-    item({ node_uuid: "done", name: "already confirmed", phase: "succeeded" }),
-  ];
-  mount(true, 7);
-  const name = await screen.findByText("needs inspection");
-  const drawer = screen.getByRole("dialog", { name: i18n.t("nodes:batchUpgrade.runTitle", { id: 7 }) });
-  assert.ok(within(drawer).getByRole("columnheader", { name: k.columns.action }));
-  assert.ok(within(name.closest("tr")!).getByRole("button", { name: k.release }));
-  const done = within(screen.getByText("already confirmed").closest("tr")!);
-  assert.ok(!done.queryByRole("button", { name: k.release }));
-  assert.equal(done.getAllByRole("cell").at(-1)?.textContent, "—");
-  state.items = state.items.map((entry) => entry.phase === "unconfirmed" ? { ...entry, verified_at: "2026-10-30T03:21:00Z", verification_note: "Inspected process and log; old operation ended" } : entry);
-  await act(async () => Events.emit("agent_upgrade"));
-  await waitFor(() => assert.ok(!within(drawer).queryByRole("columnheader", { name: k.columns.action })));
-  assert.ok(!within(drawer).queryByRole("button", { name: k.release }));
-});
-
-test("viewers do not receive an empty result action column even when a row needs admin verification", async () => {
-  const state = backend([run({ state: "finished", counts: counts({ total: 1, processed: 1, unconfirmed: 1, queued: 0, active: 0 }) })]);
-  state.items = [item({ phase: "unconfirmed" })];
-  mount(false, 7);
-  await screen.findByText("node outside current page");
-  const drawer = screen.getByRole("dialog", { name: i18n.t("nodes:batchUpgrade.runTitle", { id: 7 }) });
-  assert.ok(!within(drawer).queryByRole("columnheader", { name: k.columns.action }));
-  assert.ok(!within(drawer).queryByRole("button", { name: k.release }));
-});
-
 test("an attempt the system settled shows why in the reader's language, and only an operator's release shows a note", async () => {
   const state = backend([run({ state: "finished", counts: counts({ total: 3, processed: 3, unconfirmed: 3, active: 0, queued: 0 }) })]);
   state.items = [
@@ -352,10 +328,16 @@ test("an attempt the system settled shows why in the reader's language, and only
   ];
   mount(true, 7);
   await screen.findByText("removed node");
-  assert.ok(screen.getByText(/Verified by the system: the node was removed from the platform, so no upgrade can still be running\./));
-  assert.ok(screen.getByText("Later verification: process gone, logs clean"));
-  assert.ok(screen.getByText("Later verification: disk full while unpacking"), "an agent's failure detail stays visible");
-  assert.ok(!screen.queryByRole("button", { name: k.release }), "a settled attempt offers no release");
+  assert.ok(screen.getByText(/The node was removed from the platform, so no upgrade can still be running\./));
+  assert.ok(screen.getByText("Note: process gone, logs clean"));
+  assert.ok(screen.getByText("Note: disk full while unpacking"), "an agent's failure detail stays visible");
+  // Once settled a row says how it ended, not that its outcome is unknown, and no longer promises a later settlement.
+  const removed = screen.getByText("removed node").closest("tr")!;
+  assert.ok(within(removed).getByText(k.settled.node_removed));
+  assert.ok(within(screen.getByText("failed node").closest("tr")!).getByText(k.settled.agent_failed));
+  assert.ok(within(screen.getByText("checked node").closest("tr")!).getByText(k.settled.operator_verified));
+  assert.ok(!screen.queryByText(k.phase.unconfirmed));
+  assert.ok(!screen.queryByText(k.reason.confirmation_timeout));
 });
 
 test("a whole-fleet request previews every node, fixes the range to what came back, and is ignored for a non-admin", async () => {
@@ -382,7 +364,8 @@ test("a whole-fleet request while a batch blocks the fleet shows what blocks it 
   const blocker = { run_id: 7, node_uuid: "node-a", name: "stuck-node", reason: "unconfirmed" };
   const state = backend([run({ state: "finished", blocked_by_item: blocker as never })]);
   const view = render(<I18nextProvider i18n={i18n}><AgentUpgradeManager isAdmin selectedNodeUUIDs={[]} upgradeAllRequest={0} /></I18nextProvider>);
-  await waitFor(() => assert.ok(screen.getByRole("button", { name: k.history }).className.includes("dangerous")));
+  // A batch in progress, or a node whose outcome is not known yet, is not an alarm.
+  await waitFor(() => assert.ok(!screen.getByRole("button", { name: k.history }).className.includes("dangerous")));
   view.rerender(<I18nextProvider i18n={i18n}><AgentUpgradeManager isAdmin selectedNodeUUIDs={[]} upgradeAllRequest={1} /></I18nextProvider>);
   assert.ok(await screen.findByText(k.blocked.replace("{{name}}", "stuck-node")));
   assert.deepEqual(state.previews, []);

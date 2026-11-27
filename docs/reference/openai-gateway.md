@@ -13,7 +13,7 @@ server 的 `/v1/*` 默认要求 API key 鉴权，规则见下文[认证](#认证
 - 读不到设置时按关闭处理：设置读取失败不会放行不带 key 的请求，只按「要求 key」处理。
 - 吊销 key 不改变这个判定：吊销最后一个 key 不会重新打开网关，`/v1` 会拒绝所有请求，直到再创建一个 key，或管理员打开上面这个开关。
 
-这条规则覆盖全部 `/v1` 路由，包括 `/v1/models`、`/v1/files`、`/v1/batches`、`/v1/tokenize` 与 `/v1/detokenize`。401 的码按入口不同：网关路由返回 `INVALID_API_KEY`（`type` 为 `authentication_error`，见[错误](#错误)），Files 与 Batches 返回 OpenAI 格式的 `invalid_api_key`。
+这条规则覆盖全部 `/v1` 路由，包括 `/v1/models`、`/v1/key`、`/v1/files`、`/v1/batches`、`/v1/tokenize` 与 `/v1/detokenize`。401 的码按入口不同：网关路由返回 `INVALID_API_KEY`（`type` 为 `authentication_error`，见[错误](#错误)），Files 与 Batches 返回 OpenAI 格式的 `invalid_api_key`。
 
 `GET /v1/models` 列出网关此刻能路由的服务名（来自网关按事件更新的路由表，不读数据库）：只含活跃部署，每个服务名一次，按名字排序；带范围的 key 只看到它能调用的部署的服务名。刚创建或刚停止的部署在路由表重建后出现或消失：部署事件后最多约 0.5 秒，没有事件时也每 2 秒刷新一次。
 
@@ -75,9 +75,71 @@ server 的 `/v1/*` 默认要求 API key 鉴权，规则见下文[认证](#认证
 
 ## 请求优先级
 
-请求的优先级由网关决定：按 API 令牌绑定的优先级类，以及客户端用请求头 `X-GPUWorks-Priority-Class: <名称>` 在令牌允许范围内的指定；批处理请求使用任务创建时选的类，通过 `/v1/batches` 创建的任务固定为 `batch` 类。名称不存在时返回 400。响应头 `X-GPUWorks-Priority-Class` 给出请求实际使用的类。
+请求的优先级由网关决定：按 API 令牌绑定的优先级类，以及客户端用请求头 `X-GPUWorks-Priority-Class: <名称>` 在令牌允许范围内的指定；批处理请求使用任务创建时选的类，通过 `/v1/batches` 创建的任务固定为 `batch` 类。名称不存在时返回 400 `PRIORITY_CLASS_UNKNOWN`，令牌的三种策略（包括「固定」）都是如此；不带令牌的匿名访问不看这个请求头。响应头 `X-GPUWorks-Priority-Class` 给出请求实际使用的类。
 
 部署开启了请求优先级时，网关把类的数值按引擎方向写进请求体的 `priority`；否则把已有的 `priority` 改为 `0`。客户端自带的 `priority` 字段和 `X-Vllm-Priority` 请求头都不会到达引擎，无论模型写在请求体、`?model=` 还是 `X-GPUWorks-Model` 里，也无论请求体声明的 Content-Type；声明为 JSON 或文本的请求体须为 UTF-8 编码，否则返回 400。详见[请求优先级](../explanation/request-priority.md)。
+
+响应头 `X-GPUWorks-Priority-Scheduling` 说明引擎是否按这个类调度了请求：接收请求的实例是带着优先级调度启动的、请求走生成路径且网关写入了引擎的 `priority` 时为 `on`，其他情况（部署没有开启、实例启动时没带上、`/v1/tokenize` 等辅助接口、网关不改写的请求体如 multipart 上传）为 `off`。网关在选定实例时写这个头；连接失败后换副本重发只发往调度方式与第一次选定的实例相同的副本，所以这个值总是说明实际接收请求的实例。
+
+### 令牌信息
+
+`GET /v1/key` 返回调用它的 API 令牌的令牌信息，供放在 GPUWorks 前面的网关在转发之前判断该怎么带优先级请求头、繁忙声明对哪些模型起作用。鉴权、令牌范围与匿名访问的处理同 `/v1/models`；其他方法返回 405 `METHOD_NOT_ALLOWED` 并带 `Allow: GET`。它不是推理流量：不计入网关请求数，不留请求记录，从路由表与优先级类快照回答，不读部署表。
+
+```json
+{
+  "object": "key",
+  "features": ["priority_scheduling_header", "busy_reject"],
+  "priority": {
+    "own": {"name": "normal", "value": 0},
+    "ceiling": {"name": "critical", "value": 40},
+    "reachable": [
+      {"name": "critical", "value": 40},
+      {"name": "high", "value": 20},
+      {"name": "normal", "value": 0},
+      {"name": "low", "value": -20},
+      {"name": "batch", "value": -40}
+    ]
+  },
+  "models": [
+    {"id": "qwen3-8b", "priority_scheduling": "all", "busy_reject": true}
+  ]
+}
+```
+
+| 字段 | 含义 |
+|---|---|
+| `features` | 本 server 支持的网关能力，只增不减。`priority_scheduling_header`：响应带 `X-GPUWorks-Priority-Scheduling`；`busy_reject`：认 `X-GPUWorks-If-Busy`，见[繁忙婉拒](#繁忙婉拒) |
+| `priority` | 令牌的优先级绑定；不带令牌的匿名访问为 `null` |
+| `priority.own` | 不带 `X-GPUWorks-Priority-Class` 时请求使用的类 |
+| `priority.reachable` | 请求头能用到的全部类（含 `own`），按数值从高到低 |
+| `priority.ceiling` | 请求头指定了不在 `reachable` 里的类时实际使用的类。策略为「固定」或「只降不升」时等于 `own` |
+| `models` | 令牌有权调用的模型，与 `/v1/models` 的 `id` 相同，按名字排序 |
+| `models[].priority_scheduling` | 运行中的副本里按优先级调度的有多少：`all`、`some` 或 `none`（没有运行中的副本也是 `none`） |
+| `models[].busy_reject` | 带繁忙声明的请求在模型繁忙时会不会被婉拒：令牌能调用的该模型的部署都不是 PD 分离或多机部署，且每个运行中的副本的运行位已知（启动参数写明了并发序列上限、数据并行规模为 1）时为 `true`；没有运行中的副本时为 `false` |
+
+调用方解析一个类只用一条规则：在 `reachable` 里就按它，否则按 `ceiling`；网关的策略逻辑不必在调用方重写。字段只增不改，调用方应忽略不认识的字段。没有这个接口的旧版本 server 把它当作没写模型的模型请求，带有效令牌时返回 400 `MODEL_REQUIRED`：调用方把 404，以及 400 且 `error.code` 为 `MODEL_REQUIRED`，都当作「该版本不提供」，401、403 当作令牌无效或无权，其他失败当作暂时读不到。类与令牌绑定的改动生效时间同请求本身（见[请求优先级](../explanation/request-priority.md)）。
+
+### 繁忙婉拒
+
+有别处可以改投的调用方（例如放在 GPUWorks 前面的网关）可以在模型请求上带 `X-GPUWorks-If-Busy: reject`，声明「忙就别排队」：GPUWorks 判断当前接不了这个请求时，立即返回 429 `MODEL_BUSY` 并带 `Retry-After: 1`，调用方可以马上改投；判断接得了就照常转发。不带这个头，或取值不是 `reject`，行为与今天完全相同。这个头不会转给引擎。
+
+```json
+{"error": {"message": "every replica of qwen3-8b is busy and the request asked not to wait; send it again later, elsewhere, or without X-GPUWorks-If-Busy", "type": "invalid_request_error", "code": "MODEL_BUSY", "param": null, "params": {"model": "qwen3-8b"}}}
+```
+
+调用方只按状态码与 `error.code` 识别婉拒，不要匹配 `message`，也不要依赖下面的口径：口径会随版本变准，语义不变。
+
+当前的口径：网关在选副本并占位的同一时刻判断，两个并发请求不会同时拿到最后一个空位。副本的运行位是实例启动参数里明确写出的并发序列上限（vLLM `--max-num-seqs`、SGLang `--max-running-requests`）；副本上本请求要排在其后的在途请求数达到运行位，就算没有空位：按优先级调度的副本只数优先级不低于本请求的（引擎会先运行本请求，更低的不算），其他副本按到达顺序运行，所有在途请求都算。部署的路由策略（`least_request`、`prefix_affinity`、`failover`）首选的副本没有空位而别的可选副本有时，请求落到有空位的副本；所有可选副本都没有空位才婉拒。
+
+以下情况不婉拒，照常转发或按原有规则处理：
+
+- 有运行中的副本的启动参数没有写明并发序列上限（GPUWorks 不猜引擎的默认值），或写明了数据并行规模大于 1：这样的部署 `models[].busy_reject` 为 `false`，即使那个副本正在排空或所在节点离线、可选的只剩写明了上限的副本，也不婉拒；
+- PD 分离部署、多机部署；
+- 部署在休眠或唤醒中：照常等唤醒或返回 503 `MODEL_ASLEEP`；
+- 连接失败后换副本重发、被抢占后重放的那一次；
+- `/v1/tokenize` 等辅助接口与试验场的请求（声明被丢弃）。
+
+婉拒计入部署网关请求数的 429 一类，不留请求记录，不更新部署的最近请求时间。让部署参与婉拒的步骤见[上游网关接入](../explanation/request-priority.md#上游网关接入)，设计取舍见 [ADR 0083](../adr/0083-busy-rejection-for-upstream-gateways.md)。多个 server 时每个 server 只数自己转发的在途请求，结果是该婉拒时可能没婉拒，不会误拒。[令牌信息](#令牌信息)的 `features` 含 `busy_reject` 表示 server 认这个声明，`models[].busy_reject` 说明哪些模型会婉拒。
 
 ## Trace context
 
@@ -202,6 +264,7 @@ PD 分离将输入提示词计算和后续生成交给不同实例。vLLM 顺序
 | `INVALID_API_KEY` | 401 | `authentication_error` | — | 缺少 API key 或 key 无效 |
 | `MODEL_ACCESS_DENIED` | 403 | `permission_error` | `model` | 这个 API key 无权调用该模型（`params.model`） |
 | `MODEL_REQUIRED` | 400 | `invalid_request_error` | `model` | 请求没有指定 `model` |
+| `PRIORITY_CLASS_UNKNOWN` | 400 | `invalid_request_error` | — | 请求头 `params.header`（`X-GPUWorks-Priority-Class`）里的名称不是任何优先级类；令牌的每种策略都拒绝，不转发、不唤醒休眠的部署 |
 | `REQUEST_BODY_INVALID` | 400 | `invalid_request_error` | — | 请求体无法读取（如 multipart 缺 boundary、不是 JSON 对象），`params.detail` 说明原因 |
 | `REQUEST_TOO_LARGE` | 413 | `invalid_request_error` | — | 请求体超过上限（`params.max_bytes`） |
 | `METHOD_NOT_ALLOWED` | 405 | `invalid_request_error` | — | 该路由只接受 `params.method`（如 `GET /v1/tokenize`），响应带 `Allow` |
@@ -213,6 +276,7 @@ PD 分离将输入提示词计算和后续生成交给不同实例。vLLM 顺序
 | `ROUTE_NOT_FOUND` | 404 | `not_found_error` | — | 这个监听地址不提供 `/v1`（只开了控制台或 agent 功能） |
 | `INSTANCE_NOT_FOUND` | 404 | `not_found_error` | — | 固定的实例不存在 |
 | `INSTANCE_MODEL_MISMATCH` | 404 | `not_found_error` | `model` | 固定的实例不提供该模型 |
+| `MODEL_BUSY` | 429 | `invalid_request_error` | — | 请求带了 `X-GPUWorks-If-Busy: reject`，而模型 `params.model` 当前接不了；带 `Retry-After: 1`，改投别处或稍后重发，见[繁忙婉拒](#繁忙婉拒) |
 | `MODEL_ASLEEP` | 503 | `server_error` | — | 部署在睡眠；唤醒部署 `params.deployment_id`，或等定时唤醒、排队中的唤醒；可能带 `Retry-After` |
 | `INSTANCE_ASLEEP` | 503 | `server_error` | — | 固定的实例所属部署在睡眠 |
 | `INSTANCE_NOT_RUNNING` | 503 | `server_error` | — | 固定的实例没有在运行 |

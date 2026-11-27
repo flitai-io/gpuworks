@@ -177,6 +177,11 @@ type LaunchResolveError struct {
 }
 
 func (e *LaunchResolveError) Error() string {
+	if e.DeploymentID == 0 {
+		// A preview has no deployment yet; "deployment 0" reads as a
+		// deployment named 0 rather than as the draft the form holds.
+		return fmt.Sprintf("resolve launch: %v", e.Err)
+	}
 	return fmt.Sprintf("deployment %d resolve launch: %v", e.DeploymentID, e.Err)
 }
 
@@ -208,6 +213,9 @@ func PlanLaunch(ctx context.Context, st *store.Store, networks Networks, req Lau
 	input.ServingUnavailable = !networks.CanServe(*req.Node)
 	plan := LaunchPlan{Input: input, Output: input.Evaluate(st), Topology: req.Topology, Source: req.Source}
 	if plan.Output.PlacementError != nil && !req.Preview {
+		if req.Source.DeploymentID == 0 {
+			return plan, fmt.Errorf("placement: %w", plan.Output.PlacementError)
+		}
 		return plan, fmt.Errorf("deployment %d placement: %w", req.Source.DeploymentID, plan.Output.PlacementError)
 	}
 	if (!plan.Output.Result.OK || plan.Output.Result.Plan == nil) && !req.Preview {
@@ -250,11 +258,8 @@ func PlanLaunch(ctx context.Context, st *store.Store, networks Networks, req Lau
 	}
 	plan.Params, plan.Profile, plan.LaunchInput = allocated.Params, allocated.Profile, allocated.LaunchInput
 	plan.Resolved, plan.Warnings = allocated.Resolved, allocated.Warnings
-	if refusal := dgpuStartupMemoryRefusal(req, plan); refusal != nil {
-		plan.Output.Result = scheduler.Result{OK: false, Message: *refusal, Explain: scheduler.Explain{Filters: []scheduler.Reason{*refusal}}}
-		// Freeing the card cannot resolve this refusal.
-		plan.Output.Yield, plan.Output.Reserved, plan.Output.Held, plan.Output.Eviction = nil, nil, nil, nil
-		return plan, nil
+	if warning := dgpuStartupMemoryWarning(req, plan); warning != nil {
+		plan.Output.Warnings = append(plan.Output.Warnings, *warning)
 	}
 	plan.Resolved.StartupEstimate = launchStartupEstimate(req, plan.Resolved)
 	if refusal := agentCapabilityRefusal(req.AgentCaps, req.Node, plan.Resolved); refusal != nil {
@@ -346,7 +351,7 @@ func previewRequestedFeatures(req LaunchRequest) (*proto.RequestedFeatures, erro
 // for the preview and the controller by construction: both spend the catalog's
 // spec and runtime weights, its measured KV cost, and the node's cache fact.
 func launchInput(st *store.Store, req LaunchRequest) (Input, error) {
-	componentWeightBytes, componentArtifacts := componentSum(req.Selection.Components)
+	componentWeightBytes, componentArtifacts := componentSum(req.Selection.Components, req.Topology.NodeRank)
 	validator, err := TemplateGPUValidator(req.Selection)
 	if err != nil {
 		return Input{}, err
@@ -452,15 +457,20 @@ func launchGPU(node *store.Node, indexes []int) (store.GPU, error) {
 	return gpu, nil
 }
 
-func componentSum(components []deploy.ComponentBinding) (int64, []Artifact) {
+// componentSum is what rank's launch holds of the non-primary components: the
+// weights the whole group holds (a rank-scoped component's part counted once
+// per rank, as the primary's is, ADR 0076), and the artifact rank reads of
+// each, which disk admission counts at one rank's size.
+func componentSum(components []deploy.ComponentBinding, rank int) (int64, []Artifact) {
 	var weightBytes int64
 	var artifacts []Artifact
 	for _, component := range components {
 		if component.Role == "primary" || component.WeightBytes <= 0 {
 			continue
 		}
-		weightBytes += component.WeightBytes
-		artifacts = append(artifacts, Artifact{ModelID: component.StoreModelID, StorageBytes: component.WeightBytes})
+		weightBytes += component.GroupWeightBytes()
+		id, _ := component.RankModelID(rank)
+		artifacts = append(artifacts, Artifact{ModelID: id, StorageBytes: component.WeightBytes})
 	}
 	return weightBytes, artifacts
 }

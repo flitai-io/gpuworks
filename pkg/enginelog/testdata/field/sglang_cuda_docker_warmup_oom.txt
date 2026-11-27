@@ -1,0 +1,83 @@
+[2026-11-25 05:52:05 151] INFO Load weight begin. avail mem=23.24 GB
+[2026-11-25 05:52:05 151] INFO Multimodal attention backend not set. Use triton_attn.
+[2026-11-25 05:52:05 151] INFO Using triton_attn as multimodal attention backend.
+Multi-thread loading shards: 100% Completed | 2/2 [00:03<00:00,  1.55s/it]
+[2026-11-25 05:52:11 151] INFO Load weight end. elapsed=6.66 s, type=Qwen3VLForConditionalGeneration, avail mem=14.71 GB, mem usage=8.53 GB.
+[2026-11-25 05:52:12 151] INFO Reserving 0.10 GB of the KV budget for post-sizing multimodal allocations (feature-transport pools + embedding cache).
+[2026-11-25 05:52:12 151] INFO KV Cache is allocated. dtype: torch.bfloat16, #tokens: 85842, K size: 5.89 GB, V size: 5.89 GB
+[2026-11-25 05:52:12 151] INFO Memory pool end. avail mem=0.86 GB
+[2026-11-25 05:52:17 151] INFO Disable prefill CUDA graph because cuda_graph_config resolved prefill.backend='disabled' (e.g. via --cuda-graph-backend-prefill=disabled or auto-disable rules).
+[2026-11-25 05:52:17 151] INFO Capture target decode CUDA graph begin. backend=full, num_tokens_per_req=1, avail mem=0.35 GB
+Capturing batches (bs=1 avail_mem=0.16 GB): 100%|██████████| 10/10 [00:36<00:00,  3.69s/it]
+[2026-11-25 05:52:55 151] INFO Capture target decode CUDA graph end. bs=[1, 2, 4, 8, 12, 16, 24, 32, 40, 48], elapsed=37.88 s, mem usage=0.21 GB, avail mem=0.13 GB.
+[2026-11-25 05:52:55 151] WARNING KV pool holds 85842 tokens, fewer than --context-length 262144. One full-length request cannot fit, so long requests will be refused or truncated at serving time. Lower --context-length, raise --mem-fractio
+[2026-11-25 05:52:55 151] INFO max_total_num_tokens=85842, chunked_prefill_size=4096, max_prefill_tokens=16384, max_running_requests=2048, context_len=262144, available_gpu_mem=0.13 GB
+[2026-11-25 05:53:00 1] ERROR Error in request: CUDA error: out of memory
+Search for `cudaErrorMemoryAllocation' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+The CUDA driver logged these messages, which may provide useful details:
+Returning 2 (CUDA_ERROR_OUT_OF_MEMORY) from cuDevicePrimaryCtxRetain
+
+Traceback (most recent call last):
+  File "/sgl-workspace/sglang/python/sglang/srt/entrypoints/openai/serving_base.py", line 116, in handle_request
+    return await self._handle_non_streaming_request(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/entrypoints/openai/serving_chat.py", line 2815, in _handle_non_streaming_request
+    ret = await self.tokenizer_manager.generate_request(
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/managers/tokenizer_manager.py", line 946, in generate_request
+    tokenized_obj = await self._tokenize_one_request(obj)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/managers/tokenizer_manager.py", line 1202, in _tokenize_one_request
+    mm_inputs = await self.mm_processor.process_mm_data_async(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/multimodal/processors/qwen_vl.py", line 1202, in process_mm_data_async
+    artifacts = await prepare_artifacts(
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/multimodal/media_artifacts/base.py", line 466, in prepare_media_artifacts_without_cache
+    artifacts = await self._run_preprocess_and_build_artifact_batch(entries)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/multimodal/media_artifacts/base.py", line 222, in _run_preprocess_and_build_artifact_batch
+    return self.prepare_artifact_batch(entries)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/multimodal/processors/qwen_vl.py", line 804, in prepare_artifact_batch
+    result = processor.image_processor(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/utils/hf_transformers_patches.py", line 317, in safe_call
+    return original(self, images, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/transformers/image_processing_utils.py", line 217, in __call__
+    return self.preprocess(images, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/transformers/models/qwen2_vl/image_processing_qwen2_vl.py", line 149, in preprocess
+    return super().preprocess(images, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/transformers/image_processing_utils.py", line 408, in preprocess
+    return self._preprocess_image_like_inputs(images, *args, **image_like_kwargs, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/transformers/image_processing_utils.py", line 311, in _preprocess_image_like_inputs
+    images = self._prepare_image_like_inputs(images, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/transformers/image_processing_utils.py", line 293, in _prepare_image_like_inputs
+    processed_images = [process_image_partial(img) for img in images]
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/transformers/image_processing_backends.py", line 147, in process_image
+    image = image.to(device)
+            ^^^^^^^^^^^^^^^^
+torch.AcceleratorError: CUDA error: out of memory
+Search for `cudaErrorMemoryAllocation' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+The CUDA driver logged these messages, which may provide useful details:
+Returning 2 (CUDA_ERROR_OUT_OF_MEMORY) from cuDevicePrimaryCtxRetain
+
+
+/sgl-workspace/sglang/python/sglang/srt/entrypoints/openai/serving_base.py:138: FastAPIDeprecationWarning: ORJSONResponse is deprecated, FastAPI now serializes data directly to JSON bytes via Pydantic when a return type or response model is
+  return self.create_error_response(
+[2026-11-25 05:53:00] INFO:     127.0.0.1:58832 - "POST /v1/chat/completions HTTP/1.1" 500 Internal Server Error
+[2026-11-25 05:53:00 1] ERROR Initialization failed. warmup error: Traceback (most recent call last):
+  File "/sgl-workspace/sglang/python/sglang/srt/entrypoints/http_server.py", line 2501, in _execute_server_warmup
+    assert res.status_code == 200, f"{res.text}"
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {"object":"error","message":"Internal server error: CUDA error: out of memory\nSearch for `cudaErrorMemoryAllocation' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.\nThe CUDA
+
+[2026-11-25 05:53:00 1] INFO kill_process_tree called: parent_pid=1, include_parent=True, pid=1
+[2026-11-25 05:53:01 1] ERROR Subprocess detokenizer (pid=152) crashed with exit code -9. Triggering SIGQUIT for cleanup...
+[2026-11-25 05:53:01 1] ERROR SIGQUIT received. signum=None, frame=None. It usually means one child failed.

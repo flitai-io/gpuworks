@@ -191,7 +191,7 @@ agent 程序本身由 server 下发和升级，平时升级 server 不用再导�
 
 ### 更新镜像目录和推理模板
 
-想用比内嵌更新的系统镜像目录与推理模板目录时：在外网机上从任一发布源（如 `https://dl.gpuworks.ai`）下载 `<channel>/manifest.json`
+想用比内嵌更新的系统镜像目录与推理模板目录时：在外网机上从任一发布源（如 `https://dl.gpuworks.ai`）下载签名索引中 `image_catalog_v4.path` 对应的文件（旧版服务使用 `<channel>/manifest.json`）
 与 `<channel>/index.json` 里列出的 `catalog/templates/<sha256>.tar.gz`，在设置页「版本与更新」点「上传 manifest」「上传目录包」，
 规则见[镜像目录](../reference/image-families.md#更新目录)。离线环境里「检查更新」会因为发布源不可达返回 502 `UPDATE_SOURCES_UNAVAILABLE`，不改库。
 

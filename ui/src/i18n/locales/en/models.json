@@ -258,7 +258,8 @@
     "previewFailed": "Preview failed: {{detail}}",
     "registered": "Model registered",
     "failed": "Registration failed: {{detail}}",
-    "fetchingMetadata": "Reading model metadata from {{source}}; this can take several seconds."
+    "fetchingMetadata": "Reading model metadata from {{source}}; this can take several seconds.",
+    "force": "Register anyway"
   },
   "download": {
     "title": "Download to… · {{name}}",

@@ -3,10 +3,12 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/agent/modelscan"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
@@ -37,7 +39,12 @@ func checkModelPathsWith(spec proto.InstanceDesiredState, stat func(string) (os.
 		}
 	}
 	for _, path := range paths {
-		if err := statDirWithin(stat, path, modelPathCheckTimeout); err != nil {
+		err := statDirWithin(stat, path, modelPathCheckTimeout)
+		if errors.Is(err, fs.ErrNotExist) && modelscan.MissingDirectory(stat, path) {
+			return withFailure(proto.RuntimeFailure{Code: proto.ErrorModelPathMissing, Resource: path},
+				fmt.Errorf("%s: model path %s does not exist on this node", proto.ErrorModelPathMissing, path))
+		}
+		if err != nil {
 			return withFailure(proto.RuntimeFailure{Code: proto.ErrorModelPathUnavailable, Resource: path, Detail: err.Error()},
 				fmt.Errorf("%s: model path %s is unavailable: %v", ModelPathUnavailable, path, err))
 		}

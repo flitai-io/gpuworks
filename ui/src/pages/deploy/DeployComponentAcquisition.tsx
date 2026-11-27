@@ -18,7 +18,7 @@ export default function DeployComponentAcquisition({ acquisition }: { acquisitio
       <div className="deploy-workbench-label">{t("workbench.componentAcquisition.title")}</div>
       <ul className="deploy-workbench-body deploy-component-acquisition" aria-label={t("workbench.componentAcquisition.title")}>
         {components.map((component) => (
-          <li key={component.name}>
+          <li key={`${component.name}:${component.model}`}>
             <Alert status={status(component)}>
               <AlertTitle>
                 {t("workbench.componentAcquisition.heading", {

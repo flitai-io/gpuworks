@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -81,12 +82,20 @@ func TestDockerTerminalSessionsRemainIsolatedOnClose(t *testing.T) {
 	// cleanup before run so that partial creation follows the same owned path.
 	container := name
 	type owned struct {
+		label string
 		local *terminal.Session
 		close func(context.Context) error
 		pid   string
 		start string
+		// Written by the session's drain goroutine, read only by the failure
+		// report after it has stopped or under outputMu.
+		outputMu sync.Mutex
+		output   []byte
+		exited   string
 	}
 	var sessions []*owned
+	begun := time.Now()
+	since := func() string { return time.Since(begun).Round(time.Millisecond).String() }
 	t.Cleanup(func() {
 		for _, session := range sessions {
 			if session.local != nil {
@@ -113,18 +122,61 @@ func TestDockerTerminalSessionsRemainIsolatedOnClose(t *testing.T) {
 		t.Fatalf("owned container run: %v: %s", err, output)
 	}
 	container = strings.TrimSpace(string(output))
+	// Registered after the reclaim above, so it runs first, while the
+	// container and the sessions are still there to look at.
+	t.Cleanup(func() {
+		if t.Failed() {
+			reportTerminalIsolationFailure(t, docker, container, begun, since)
+			for _, session := range sessions {
+				session.outputMu.Lock()
+				tail := session.output
+				if len(tail) > 2048 {
+					tail = tail[len(tail)-2048:]
+				}
+				t.Logf("diagnostics: session %s shell pid=%s local client %s; output tail %q", session.label, session.pid, session.exited, tail)
+				session.outputMu.Unlock()
+			}
+		}
+	})
 	start := func(label string) *owned {
 		t.Helper()
 		argv, closeSession, err := New().ExecPTYSession(context.Background(), container, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		session := &owned{close: closeSession}
+		session := &owned{label: label, close: closeSession, exited: "running"}
 		sessions = append(sessions, session)
 		session.local, err = terminal.Open(terminal.Spec{Argv: argv, Dir: "/", Rows: 24, Cols: 80, Grace: time.Second})
 		if err != nil {
 			t.Fatal(err)
 		}
+		// Keep the client's output (it says why a docker exec gave up) and when
+		// and how it exited. Its status mirrors the remote shell's unless the
+		// client itself was killed; the daemon's exec_die events in the failure
+		// report tell those two apart.
+		local := session.local
+		go func() {
+			buf := make([]byte, 4096)
+			for {
+				n, readErr := local.Read(buf)
+				session.outputMu.Lock()
+				session.output = append(session.output, buf[:n]...)
+				if len(session.output) > 16384 {
+					session.output = session.output[len(session.output)-16384:]
+				}
+				session.outputMu.Unlock()
+				if readErr != nil {
+					break
+				}
+			}
+		}()
+		go func() {
+			code := local.ExitCode()
+			session.outputMu.Lock()
+			session.exited = fmt.Sprintf("exited %d at %s", code, since())
+			session.outputMu.Unlock()
+		}()
+		t.Logf("%s: %s session opened", since(), label)
 		path := "/tmp/" + name + "-" + label + ".pid"
 		if _, err = session.local.Write([]byte("printf '%s' \"$$\" > " + path + "\n")); err != nil {
 			t.Fatal(err)
@@ -167,6 +219,7 @@ func TestDockerTerminalSessionsRemainIsolatedOnClose(t *testing.T) {
 	}
 	closeOwned := func(session *owned) {
 		t.Helper()
+		t.Logf("%s: closing %s session", since(), session.label)
 		ctx, cancel := context.WithTimeout(context.Background(), terminalStepTimeout)
 		defer cancel()
 		if err := session.close(ctx); err != nil {
@@ -211,4 +264,48 @@ func TestDockerTerminalSessionsRemainIsolatedOnClose(t *testing.T) {
 		t.Fatalf("terminal private registration leaked: %v: %s", err, output)
 	}
 	t.Log("both real terminal identities gone, unrelated session survived first close, private registrations absent")
+}
+
+// reportTerminalIsolationFailure logs what a failed isolation run needs to say
+// who ended a shell: the container's process table (pid, ppid, pgid, sid,
+// state, command), the daemon's exec events for the container with exit codes,
+// and the docker exec clients alive on this side.
+func reportTerminalIsolationFailure(t *testing.T, docker func(...string) ([]byte, error), container string, begun time.Time, since func() string) {
+	t.Helper()
+	t.Logf("diagnostics at %s", since())
+	output, err := docker("exec", container, "/bin/sh", "-c",
+		`for d in /proc/[0-9]*; do s=$(cat "$d/stat" 2>/dev/null) || continue; set -- ${s##*) }; `+
+			`printf '%s ppid=%s pgid=%s sid=%s state=%s %s\n' "${d#/proc/}" "$2" "$3" "$4" "$1" "$(tr '\0' ' ' < "$d/cmdline")"; done`)
+	t.Logf("diagnostics: container processes (err=%v):\n%s", err, output)
+	output, err = docker("events", "--since", begun.Add(-time.Second).Format(time.RFC3339Nano), "--until", time.Now().Format(time.RFC3339Nano),
+		"--filter", "container="+container, "--format", `{{.TimeNano}} {{json .Action}} {{index .Actor.Attributes "execID"}} {{index .Actor.Attributes "exitCode"}}`)
+	// An exec action carries its whole script; its first line is enough.
+	var events []string
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if at, action, ok := strings.Cut(line, ` "`); ok {
+			if end := strings.LastIndex(action, `" `); end >= 0 {
+				name, rest := action[:end], action[end+2:]
+				if len(name) > 60 {
+					name = name[:60] + "..."
+				}
+				line = at + " " + name + " " + rest
+			}
+		}
+		events = append(events, line)
+	}
+	t.Logf("diagnostics: daemon events (err=%v):\n%s", err, strings.Join(events, "\n"))
+	var clients []string
+	entries, _ := os.ReadDir("/proc")
+	for _, entry := range entries {
+		if _, convErr := strconv.Atoi(entry.Name()); convErr != nil {
+			continue
+		}
+		raw, readErr := os.ReadFile("/proc/" + entry.Name() + "/cmdline")
+		if readErr != nil || !strings.Contains(string(raw), container) {
+			continue
+		}
+		stat, _ := os.ReadFile("/proc/" + entry.Name() + "/stat")
+		clients = append(clients, fmt.Sprintf("%s %s | %s", entry.Name(), strings.TrimSpace(string(stat)), strings.ReplaceAll(string(raw), "\x00", " ")))
+	}
+	t.Logf("diagnostics: local processes naming the container:\n%s", strings.Join(clients, "\n"))
 }

@@ -80,13 +80,7 @@ type ClusterUpgradeResponse struct {
 	// member cannot read its record or its program does not say.
 	RecordedStorageTier string `json:"recorded_storage_tier,omitempty"`
 	Refused             string `json:"refused,omitempty"`
-	// RefusedCode is the stable code of a refusal a caller acts on, beside
-	// its text in Refused; absent from a refusal that is only reported. It
-	// is for a caller to tell this refusal apart; the enterprise upgrade
-	// command is to restart a member that answers "single_member"
-	// (GWKS-487).
-	RefusedCode string `json:"refused_code,omitempty"`
-	Error       string `json:"error,omitempty"`
+	Error               string `json:"error,omitempty"`
 }
 
 // ValidClusterUpgradeAction reports a step this protocol knows.

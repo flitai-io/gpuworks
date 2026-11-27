@@ -119,6 +119,9 @@ func TestAModuleReachesEveryHostMethod(t *testing.T) {
 	if err := first.host.HoldScheduling(&fakeHolder{}); !errors.Is(err, app.ErrHostClosed) {
 		t.Fatalf("HoldScheduling after Init = %v", err)
 	}
+	if err := first.host.HoldCardScheduling(&fakeCardHolder{}); !errors.Is(err, app.ErrHostClosed) {
+		t.Fatalf("HoldCardScheduling after Init = %v", err)
+	}
 
 	// A module's Service runs while the server runs, stops with it, and runs
 	// again when the same server is run again.

@@ -43,6 +43,13 @@ func failedReport(t *testing.T, statuses []proto.InstanceStatus) proto.InstanceS
 // English fallback.
 func TestLaunchFailuresBeforeTheContainerCarryTheirCode(t *testing.T) {
 	missingModel := filepath.Join(t.TempDir(), "absent")
+	// The same absence beside a directory that still holds something is the
+	// node's finding that the files are gone.
+	storageRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(storageRoot, "another-model"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	goneModel := filepath.Join(storageRoot, "absent")
 	for name, tc := range map[string]struct {
 		driver  runtime.Driver
 		spec    proto.InstanceDesiredState
@@ -63,6 +70,17 @@ func TestLaunchFailuresBeforeTheContainerCarryTheirCode(t *testing.T) {
 				}
 			},
 			message: ModelPathUnavailable + ": model path " + missingModel,
+		},
+		"model path gone": {
+			driver: &imageToleranceDriver{exists: []bool{true}},
+			spec:   proto.InstanceDesiredState{Image: "repo:v1", ModelPath: goneModel},
+			code:   proto.ErrorModelPathMissing, phase: proto.PhaseContainerPrepare,
+			check: func(t *testing.T, f proto.RuntimeFailure) {
+				if f.Resource != goneModel || f.Detail != "" {
+					t.Fatalf("model path reason = %+v", f)
+				}
+			},
+			message: proto.ErrorModelPathMissing + ": model path " + goneModel,
 		},
 		"image pull": {
 			driver: &imageToleranceDriver{present: map[string]bool{}, pullErr: errTest("registry down")},

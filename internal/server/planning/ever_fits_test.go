@@ -57,7 +57,7 @@ func TestEverFitsPlansOneNodePerHardwareShape(t *testing.T) {
 			Source: LaunchSourceFromDeployment(&store.Deployment{Image: "registry.example/vllm:v1"}), ServedName: "ever-fits",
 		}, deploy.CatalogSelection{}, nil
 	}
-	never, err := EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, reqs, build)
+	_, never, err := EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, reqs, build)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,11 +71,11 @@ func TestEverFitsPlansOneNodePerHardwareShape(t *testing.T) {
 	}
 	add("big-inside", "NVIDIA H100", 80<<30, `{"pool":"p"}`)
 	built = 0
-	if never, err := EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, reqs, build); err != nil || never != nil || built != 3 {
+	if _, never, err := EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, reqs, build); err != nil || never != nil || built != 3 {
 		t.Fatalf("with a big node in the pool: never = %+v err = %v built %d", never, err, built)
 	}
 
-	never, err = EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, nodelabel.Requirements{"pool": {"nowhere"}}, build)
+	_, never, err = EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, nodelabel.Requirements{"pool": {"nowhere"}}, build)
 	if err != nil || never == nil || never.Pool != 0 || never.Shapes != 0 || never.Node != "" {
 		t.Fatalf("an empty pool: never = %+v err = %v", never, err)
 	}
@@ -101,7 +101,7 @@ func TestEverFitsSkipsUnsupportedAMDRuntimeAndTriesDocker(t *testing.T) {
 		builds++
 		return LaunchRequest{Engine: "vllm", Model: model, Node: node, Placement: Placement{GPUIndexes: []int{1}, TP: 1}, Topology: DistTopology{NNodes: 1}, Source: LaunchSourceFromDeployment(&store.Deployment{Image: "registry.example/amd:v1"}), ServedName: "amd"}, deploy.CatalogSelection{}, nil
 	}
-	never, err := EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, nil, build)
+	_, never, err := EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, nil, build)
 	if err != nil || never != nil || builds != 2 {
 		t.Fatalf("docker should be tried after the host-process node: never=%+v err=%v builds=%d", never, err, builds)
 	}
@@ -113,7 +113,7 @@ func TestEverFitsSkipsUnsupportedAMDRuntimeAndTriesDocker(t *testing.T) {
 		req.Placement.PP = 2
 		return req, layer, err
 	}
-	if never, err := EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, nil, badConfig); err == nil || never != nil {
+	if _, never, err := EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, nil, badConfig); err == nil || never != nil {
 		t.Fatalf("invalid parallelism must propagate after skipping the host-process node: never=%+v err=%v", never, err)
 	}
 }
@@ -138,12 +138,12 @@ func TestEverFitsRequiresEveryDataParallelReplicaCard(t *testing.T) {
 		return LaunchRequest{Engine: "vllm", Model: model, Node: node, Placement: Placement{TP: 1}, Quick: deploy.LaunchConfig{DP: 2}, Topology: DistTopology{NNodes: 1, Role: "standalone"}, Source: LaunchSourceFromDeployment(&store.Deployment{Image: "registry.example/vllm:v1"}), ServedName: "ever-fits-dp"}, deploy.CatalogSelection{}, nil
 	}
 	nodes := []*store.Node{node}
-	never, err := EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, nil, build)
+	_, never, err := EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, nil, build)
 	if err != nil || never == nil || never.Reason.Code != "insufficient_empty_gpus" {
 		t.Fatalf("one card: never=%+v err=%v", never, err)
 	}
 	node.GPUs = append(node.GPUs, store.GPU{Index: 1, Name: "NVIDIA GPU", MemoryTotal: 16 << 30, Vendor: "nvidia", ArchID: "sm_80", ComputeCapability: "8.0"})
-	never, err = EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, nil, build)
+	_, never, err = EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, nil, build)
 	if err != nil || never != nil {
 		t.Fatalf("two cards: never=%+v err=%v", never, err)
 	}
@@ -184,18 +184,18 @@ func TestEverFitsUnresolvableShapeDoesNotVetoThePool(t *testing.T) {
 			ServedName: "ever-fits-unresolvable"}, deploy.CatalogSelection{}, nil
 	}
 	for _, order := range [][]*store.Node{{small, large}, {large, small}} {
-		if never, err := EverFits(context.Background(), st, storeNetworks(st), order, NodeFacts{}, nil, build); err != nil || never != nil {
+		if _, never, err := EverFits(context.Background(), st, storeNetworks(st), order, NodeFacts{}, nil, build); err != nil || never != nil {
 			t.Fatalf("order %s, %s: never=%+v err=%v; want the four-card node to fit", order[0].DisplayName(), order[1].DisplayName(), never, err)
 		}
 	}
-	never, err := EverFits(context.Background(), st, storeNetworks(st), []*store.Node{small}, NodeFacts{}, nil, build)
+	_, never, err := EverFits(context.Background(), st, storeNetworks(st), []*store.Node{small}, NodeFacts{}, nil, build)
 	var unresolved *LaunchResolveError
 	if never != nil || !errors.As(err, &unresolved) {
 		t.Fatalf("only the two-card node: never=%+v err=%v; want its resolve error", never, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := EverFits(ctx, st, storeNetworks(st), []*store.Node{small, large}, NodeFacts{}, nil, build); !errors.Is(err, context.Canceled) {
+	if _, _, err := EverFits(ctx, st, storeNetworks(st), []*store.Node{small, large}, NodeFacts{}, nil, build); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled context: err=%v", err)
 	}
 }
@@ -239,11 +239,11 @@ func TestEverFitsTellsDGPUReadyNodesApart(t *testing.T) {
 			ServedName: "ever-fits-dgpu"}, deploy.CatalogSelection{}, nil
 	}
 	for _, order := range [][]*store.Node{{plain, ready}, {ready, plain}} {
-		if never, err := EverFits(context.Background(), st, storeNetworks(st), order, NodeFacts{}, nil, build); err != nil || never != nil {
+		if _, never, err := EverFits(context.Background(), st, storeNetworks(st), order, NodeFacts{}, nil, build); err != nil || never != nil {
 			t.Fatalf("order %s, %s: never=%+v err=%v; want the dGPU-ready node to fit", order[0].DisplayName(), order[1].DisplayName(), never, err)
 		}
 	}
-	if never, err := EverFits(context.Background(), st, storeNetworks(st), []*store.Node{plain}, NodeFacts{}, nil, build); err != nil || never == nil {
+	if _, never, err := EverFits(context.Background(), st, storeNetworks(st), []*store.Node{plain}, NodeFacts{}, nil, build); err != nil || never == nil {
 		t.Fatalf("only the plain node: never=%+v err=%v; want a refusal", never, err)
 	}
 }

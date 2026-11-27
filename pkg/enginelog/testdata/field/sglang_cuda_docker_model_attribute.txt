@@ -1,0 +1,67 @@
+/sgl-workspace/sglang/python/sglang/launch_server.py:71: UserWarning: 'python -m sglang.launch_server' is still supported, but 'sglang serve' is the recommended entrypoint.
+  Example: sglang serve --model-path <model> [options]
+  warnings.warn(
+[2026-11-24 18:01:42] Breakable CUDA graph is incompatible with multimodal model; disabling prefill CUDA graph.
+[2026-11-24 18:01:55] Attention backend not specified. Use fa3 backend by default.
+[2026-11-24 18:02:06 1] WARNING Processor tokenizer for /model is TokenizersBackend, reloading via get_tokenizer
+[2026-11-24 18:02:12 148] INFO Init parallel begin.
+[2026-11-24 18:02:14 1] INFO Using default HuggingFace chat template with detected content format: openai
+[2026-11-24 18:02:14 1] INFO Auto-detected template features: reasoning_config=ReasoningToggleConfig(toggle_param='enable_thinking', default_enabled=True, special_case=None, effort_kwarg=None), reasoning_parser=qwen3, tool_call_parser=qwen3
+[2026-11-24 18:02:16 148] INFO Init parallel ends. elapsed=3.41 s
+[2026-11-24 18:02:18 148] WARNING Processor tokenizer for /model is TokenizersBackend, reloading via get_tokenizer
+[2026-11-24 18:02:27 148] INFO Memory baseline taken. mem usage=0.00 GB
+[2026-11-24 18:02:27 148] INFO Load weight begin. avail mem=139.36 GB
+[2026-11-24 18:02:27 148] WARNING using attn output gate!
+[2026-11-24 18:02:27 148] INFO Multimodal attention backend not set. Use fa3.
+[2026-11-24 18:02:27 148] INFO Using fa3 as multimodal attention backend.
+Multi-thread loading shards: 100% Completed | 1/1 [00:00<00:00, 91.35it/s]
+[2026-11-24 18:02:49 148] INFO Load weight end. elapsed=21.95 s, type=MiniCPMV4_6, avail mem=135.92 GB, mem usage=3.43 GB.
+[2026-11-24 18:02:51 148] WARNING Processor tokenizer for /model is TokenizersBackend, reloading via get_tokenizer
+[2026-11-24 18:02:59 148] INFO Reserving 0.10 GB of the KV budget for post-sizing multimodal allocations (feature-transport pools + embedding cache).
+[2026-11-24 18:02:59 148] WARNING max_running_requests is capped to 623 by the mamba state cache (max_mamba_cache_size=3119, 5 state slots per request). To raise it: increase --mamba-full-memory-ratio or --max-mamba-cache-size, or halve the
+[2026-11-24 18:02:59 148] INFO Mamba Cache is allocated. max_mamba_cache_size: 3119, conv_state size: 1.93GB, ssm_state size: 54.84GB 
+[2026-11-24 18:03:01 148] INFO Warmed fused Mamba slot copy kernel in 1765.919 ms
+[2026-11-24 18:03:18 148] INFO KV Cache is allocated. dtype: torch.bfloat16, #tokens: 5512149, K size: 31.54 GB, V size: 31.54 GB
+[2026-11-24 18:03:18 148] INFO Memory pool end. avail mem=16.17 GB
+[2026-11-24 18:03:19 148] INFO FlashInfer GDN kernels loaded successfully
+[2026-11-24 18:03:19 148] INFO Defaulting SM90 GDN prefill backend to FlashInfer.
+[2026-11-24 18:03:19 148] INFO Linear attention kernel backend: decode=triton, prefill=flashinfer, verify=triton
+[2026-11-24 18:03:19 148] INFO Using hybrid linear attention backend for hybrid GDN models.
+[2026-11-24 18:03:19 148] INFO Using FlashInfer GDN kernels
+[2026-11-24 18:03:19 148] INFO GDN kernel dispatcher: decode=TritonGDNKernel, extend=FlashInferGDNKernel, verify=TritonGDNKernel packed_decode=True
+[2026-11-24 18:03:19 148] ERROR Scheduler hit an exception: Traceback (most recent call last):
+  File "/sgl-workspace/sglang/python/sglang/srt/managers/scheduler.py", line 6362, in run_scheduler_process
+    scheduler = Scheduler(server_args, port_args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/managers/scheduler.py", line 568, in __init__
+    self.init_model_worker()
+  File "/sgl-workspace/sglang/python/sglang/srt/managers/scheduler.py", line 1146, in init_model_worker
+    self.init_all_cuda_graphs()
+  File "/opt/sglang/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/managers/scheduler.py", line 1124, in init_all_cuda_graphs
+    self.tp_worker.init_cuda_graphs()
+  File "/sgl-workspace/sglang/python/sglang/srt/managers/tp_worker.py", line 435, in init_cuda_graphs
+    self.model_runner.init_cuda_graphs(
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/model_runner.py", line 1192, in init_cuda_graphs
+    capture = capture_cuda_graphs(
+              ^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/model_runner_components/cuda_graph_setup.py", line 416, in capture_cuda_graphs
+    eager_runner = EagerRunner(model_runner, run_warmup=not defer_distributed_setup)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner/eager_runner.py", line 153, in __init__
+    self.warmup()
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner/base_runner.py", line 254, in warmup
+    with self.model_context():
+         ^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/sglang/python/sglang/srt/model_executor/runner/base_runner.py", line 250, in model_context
+    shared_experts=self.model_runner.model.shared_experts_config
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/sglang/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1972, in __getattr__
+    raise AttributeError(
+AttributeError: 'MiniCPMV4_6' object has no attribute 'shared_experts_config'
+
+[2026-11-24 18:03:19 1] ERROR Received sigquit from a child process. It usually means the child failed.
+[2026-11-24 18:03:19 1] INFO kill_process_tree called: parent_pid=1, include_parent=True, pid=1
+[2026-11-24 18:03:19 1] INFO kill_process_tree called: parent_pid=1, include_parent=False, pid=1

@@ -102,7 +102,7 @@ For other connection issues, see [Connect Nodes](../how-to/connect-nodes.md#maca
 
 ![Select the Apple silicon · MXFP4 spec under vLLM and check the mxfp4 weights and Metal environment package](../assets/screenshots/en/tutorial-mac-template.png)
 
-3. Select **ModelScope** as the model source, confirm that the repository is `mlx-community/gpt-oss-20b-MXFP4-Q8`, and click **Register model and deploy** to open the deployment configuration.
+3. Select **ModelScope** as the model source and confirm that the repository is `mlx-community/gpt-oss-20b-MXFP4-Q8`. Once it is selected, the management node tests the source, and **Register model and deploy** becomes available when the source serves the model; click it to open the deployment configuration. If the test does not pass, choose another source as the message suggests, or check the repository and the management node's outbound access and click **Test again**.
 
 Weight size does not represent total runtime memory use. You also need room for the context cache, engine, and system. In the next step, review the configuration evaluation before submitting the deployment.
 
@@ -158,7 +158,7 @@ Stopping the deployment retains its configuration, model files, and environment 
 <!-- translation-source-sha256: 33fa14864f768d551ccba565972031cf0be6251ad69919d3e3e39d98762ada61 ## 1. Download the Release Package and Install the Console -->
 <!-- translation-source-sha256: 6db3d37e2dc621578c796ee27387d0a410cdf7b6f69ba8b3506f71f765f1afb0 ## 2. Connect This Mac to the Console -->
 <!-- translation-source-sha256: cf66fe11339f206eb622f310eb77fded0dfafb564838123103da23b9739352c3 ### If a LaunchAgents Directory Permission Error Occurs -->
-<!-- translation-source-sha256: d72ca3f2edf7488c311b2b64cb104de5adca96c46e65d33cb052e34b0084351f ## 3. Choose a Model From an Inference Template -->
+<!-- translation-source-sha256: 74ce814d6d6125511e67f28fe6de4dbe4e90314ca555c9f38167f42f5b70a679 ## 3. Choose a Model From an Inference Template -->
 <!-- translation-source-sha256: 0d9f0baccc30eb261eec236b2e80710427ec8bec8ed05c97a3b470e584bb7ec1 ## 4. Deploy to the Local Mac -->
 <!-- translation-source-sha256: a7e901d290a2d19b39b10d2dee54aea270431252f5413cc8c9b3a5108a063b04 ## 5. Complete a Local Chat in the Playground -->
 <!-- translation-source-sha256: 3066b27d9f8f40d10b809a9306c29f14b6fb0bb951204b79f58ae8f57d22e497 ## Optional: Stop the Model When You Finish -->

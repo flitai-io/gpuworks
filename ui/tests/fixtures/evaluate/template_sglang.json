@@ -355,12 +355,30 @@
         {
           "image": "gpuworks/gpuworks-runner:cuda13.0-sglang0.5.21-r2",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "sglang",
+          "engine_version": "0.5.21"
+        },
+        {
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-sglang0.5.9-r1",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "sglang",
+          "engine_version": "0.5.9"
         },
         {
           "image": "gpuworks/gpuworks-runner:cuda12.9-sglang0.5.18-r2",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "sglang",
+          "engine_version": "0.5.18"
+        },
+        {
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.19-r1",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "sglang",
+          "engine_version": "0.5.19"
         }
       ]
     },

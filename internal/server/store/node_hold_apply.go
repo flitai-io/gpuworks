@@ -21,6 +21,11 @@ var holdColumns = append(append([]string(nil), holdFactColumns...),
 // node is published as a scheduling change. It returns the nodes it held
 // and those it released. A holder that knows which nodes its answers
 // changed for uses ApplySchedulingHoldsFor instead.
+//
+// The same pass asks the card holders about every card of those nodes
+// (card_hold.go) and writes each card whose answer changed; a node with
+// such a card is published as a scheduling change too, but is not counted
+// in held or released, which are about nodes.
 func (s *Store) ApplySchedulingHolds() (held, released []string, err error) {
 	return s.applySchedulingHolds(nil)
 }
@@ -39,8 +44,13 @@ func (s *Store) ApplySchedulingHoldsFor(ids []uint) (held, released []string, er
 // applySchedulingHolds is a pass over the nodes in ids, or every node when
 // ids is nil.
 func (s *Store) applySchedulingHolds(ids []uint) (held, released []string, err error) {
+	var cardsChanged []string
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		held, released = nil, nil
+		var err error
+		if cardsChanged, err = s.applyCardHoldsTx(tx, ids); err != nil {
+			return err
+		}
 		var nodes []Node
 		q := tx.Select(holdColumns)
 		if ids != nil {
@@ -71,8 +81,29 @@ func (s *Store) applySchedulingHolds(ids []uint) (held, released []string, err e
 	if err != nil {
 		return nil, nil, err
 	}
-	s.publishSchedulingChanges(held, released)
+	s.publishSchedulingChanges(held, released, cardsOnly(cardsChanged, held, released))
 	return held, released, nil
+}
+
+// cardsOnly is the nodes in cards that are in neither held nor released,
+// so a node is published once.
+func cardsOnly(cards []string, held, released []string) []string {
+	var out []string
+	for _, uuid := range cards {
+		if !stringIn(uuid, held) && !stringIn(uuid, released) {
+			out = append(out, uuid)
+		}
+	}
+	return out
+}
+
+func stringIn(v string, list []string) bool {
+	for _, s := range list {
+		if s == v {
+			return true
+		}
+	}
+	return false
 }
 
 // ReleaseUnownedHolds releases every node cordoned under a holder source
@@ -82,9 +113,17 @@ func (s *Store) applySchedulingHolds(ids []uint) (held, released []string, err e
 // removed) calls it at boot, so its cordons do not outlive it. known names
 // sources whose holder is expected but not registered yet. It returns the
 // released nodes.
+//
+// Cards marked by such a source are released the same way; a node with
+// such a card is published as a scheduling change, not counted in released.
 func (s *Store) ReleaseUnownedHolds(known ...SchedulingSource) (released []string, err error) {
+	var cardsReleased []string
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		released = nil
+		var err error
+		if cardsReleased, err = s.releaseUnownedCardHoldsTx(tx, known); err != nil {
+			return err
+		}
 		var nodes []Node
 		if err := tx.Select(holdColumns).
 			Where("scheduling = ? AND scheduling_by NOT IN ?", NodeCordoned,
@@ -110,7 +149,7 @@ func (s *Store) ReleaseUnownedHolds(known ...SchedulingSource) (released []strin
 	if err != nil {
 		return nil, err
 	}
-	s.publishSchedulingChanges(nil, released)
+	s.publishSchedulingChanges(released, cardsOnly(cardsReleased, nil, released))
 	return released, nil
 }
 

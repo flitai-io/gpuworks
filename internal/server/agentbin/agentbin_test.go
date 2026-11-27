@@ -2,14 +2,14 @@ package agentbin
 
 import (
 	"bytes"
-	"io"
+	"encoding/json"
+	"errors"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -22,7 +22,7 @@ func TestReadPrefersOverrideDir(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, name), []byte("override"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	got, err := Read(dir, name)
+	got, err := bundled.Read(dir, name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestReadPrefersOverrideDir(t *testing.T) {
 }
 
 func TestReadRejectsTraversal(t *testing.T) {
-	if _, err := Read(t.TempDir(), "../secret"); err == nil {
+	if _, err := bundled.Read(t.TempDir(), "../secret"); err == nil {
 		t.Fatal("Read should reject traversal")
 	}
 }
@@ -54,21 +54,21 @@ func testTree(t *testing.T, agent []byte) fstest.MapFS {
 
 func useTree(t *testing.T, tree fs.FS) {
 	t.Helper()
-	saved := binaries
-	binaries = tree
-	t.Cleanup(func() { binaries = saved })
+	saved := bundled
+	bundled = Files{tree}
+	t.Cleanup(func() { bundled = saved })
 }
 
 func TestACompressedAgentIsServedExpanded(t *testing.T) {
 	agent := bytes.Repeat([]byte("ELF agent bytes "), 4096)
 	useTree(t, testTree(t, agent))
 
-	got, err := Read("", "gpuworks-agent-linux-amd64")
+	got, err := bundled.Read("", "gpuworks-agent-linux-amd64")
 	if err != nil || !bytes.Equal(got, agent) {
 		t.Fatalf("Read = %d bytes, %v", len(got), err)
 	}
 	res := httptest.NewRecorder()
-	Handler("").ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/dl/gpuworks-agent-linux-amd64", nil))
+	bundled.Handler("").ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/dl/gpuworks-agent-linux-amd64", nil))
 	if res.Code != http.StatusOK || !bytes.Equal(res.Body.Bytes(), agent) {
 		t.Fatalf("GET = %d, %d bytes", res.Code, res.Body.Len())
 	}
@@ -77,7 +77,7 @@ func TestACompressedAgentIsServedExpanded(t *testing.T) {
 	if got := res.Header().Get("Content-Length"); got != strconv.Itoa(len(agent)) {
 		t.Fatalf("Content-Length = %q, want %d", got, len(agent))
 	}
-	if !Has("gpuworks-agent-linux-amd64") {
+	if !bundled.Has("gpuworks-agent-linux-amd64") {
 		t.Fatal("Has does not see the compressed agent")
 	}
 }
@@ -85,7 +85,7 @@ func TestACompressedAgentIsServedExpanded(t *testing.T) {
 func TestAPlainAgentIsServedAsItIs(t *testing.T) {
 	useTree(t, testTree(t, []byte("x")))
 	res := httptest.NewRecorder()
-	Handler("").ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/dl/gpuworks-agent-linux-arm64", nil))
+	bundled.Handler("").ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/dl/gpuworks-agent-linux-arm64", nil))
 	if res.Code != http.StatusOK || res.Body.String() != "plain arm64 agent" || res.Header().Get("Content-Length") != "17" {
 		t.Fatalf("GET = %d %q %v", res.Code, res.Body.String(), res.Header())
 	}
@@ -97,45 +97,42 @@ func TestOnlyAgentNamesAreServed(t *testing.T) {
 	useTree(t, testTree(t, []byte("x")))
 	for _, name := range []string{"gpuworks-agent-linux-amd64.zst", "../agentbin.go", "gpuworks-agent-darwin-amd64", ""} {
 		res := httptest.NewRecorder()
-		Handler("").ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/dl/"+name, nil))
+		bundled.Handler("").ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/dl/"+name, nil))
 		if res.Code != http.StatusNotFound {
 			t.Errorf("%q: status %d", name, res.Code)
 		}
-		if _, err := Read("", name); err == nil {
+		if _, err := bundled.Read("", name); err == nil {
 			t.Errorf("%q: Read succeeded", name)
 		}
-		if Has(name) {
+		if bundled.Has(name) {
 			t.Errorf("%q: Has", name)
 		}
 	}
 }
 
-// The agents a build embedded, by the zstd CLI or zstdpack, expand to a
-// binary and state their size. A tree with none (a build without
-// cross-agents) has nothing to check.
+// Check every platform advertised by the actual build, including delta frames.
 func TestTheEmbeddedAgentsExpand(t *testing.T) {
-	entries, err := fs.ReadDir(embedded, "dl")
+	raw, err := fs.ReadFile(embedded, "dl/"+ManifestName)
+	if errors.Is(err, fs.ErrNotExist) {
+		if _, err := fs.Stat(embedded, "dl/pack"); err == nil {
+			t.Fatal("packed build has no manifest")
+		}
+		return // source-only build
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, entry := range entries {
-		name, ok := strings.CutSuffix(entry.Name(), compressedSuffix)
-		if !ok {
-			continue
-		}
-		compressed, _ := fs.ReadFile(embedded, "dl/"+entry.Name())
-		size, ok := expandedSize(compressed)
-		if !ok {
-			t.Errorf("%s records no content size", entry.Name())
-		}
-		dec, err := zstd.NewReader(bytes.NewReader(compressed))
-		if err != nil {
+	var m Manifest
+	if err = json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	files, err := Prepare(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name := range m.Binaries {
+		if _, err := files.ReadVerified("", name, m.Version); err != nil {
 			t.Fatal(err)
-		}
-		n, err := io.Copy(io.Discard, dec)
-		dec.Close()
-		if err != nil || uint64(n) != size || n < 1<<20 {
-			t.Errorf("%s expands to %d bytes (recorded %d): %v", name, n, size, err)
 		}
 	}
 }

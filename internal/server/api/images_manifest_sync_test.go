@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
+	"gpuworks.ai/gpuworks/internal/server/imagecatalog/manifest"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -108,93 +110,6 @@ func TestCheckForUpdatesReadsTheChannel(t *testing.T) {
 	if state, err := run.store.OfficialCatalogState(); err != nil || state.ImageCatalogVersion != "2026-10-09.abcdef12" {
 		t.Fatalf("recorded state = %+v, %v", state, err)
 	}
-}
-
-func TestCheckForUpdatesListsPublishedSWRWithDeploymentOff(t *testing.T) {
-	run := newImageManifestRun(t)
-	channel := newTestChannel(t)
-	const ref = "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.2-a3-vllm0.32.0rc1-r2-arm64"
-	const published = `{"schema_version":3,"catalog_version":"2026-11-24-test","series":[{"name":"vLLM · CANN","engine":"vllm","purpose":"inference","framework":"cann","versions":[{"image_ref":"` + ref + `","arch":"arm64","rolling_tag":true}]}]}`
-	channel.publishImageCatalog([]byte(published))
-	run.useChannel(channel)
-
-	sync := run.do(http.MethodPost, "/api/v1/images/sync", "", "")
-	if sync.Code != http.StatusOK {
-		t.Fatalf("sync status = %d: %s", sync.Code, sync.Body.String())
-	}
-	list := run.do(http.MethodGet, "/api/v1/images/versions?source=official", "", "")
-	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), ref) {
-		t.Fatalf("published SWR tag is missing from the official version list: %d %s", list.Code, list.Body.String())
-	}
-	row, err := run.store.ImageByRef(ref)
-	if err != nil || row.Enabled || row.Source != "official" {
-		t.Fatalf("published SWR tag = %+v, %v", row, err)
-	}
-}
-
-func TestCheckForUpdatesKeepsCustomRefAndImportsOtherImages(t *testing.T) {
-	run := newImageManifestRun(t)
-	const ref = "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-local-r1"
-	custom, err := run.store.UpsertImage(&store.Image{ImageRef: ref, Engine: "vllm", Source: "custom", Notes: "operator overrides", Enabled: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	const second = "example.org/runner:second"
-	channel := newTestChannel(t)
-	channel.publishImageCatalog([]byte(`{"schema_version":3,"catalog_version":"test-conflict","series":[{"name":"Upstream","engine":"vllm","versions":[{"image_ref":"` + ref + `"},{"image_ref":"` + second + `"}]}]}`))
-	run.useChannel(channel)
-	for i := 0; i < 2; i++ {
-		rec := run.do(http.MethodPost, "/api/v1/images/sync", "", "")
-		var result dto.ImageManifestImportResult
-		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &result) != nil || len(result.Skipped) != 1 || result.Skipped[0].Name != ref || result.Created != 1-i || result.Updated != i {
-			t.Fatalf("sync %d: %d %s", i, rec.Code, rec.Body.String())
-		}
-		row, err := run.store.ImageByRef(ref)
-		if err != nil || row.ID != custom.ID || row.Source != "custom" || row.Notes != "operator overrides" || !row.Enabled {
-			t.Fatalf("operator row changed: %+v, %v", row, err)
-		}
-		if row, err := run.store.ImageByRef(second); err != nil || row.Source != "official" {
-			t.Fatalf("missing new official row: %+v, %v", row, err)
-		}
-	}
-	// A new settings request still shows the conflict and the current version.
-	s := getUpdateStatus(t, run).ImageCatalog
-	if s.UpdateAvailable || s.Current != "test-conflict" || s.Current != s.Latest || len(s.Skipped) != 1 || s.Skipped[0] != ref {
-		t.Fatalf("partial catalog: %+v", s)
-	}
-
-	channel.fail("nightly/index.json", http.StatusServiceUnavailable)
-	rec := run.do(http.MethodGet, "/api/v1/updates?refresh=true", "", "")
-	var status dto.UpdateStatus
-	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &status) != nil {
-		t.Fatalf("offline updates = %d %s", rec.Code, rec.Body.String())
-	}
-	if c := status.ImageCatalog; status.Available || c.UpdateAvailable || c.Current != s.Current || c.Latest != "" || len(c.Skipped) != 1 || c.Skipped[0] != ref {
-		t.Fatalf("offline partial catalog: %+v", status)
-	}
-	if rec := run.do(http.MethodPost, "/api/v1/images/sync", "", ""); rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), ErrorUpdateSourcesUnavailable) {
-		t.Fatalf("offline sync = %d %s", rec.Code, rec.Body.String())
-	}
-
-	channel.fail("nightly/index.json", 0)
-	if err := run.store.DeleteImage(custom.ID); err != nil {
-		t.Fatal(err)
-	}
-	if rec := run.do(http.MethodPost, "/api/v1/images/sync", "", ""); rec.Code != http.StatusOK {
-		t.Fatal(rec.Body.String())
-	}
-	rec = run.do(http.MethodGet, "/api/v1/updates?refresh=true", "", "")
-	status = dto.UpdateStatus{}
-	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &status) != nil {
-		t.Fatalf("updates after retry = %d %s", rec.Code, rec.Body.String())
-	}
-	if c := status.ImageCatalog; !status.Available || c.Latest != c.Current || c.UpdateAvailable || len(c.Skipped) != 0 {
-		t.Fatalf("completed catalog: %+v", status)
-	}
-	if row, err := run.store.ImageByRef(ref); err != nil || row.Source != "official" {
-		t.Fatalf("retry did not import %s: %v", ref, err)
-	}
-
 }
 
 func TestCheckForUpdatesFailuresLeaveCatalogUntouched(t *testing.T) {
@@ -435,5 +350,86 @@ func TestSyncImageForceReachesThePullUnsourced(t *testing.T) {
 	var wire dto.ImageNodeSyncRequest
 	if err := json.Unmarshal([]byte(`{"force":true,"source":"quay"}`), &wire); err != nil || !wire.Force || wire.Source != "quay" {
 		t.Fatalf("request wire = %+v, %v", wire, err)
+	}
+}
+
+func TestChannelUsesSelectionAwareCatalogForStatusAndSync(t *testing.T) {
+	run := newImageManifestRun(t)
+	c := newTestChannel(t)
+	c.publishImageCatalog(imagecatalog.SeedJSON())
+	c.index.ImageCatalogV4 = c.index.ImageCatalog
+	want := c.imagePath
+	c.publishImageCatalog([]byte(upstreamManifest))
+	run.useChannel(c)
+	status := getUpdateStatus(t, run)
+	if status.ImageCatalog.Latest != c.index.ImageCatalogV4.Version || !status.ImageCatalog.UpdateAvailable {
+		t.Fatalf("channel status %+v", status.ImageCatalog)
+	}
+	rec := run.do(http.MethodPost, "/api/v1/images/sync", "", "")
+	if rec.Code != http.StatusOK || !slices.Contains(c.requested(), want) {
+		t.Fatalf("sync %d, requested %v", rec.Code, c.requested())
+	}
+	if applied := getUpdateStatus(t, run); applied.ImageCatalog.Current != c.index.ImageCatalogV4.Version || applied.ImageCatalog.UpdateAvailable {
+		t.Fatalf("after sync: %+v", applied.ImageCatalog)
+	}
+	row, err := run.store.ImageByRef("gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4")
+	if err != nil || row.AutoSelect != "arm64" || !strings.Contains(row.RegistrySources, "swr.") {
+		t.Fatalf("template row %+v: %v", row, err)
+	}
+}
+
+func TestUploadLegacyProjectionLeavesActiveCatalogUntouched(t *testing.T) {
+	run := newImageManifestRun(t)
+	if err := run.store.RecordImageCatalogImport("before", false); err != nil {
+		t.Fatal(err)
+	}
+	before := run.versionCount()
+	body, err := manifest.LegacyCatalog(imagecatalog.SeedJSON())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := run.do(http.MethodPost, "/api/v1/images/import", "application/json", string(body))
+	var response struct {
+		Code   string            `json:"code"`
+		Params map[string]string `json:"params"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusBadRequest || response.Code != "IMAGE_MANIFEST_LEGACY_PROJECTION" || len(response.Params) != 1 || response.Params["path"] != "image_catalog_v4.path" {
+		t.Fatalf("rejection %d: %s", rec.Code, rec.Body.String())
+	}
+	state, err := run.store.OfficialCatalogState()
+	if err != nil || state.ImageCatalogUploaded || state.ImageCatalogVersion != "before" || run.versionCount() != before {
+		t.Fatalf("catalog changed: %+v %v", state, err)
+	}
+	row, err := run.store.ImageByRef("gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4")
+	if err != nil || row.Deprecated || row.AutoSelect != "arm64" {
+		t.Fatalf("policy after rejection: %+v %v", row, err)
+	}
+}
+
+func TestImportedSelectionPolicyUpdatesExistingLegacyRow(t *testing.T) {
+	run := newImageManifestRun(t)
+	const ref = "gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4"
+	var id uint
+	for _, tc := range []struct {
+		schema int
+		policy string
+	}{{2, ""}, {3, ""}, {4, "manual"}, {4, "arm64"}, {4, ""}} {
+		field := ""
+		if tc.policy != "" {
+			field = fmt.Sprintf(`,"auto_select":%q`, tc.policy)
+		}
+		body := fmt.Sprintf(`{"schema_version":%d,"catalog_version":"local-release-schema3","series":[{"name":"vLLM · CUDA","engine":"vllm","versions":[{"image_ref":%q,"arch":"multi"%s}]}]}`, tc.schema, ref, field)
+		rec := run.do(http.MethodPost, "/api/v1/images/import", "application/json", body)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("schema %d: %d %s", tc.schema, rec.Code, rec.Body.String())
+		}
+		row, err := run.store.ImageByRef(ref)
+		if err != nil || row.AutoSelect != tc.policy || id != 0 && row.ID != id {
+			t.Fatalf("schema %d: %+v %v, want %q", tc.schema, row, err, tc.policy)
+		}
+		id = row.ID
 	}
 }

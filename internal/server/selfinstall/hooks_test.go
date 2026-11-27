@@ -82,7 +82,7 @@ func TestRenderUnitSupplementaryGroupsGolden(t *testing.T) {
 	})
 	want := `[Unit]
 Description=gpuworks control plane
-Documentation=https://gpuworks.zstack.ai/
+Documentation=https://flitai.io/docs/gpuworks
 After=network-online.target
 RequiresMountsFor=/opt/gpuworks/server/data
 

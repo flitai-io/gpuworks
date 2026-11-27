@@ -105,6 +105,17 @@ jobs:
           path: dist/
           retention-days: 30
 
+      # Independent recovery files for an operator overriding <data>/dl.
+      - uses: actions/upload-artifact@v5
+        if: matrix.os == 'linux' && matrix.arch == 'amd64'
+        with:
+          name: agent-recovery
+          path: |
+            bin/dl/gpuworks-agent-*
+            internal/server/agentbin/dl/agent-manifest.json
+          if-no-files-found: error
+          retention-days: 30
+
   docs:
     if: github.ref_type == 'tag'
     uses: ./.github/workflows/docs.yml

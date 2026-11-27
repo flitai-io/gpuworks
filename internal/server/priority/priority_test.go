@@ -1,6 +1,10 @@
 package priority
 
-import "testing"
+import (
+	"slices"
+	"strings"
+	"testing"
+)
 
 func testTable() Table {
 	classes := []Class{
@@ -90,5 +94,49 @@ func TestValidation(t *testing.T) {
 	}
 	if !IsBuiltin(Batch) || IsBuiltin("gold") {
 		t.Fatal("IsBuiltin")
+	}
+}
+
+func TestKeyReach(t *testing.T) {
+	table := testTable()
+	cases := []struct {
+		name         string
+		binding      Binding
+		own, ceiling string
+		reachable    []string
+	}{
+		{name: "within its ceiling", binding: Binding{ClassID: 3, CeilingID: 1}, own: Normal, ceiling: Critical, reachable: []string{Critical, "gold", High, Normal, Low, Batch}},
+		{name: "a custom-valued ceiling", binding: Binding{ClassID: 3, CeilingID: 6}, own: Normal, ceiling: "gold", reachable: []string{"gold", High, Normal, Low, Batch}},
+		{name: "no ceiling is its own class", binding: Binding{ClassID: 2}, own: High, ceiling: High, reachable: []string{High, Normal, Low, Batch}},
+		{name: "a ceiling below its own class is its own class", binding: Binding{ClassID: 2, CeilingID: 4}, own: High, ceiling: High, reachable: []string{High, Normal, Low, Batch}},
+		{name: "unbound runs at the default", binding: Binding{}, own: Normal, ceiling: Normal, reachable: []string{Normal, Low, Batch}},
+		{name: "fixed reaches only its own class", binding: Binding{ClassID: 3, CeilingID: 1, Policy: PolicyFixed}, own: Normal, ceiling: Normal, reachable: []string{Normal}},
+		{name: "down only reaches what is not above it", binding: Binding{ClassID: 6, CeilingID: 1, Policy: PolicyDownOnly}, own: "gold", ceiling: "gold", reachable: []string{"gold", High, Normal, Low, Batch}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := KeyReach(table, tc.binding)
+			var names []string
+			for _, c := range got.Reachable {
+				names = append(names, c.Name)
+			}
+			if got.Own.Name != tc.own || got.Ceiling.Name != tc.ceiling || strings.Join(names, ",") != strings.Join(tc.reachable, ",") {
+				t.Fatalf("reach = own %s ceiling %s reachable %v, want %s %s %v", got.Own.Name, got.Ceiling.Name, names, tc.own, tc.ceiling, tc.reachable)
+			}
+			// The rule a client applies to the reach (a reachable class runs
+			// as named, any other at the ceiling) is the one Resolve applies.
+			for name, class := range table.byName {
+				want := got.Ceiling
+				if slices.Contains(got.Reachable, class) {
+					want = class
+				}
+				if decision, _ := Resolve(table, SourceKey, tc.binding, name); decision.Class != want {
+					t.Fatalf("asking %s runs at %s, the reach says %s", name, decision.Class.Name, want.Name)
+				}
+			}
+		})
+	}
+	if got := KeyReach(NewTable(nil, 0), Binding{}); len(got.Reachable) != 1 || got.Reachable[0] != got.Own || got.Own.Name != Normal {
+		t.Fatalf("an empty table's reach = %+v, want its neutral default alone", got)
 	}
 }

@@ -7,6 +7,7 @@ import { Button } from "../../components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { Notice } from "../../ui-kit/Notice";
+import KubeRolloutStatus from "./KubeRolloutStatus";
 
 const ACTION_STATUS: Record<KubeObjectAction, BadgeStatus> = {
   create: "success",
@@ -137,6 +138,8 @@ export default function KubeClusterOperationModal({ cluster, op, onClose, onDone
               </Table>
             </div>
           )}
+          {/* Once applied, how the agents come up on each node. */}
+          {op === "apply" && stage === "done" && !failed && <KubeRolloutStatus uuid={cluster.uuid} />}
         </div>
         <DialogFooter>{footer}</DialogFooter>
       </DialogContent>

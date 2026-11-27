@@ -550,14 +550,14 @@ func TestPDPrefillPickPassesOverAnInstanceOrderedToSleepSinceTheRouteWasRead(t *
 	}
 	h.orderSleepUnseen(t, "prefill-0", 1)
 	for i := 0; i < 32; i++ {
-		l := h.proxy.pickPrefill(route, "", "node-pd", nil)
+		l := h.proxy.pickPrefill(route, "", "node-pd", nil, admission{})
 		if l == nil || l.c.instanceUUID != "prefill-1" {
 			t.Fatalf("pick %d = %+v, want prefill-1", i, l)
 		}
 		l.release(outcomeCanceled)
 	}
 	h.orderSleepUnseen(t, "prefill-1", 1)
-	if l := h.proxy.pickPrefill(route, "", "node-pd", nil); l != nil {
+	if l := h.proxy.pickPrefill(route, "", "node-pd", nil, admission{}); l != nil {
 		t.Fatalf("with every prefill ordered to sleep the pick = %+v", l.c)
 	}
 }

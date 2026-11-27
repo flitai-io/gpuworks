@@ -1,8 +1,10 @@
 package cloud
 
 import (
+	"errors"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provider/zstack/cloud/inventory"
 )
 
@@ -10,12 +12,11 @@ func TestEvaluateHostOnboardingSeparatesHostEligibilityFromGPUAllocation(t *test
 	tests := []struct {
 		name     string
 		resource inventory.CloudResource
-		want     hostOnboardingDecision
+		wantCode string
 	}{
 		{
 			name:     "no GPU still admits host",
 			resource: inventory.CloudResource{Type: "host", Hypervisor: "KVM", ManagementAddress: "192.0.2.10", Status: "Connected"},
-			want:     hostOnboardingCandidate,
 		},
 		{
 			name: "used gpu still admits host",
@@ -23,7 +24,6 @@ func TestEvaluateHostOnboardingSeparatesHostEligibilityFromGPUAllocation(t *test
 				Type: "host", Hypervisor: "KVM", ManagementAddress: "192.0.2.10", Status: "Connected",
 				GPUs: []inventory.CloudGPU{{ExternalID: "gpu-used", State: "Enabled", Allocation: "Allocated"}},
 			},
-			want: hostOnboardingCandidate,
 		},
 		{
 			name: "invalid host is rejected",
@@ -31,38 +31,45 @@ func TestEvaluateHostOnboardingSeparatesHostEligibilityFromGPUAllocation(t *test
 				Type: "host", Hypervisor: "KVM", ManagementAddress: "", Status: "Connected",
 				GPUs: []inventory.CloudGPU{{ExternalID: "gpu-free", State: "Enabled", Allocation: "Unallocated"}},
 			},
-			want: hostOnboardingReject,
+			wantCode: messages.ErrorZStackAgentHostAddressMissing,
 		},
 		{
 			name:     "disabled and allocated GPU",
 			resource: inventory.CloudResource{Type: "host", Hypervisor: "KVM", ManagementAddress: "192.0.2.10", Status: "Connected", GPUs: []inventory.CloudGPU{{State: "Disabled", Allocation: "Allocated"}}},
-			want:     hostOnboardingCandidate,
 		},
 		{
 			name:     "no GPU and no address",
 			resource: inventory.CloudResource{Type: "host", Hypervisor: "KVM", Status: "Connected"},
-			want:     hostOnboardingReject,
+			wantCode: messages.ErrorZStackAgentHostAddressMissing,
 		},
 		{
 			name:     "no GPU and disconnected",
 			resource: inventory.CloudResource{Type: "host", Hypervisor: "KVM", ManagementAddress: "192.0.2.10", Status: "Disconnected"},
-			want:     hostOnboardingReject,
+			wantCode: messages.ErrorZStackAgentHostNotConnected,
 		},
 		{
 			name:     "no GPU and non KVM",
 			resource: inventory.CloudResource{Type: "host", Hypervisor: "ESX", ManagementAddress: "192.0.2.10", Status: "Connected"},
-			want:     hostOnboardingReject,
+			wantCode: messages.ErrorZStackAgentHostHypervisor,
 		},
 		{
 			name:     "not a host",
 			resource: inventory.CloudResource{Type: "vm", Hypervisor: "KVM", ManagementAddress: "192.0.2.10", Status: "Connected"},
-			want:     hostOnboardingReject,
+			wantCode: messages.ErrorZStackAgentHostType,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := evaluateHostOnboarding(tt.resource); got != tt.want {
-				t.Fatalf("decision = %q, want %q", got, tt.want)
+			err := checkHostOnboarding(tt.resource)
+			if tt.wantCode == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			var reason *messages.ProductError
+			if !errors.As(err, &reason) || reason.Code() != tt.wantCode {
+				t.Fatalf("error = %v, want code %s", err, tt.wantCode)
 			}
 		})
 	}

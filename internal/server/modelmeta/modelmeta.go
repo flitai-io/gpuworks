@@ -43,6 +43,9 @@ type Meta struct {
 	// Endpoint is the address that answered, of those FetchFrom was given;
 	// empty when none did, and the metadata is then empty too.
 	Endpoint string
+	// Answer says why config.json, the README and the weight size are all
+	// unread, when the source said why; the zero value otherwise.
+	Answer Answer
 }
 
 // InputModalities reports input types evidenced by config.json. A nil config
@@ -127,6 +130,8 @@ func FetchFrom(ctx context.Context, source, repo, revision, subfolder string, ca
 	// repository but refuses its files (a mirror without the login) is passed
 	// over for one that lets them in; when every one refuses, the first that
 	// answered is still read.
+	var answers []Answer
+	recordRead := false
 	if source != modelrepo.SourceURL {
 		chosen := false
 		var refused string
@@ -136,6 +141,7 @@ func FetchFrom(ctx context.Context, source, repo, revision, subfolder string, ca
 			repoMeta, err := fetchRepositoryMeta(probeCtx, source, repo, candidate, client)
 			if err != nil {
 				slog.Warn("model metadata repository details unavailable", "source", source, "repo", repo, "endpoint", safeMetadataURL(candidate), "err", err)
+				answers = append(answers, answerOf(candidate, err))
 				if len(candidates) > 1 {
 					_, err = getWith(probeCtx, client, modelrepo.ResolveURL(source, repo, revision, "config.json", candidate))
 				}
@@ -153,11 +159,13 @@ func FetchFrom(ctx context.Context, source, repo, revision, subfolder string, ca
 				continue
 			}
 			endpoint, m.Endpoint, chosen = candidate, candidate, true
+			recordRead = repoMeta != nil
 			m.setRepository(repoMeta)
 			break
 		}
 		if !chosen && refused != "" {
 			endpoint, m.Endpoint = refused, refused
+			recordRead = true
 			m.setRepository(refusedMeta)
 		}
 	}
@@ -215,6 +223,7 @@ func FetchFrom(ctx context.Context, source, repo, revision, subfolder string, ca
 	} else {
 		slog.Info("model metadata weight index unavailable; falling back to repository listing", "url", safeMetadataURL(idxURL), "err", err)
 	}
+	var listingErr error
 	if m.WeightBytes == 0 {
 		// Fallback: sum the .safetensors file sizes from the repo listing.
 		if files, err := modelrepo.ListFiles(ctx, source, repo, revision, endpoint, nil, modelrepo.RequestOptions{Client: client}); err == nil {
@@ -231,12 +240,27 @@ func FetchFrom(ctx context.Context, source, repo, revision, subfolder string, ca
 			slog.Info("model metadata weight listing parsed", "source", source, "repo", repo, "subfolder", subfolder, "files", len(files), "weight_files", len(selected), "weight_bytes", m.WeightBytes)
 		} else {
 			slog.Warn("model metadata weight listing failed", "source", source, "repo", repo, "err", err)
+			listingErr = err
 		}
 	}
-	if m.Endpoint == "" && (m.ConfigRaw != "" || m.README != "" || m.WeightBytes > 0) {
+	switch read := m.ConfigRaw != "" || m.README != "" || m.WeightBytes > 0; {
+	case read && m.Endpoint == "":
 		m.Endpoint = endpoint
+	case read:
+	case recordRead:
+		// The site showed the repository: a 404 for its files is about the
+		// revision, and a refusal is about the files.
+		switch answer := answerOf(endpoint, listingErr); answer.Outcome {
+		case OutcomeRepoNotFound:
+			answer.Outcome = OutcomeRevisionNotFound
+			m.Answer = answer
+		case OutcomeDenied:
+			m.Answer = answer
+		}
+	default:
+		m.Answer = unanswered(answers)
 	}
-	slog.Info("model metadata fetch finished", "source", source, "repo", repo, "revision", revision, "endpoint", safeMetadataURL(m.Endpoint), "weight_bytes", m.WeightBytes, "config", m.Config != nil, "duration", time.Since(started).String())
+	slog.Info("model metadata fetch finished", "source", source, "repo", repo, "revision", revision, "endpoint", safeMetadataURL(m.Endpoint), "weight_bytes", m.WeightBytes, "config", m.Config != nil, "outcome", string(m.Answer.Outcome), "duration", time.Since(started).String())
 	return m, nil
 }
 

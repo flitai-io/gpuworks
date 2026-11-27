@@ -88,7 +88,7 @@ func TestHTTPClientForUsesExplicitProxyOnly(t *testing.T) {
 	if client == nil {
 		t.Fatal("explicit proxy should create a client")
 	}
-	transport, ok := client.Transport.(*http.Transport)
+	transport, ok := client.Transport.(routeNamingTransport)
 	if !ok || transport.Proxy == nil {
 		t.Fatal("explicit proxy client has no proxy function")
 	}

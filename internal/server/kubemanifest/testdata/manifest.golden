@@ -176,6 +176,9 @@ spec:
             - name: state
               mountPath: "/opt/gpuworks"
               mountPropagation: Bidirectional
+            - name: storage-mounts
+              mountPath: "/mnt/gpuworks"
+              mountPropagation: Bidirectional
             - name: pod-resources
               mountPath: /var/lib/kubelet/pod-resources
               readOnly: true
@@ -185,6 +188,10 @@ spec:
         - name: state
           hostPath:
             path: "/opt/gpuworks"
+            type: DirectoryOrCreate
+        - name: storage-mounts
+          hostPath:
+            path: "/mnt/gpuworks"
             type: DirectoryOrCreate
         - name: pod-resources
           hostPath:

@@ -50,10 +50,16 @@ func deploymentImageTargetForGPU(engine, targetVendor string, node *store.Node, 
 // deploymentImageOptions returns canonical images a user can choose. It does
 // not reuse acquisition.image.candidates: those values are registry mirrors
 // for one selected image and must remain in agent pull order.
+//
+// The target engine's images come first. A draft without a template is also
+// offered the other engines' images, last and marked with the engine choosing
+// them selects: the image is where such a draft picks its engine.
 func (s *Service) deploymentImageOptions(target deploy.ImageTarget, selection templateSelection, selected string, cached *bool) []dto.ImageOption {
 	type candidate struct {
 		image, reason string
 		trusted       bool
+		// selects is the deploy engine an image of another engine brings.
+		selects string
 	}
 	values := make([]candidate, 0, 8)
 	if selection.Spec != nil && strings.TrimSpace(selection.Spec.Image) != "" {
@@ -76,22 +82,32 @@ func (s *Service) deploymentImageOptions(target deploy.ImageTarget, selection te
 	// Offer every enabled catalog image that satisfies the same target-chip
 	// predicate as automatic resolution. The first catalog entry above remains
 	// the default; these additional entries make that choice directly editable.
+	catalogByRef := make(map[string]deploy.ImageCandidate, len(catalogCandidates))
 	if catalogErr == nil {
+		var otherEngines []candidate
 		for _, catalogCandidate := range catalogCandidates {
-			candidateTarget := target
-			if selection.Spec == nil {
-				// Without an inference template there is no engine contract to
-				// preserve. Offer every runtime image compatible with the target
-				// accelerator; choosing one also chooses its catalog engine.
-				candidateTarget.Engine = catalogCandidate.ManualEngine()
-				if _, err := deploy.ProfileForEngine(candidateTarget.Engine); err != nil {
-					continue
-				}
+			catalogByRef[strings.ToLower(strings.TrimSpace(catalogCandidate.ImageRef))] = catalogCandidate
+			value := candidate{image: catalogCandidate.ImageRef, reason: "catalog_match", trusted: true}
+			if deploy.ImageCandidateSelectable(target, catalogCandidate) {
+				values = append(values, value)
+				continue
 			}
-			if deploy.ImageCandidateSelectable(candidateTarget, catalogCandidate) {
-				values = append(values, candidate{image: catalogCandidate.ImageRef, reason: "catalog_match", trusted: true})
+			// A template fixes the engine; an image family that is not a
+			// deploy engine (vllm-omni) is nothing a draft can switch to.
+			if selection.Spec != nil {
+				continue
+			}
+			if _, err := deploy.ProfileForEngine(catalogCandidate.Engine); err != nil {
+				continue
+			}
+			otherTarget := target
+			otherTarget.Engine = catalogCandidate.Engine
+			if deploy.ImageCandidateSelectable(otherTarget, catalogCandidate) {
+				value.selects = catalogCandidate.Engine
+				otherEngines = append(otherEngines, value)
 			}
 		}
+		values = append(values, otherEngines...)
 	}
 	if strings.TrimSpace(selected) != "" {
 		values = append(values, candidate{image: selected, reason: "selected_image", trusted: templateOwnsImage(selection, selected)})
@@ -118,7 +134,10 @@ func (s *Service) deploymentImageOptions(target deploy.ImageTarget, selection te
 		} else {
 			compatible = !imagecatalog.Resolve(s.d.Store, checkTarget).Blocking
 		}
-		option := dto.ImageOption{Image: value.image, Reason: value.reason, Compatible: compatible}
+		option := dto.ImageOption{Image: value.image, Reason: value.reason, Compatible: compatible, SelectsEngine: value.selects}
+		if entry, ok := catalogByRef[key]; ok {
+			option.Engine, option.EngineVersion = entry.Engine, entry.EngineVersion
+		}
 		if strings.EqualFold(value.image, strings.TrimSpace(selected)) && cached != nil {
 			if *cached {
 				option.Reason = "node_cached"

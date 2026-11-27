@@ -7,6 +7,7 @@ package priority
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -65,7 +66,8 @@ type Policy string
 
 const (
 	// PolicyFixed: every request runs at the key's class; a requested class
-	// is ignored.
+	// that exists has no effect, and one that does not is refused as under
+	// every policy.
 	PolicyFixed Policy = "fixed"
 	// PolicyWithinCeiling: a request may name any class whose value does not
 	// exceed the key's ceiling class (its own class when it has none); one
@@ -205,7 +207,7 @@ func Resolve(t Table, source Source, binding Binding, requested string) (Decisio
 		c, found := t.ByName(requested)
 		return Decision{Class: c}, found
 	}
-	own := t.byIDOr(binding.ClassID, t.Default)
+	own, ceiling := t.keyBounds(binding)
 	if requested == "" {
 		return Decision{Class: own}, true
 	}
@@ -213,21 +215,65 @@ func Resolve(t Table, source Source, binding Binding, requested string) (Decisio
 	if !found {
 		return Decision{}, false
 	}
-	ceiling := own
-	switch binding.Policy {
-	case PolicyFixed:
+	if binding.Policy == PolicyFixed {
 		return Decision{Class: own}, true
-	case PolicyDownOnly:
-	default:
-		ceiling = t.byIDOr(binding.CeilingID, own)
-		if ceiling.Value < own.Value {
-			// A ceiling below the key's own class never lowers the class it
-			// runs at by default.
-			ceiling = own
-		}
 	}
 	if asked.Value > ceiling.Value {
 		return Decision{Class: ceiling, Lowered: true}, true
 	}
 	return Decision{Class: asked}, true
+}
+
+// keyBounds is a key's own class (what its requests run at when they name
+// none) and its ceiling (what a request naming a higher class runs at).
+// Only within_ceiling has a ceiling of its own; under fixed and down_only it
+// is the key's own class.
+func (t Table) keyBounds(binding Binding) (own, ceiling Class) {
+	own = t.byIDOr(binding.ClassID, t.Default)
+	if binding.Policy == PolicyFixed || binding.Policy == PolicyDownOnly {
+		return own, own
+	}
+	ceiling = t.byIDOr(binding.CeilingID, own)
+	if ceiling.Value < own.Value {
+		// A ceiling below the key's own class never lowers the class it
+		// runs at by default.
+		ceiling = own
+	}
+	return own, ceiling
+}
+
+// Reach is what a key's requests can run at, for a client that wants to
+// know before it sends: Own without a class header, Reachable every class
+// a header can run at (Own included, highest value first, then by name),
+// and Ceiling what a header naming any other class runs at.
+type Reach struct {
+	Own       Class
+	Ceiling   Class
+	Reachable []Class
+}
+
+// KeyReach is the reach of a key's binding, by the rules Resolve applies: a
+// class is reachable exactly when a request naming it runs at it.
+func KeyReach(t Table, binding Binding) Reach {
+	own, ceiling := t.keyBounds(binding)
+	reach := Reach{Own: own, Ceiling: ceiling}
+	hasOwn := false
+	for name, class := range t.byName {
+		if decision, ok := Resolve(t, SourceKey, binding, name); ok && decision.Class == class {
+			reach.Reachable = append(reach.Reachable, class)
+			hasOwn = hasOwn || class == own
+		}
+	}
+	if !hasOwn {
+		// The neutral default of a table without classes.
+		reach.Reachable = append(reach.Reachable, own)
+	}
+	sort.Slice(reach.Reachable, func(i, j int) bool {
+		a, b := reach.Reachable[i], reach.Reachable[j]
+		if a.Value != b.Value {
+			return a.Value > b.Value
+		}
+		return a.Name < b.Name
+	})
+	return reach
 }

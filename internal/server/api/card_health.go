@@ -68,6 +68,7 @@ func (a *apiHandlers) nodeHealthChecks(w http.ResponseWriter, r *http.Request) {
 		NodeUUID: node.UUID, Online: snap.Online, Reports: snap.Reports, Stale: view.Stale,
 		Checks: []dto.CardHealthColumn{}, Cards: []dto.CardHealthCard{},
 		Summary: map[string]int{},
+		Notice:  cardHealthNotice(node.GPUs, cardFromQuery(r), snap, view, a.nodeHasCap(node.UUID, proto.CapCardChecks)),
 	}
 	if !snap.ReceivedAt.IsZero() {
 		at := snap.ReceivedAt.UTC()

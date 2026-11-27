@@ -36,7 +36,9 @@ func SourceRefusal(src store.ModelSource, node *store.Node, model *store.Model) 
 		return &scheduler.Reason{Code: code, Params: params}
 	case store.SourceAcquire, store.SourceFillCache:
 		mf := src.Location.File
-		if mf == nil {
+		// A download withdrawn with its service starts again for the
+		// deployment that needs it (the controller's acquireLocalModel).
+		if mf == nil || mf.WithdrawnWithService() {
 			return nil
 		}
 		switch mf.State {

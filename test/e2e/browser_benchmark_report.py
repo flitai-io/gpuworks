@@ -116,6 +116,20 @@ def preview_text(root):
     }""")
 
 
+def check_curve_metric_layout(page):
+    group = page.locator('[data-report-curve]').get_by_role('radiogroup')
+    group.scroll_into_view_if_needed()
+    outside = group.locator('label').evaluate_all("""labels => labels.filter(label => {
+        const box = label.getBoundingClientRect();
+        const card = label.closest('[data-report-curve]').getBoundingClientRect();
+        const y = (box.top + box.bottom) / 2;
+        return box.left < card.left || box.right > card.right ||
+            ![box.left + 1, box.right - 1].every(x => label.contains(document.elementFromPoint(x, y)));
+    }).map(label => label.textContent.trim())""")
+    assert not outside, f'Curve metrics clipped or covered by a neighbouring card: {outside}'
+    return group
+
+
 def run_case(args, report, secrets):
     labels = json.loads((ROOT / f'ui/src/i18n/locales/{args.locale}/evaluations.json').read_text())['agentic']['export']
     base = args.base_url.rstrip('/')
@@ -200,7 +214,9 @@ def run_case(args, report, secrets):
             expect(page.get_by_role('heading', name=title, exact=True)).to_be_visible()
             expect(page.locator('canvas')).to_have_count(2)
             page.locator(f'.ant-table-row[data-row-key="{selected_seq}"]').first.click()
-            page.locator('.ant-segmented-item').filter(has_text='TTFT').click()
+            metrics = check_curve_metric_layout(page)
+            metrics.get_by_text('TTFT', exact=True).click()
+            expect(metrics.get_by_role('radio', name='TTFT', exact=True)).to_be_checked()
             report['selected_point'] = selected_seq
             # Instrument only the final PNG callback. Product DOM/CSS and all API
             # responses remain intact; pause lets us photograph the actual export

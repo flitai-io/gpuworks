@@ -26,6 +26,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/cluster/identity"
 	"gpuworks.ai/gpuworks/internal/server/enrollment"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/packages"
+	"gpuworks.ai/gpuworks/internal/testenv/testport"
 )
 
 func enrollmentNativeConfig(t *testing.T) (Config, string) {
@@ -39,13 +40,7 @@ func enrollmentNativeConfig(t *testing.T) (Config, string) {
 	if err := a.Close(); err != nil {
 		t.Fatal(err)
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	address := listener.Addr().String()
-	listener.Close()
-	return cfg, address
+	return cfg, testport.Address(t)
 }
 func enrollmentNativeLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 func enrollmentNativeFiles(t *testing.T, cfg Config) map[string]string {
@@ -408,12 +403,7 @@ func TestRuntimeDqliteEnrollmentBindFailureReleasesMainListener(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer occupied.Close()
-	main, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.Addr = main.Addr().String()
-	main.Close()
+	cfg.Addr = testport.Address(t)
 	a, err := New(cfg, enrollmentNativeLog())
 	if err != nil {
 		t.Fatal(err)

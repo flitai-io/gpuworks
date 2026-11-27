@@ -115,10 +115,12 @@ func LaunchGPU(node *store.Node, index int) (store.GPU, error) {
 
 // ModelPaths are where a deployment's model files are on one node, as its
 // storage resolves them (store.ModelLocation): the primary model and each
-// component model by model id.
+// component model by model id. Rank is the rank they were resolved for
+// (RankModelIDs), which picks a rank-scoped component's artifact.
 type ModelPaths struct {
 	Primary    string
 	Components map[uint]string
+	Rank       int
 }
 
 // DeploymentLaunch is the part of a launch every instance of a deployment
@@ -156,7 +158,13 @@ func DeploymentLaunch(dep *store.Deployment, reqs map[string][]string, node *sto
 	}
 	if primary, ok := deploy.PrimaryComponent(templateLayer.Components); ok && paths != nil {
 		modelMount = primary.MountPath
-		primaryPath := paths.Components[primary.StoreModelID]
+		// The primary component is the deployment's own model, which is the
+		// rank's own artifact for rank-scoped weights (ADR 0076).
+		id := primary.StoreModelID
+		if rankID, scoped := templateLayer.RankWeightModelID(paths.Rank); scoped {
+			id = rankID
+		}
+		primaryPath := paths.Components[id]
 		if primaryPath == "" {
 			return LaunchRequest{}, templateLayer, "", fmt.Errorf("deployment %d primary component %s is not present on node %s", dep.ID, primary.Name, node.UUID)
 		}
@@ -166,7 +174,11 @@ func DeploymentLaunch(dep *store.Deployment, reqs map[string][]string, node *sto
 		if component.Role == "primary" || paths == nil {
 			continue
 		}
-		path := paths.Components[component.StoreModelID]
+		id, bound := component.RankModelID(paths.Rank)
+		if !bound {
+			return LaunchRequest{}, templateLayer, "", fmt.Errorf("deployment %d component %s binds no model for rank %d", dep.ID, component.Name, paths.Rank)
+		}
+		path := paths.Components[id]
 		if path == "" {
 			return LaunchRequest{}, templateLayer, "", fmt.Errorf("deployment %d component %s is not present on node %s", dep.ID, component.Name, node.UUID)
 		}

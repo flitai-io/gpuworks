@@ -2,7 +2,7 @@
 
 The wire formats of plugin package manifests, publisher certificates, trust updates, revocation lists, package indexes, signature envelopes, the `gwx/1` handshake, health and error messages, and the tables plugins push are defined in a separate Go module, `pkg/extapi` (module path `gpuworks.ai/gpuworks/pkg/extapi`). It uses only the standard library, so a plugin depends on it and not on the server.
 
-These formats are frozen, and this page describes each of them. The server verifies, installs and removes plugin packages and imports trust updates and revocation lists as this page describes (the `gpuworks plugin` subcommands, see [CLI Reference](cli.md)); the plugin host starts and supervises plugin processes and takes and enforces pushed tables, including the merge, grace and timeline semantics this page mentions. What the plugin host does today and what is not built yet is in [Extension Points](../dev/extensions.md#installable-extensions); the design and its trade-offs are in [ADR 0071](../adr/0071-installable-extensions.md).
+These formats are frozen, and this page describes each of them. The server verifies, installs and removes plugin packages and imports trust updates and revocation lists as this page describes (the `gpuworks plugin` subcommands, see [CLI Reference](cli.md)); the plugin host starts and supervises plugin processes and takes and enforces pushed tables, including the merge, grace and timeline semantics this page mentions. What the plugin host does today and what is not built yet is in [Extension Points](../dev/extensions.md#可安装扩展); the design and its trade-offs are in [ADR 0071](../adr/0071-installable-extensions.md).
 
 The golden corpus `pkg/extapi/testdata/golden/` is the authority on the formats. Every JSON example on this page is byte-for-byte identical to a file in the corpus, named in a comment above the example in the page source, and a test in `pkg/extapi` (`TestReferencePageExamplesAreGoldenFiles`) compares each one. That is why the examples are canonical JSON (one line, sorted keys).
 
@@ -26,7 +26,7 @@ The golden corpus `pkg/extapi/testdata/golden/` is the authority on the formats.
 - Protocol major 1 is frozen: the shapes of the envelope, handshake, error and push envelope never change.
 - Capabilities (`routes`, `table.availability` and so on) carry their own versions; a capability version released within major 1 is never removed.
 - A field that changes what the core enforces can only arrive as a new version of its object (in Go, a new type beside the old one), so an older reader refuses it instead of silently dropping a restriction.
-- A released golden file is never edited or removed (see [Golden files](#golden-files)).
+- A released golden file is never edited or removed (see [Golden files](#黄金文件)).
 
 ## Canonical JSON and digests
 
@@ -91,14 +91,14 @@ An example that uses every field is `manifest/v1/valid/full.json` in the corpus.
 | `requires` | Capabilities the package cannot run without → the lowest version it needs; a server that lacks one judges the package incompatible and names the capability |
 | `uses` | Optional capabilities → the highest version the package can use, negotiated down at run time; a capability cannot also appear in `requires` |
 | `roles` | Privileged roles the package claims, sorted; a claim counts only if the certificate grants it |
-| `permissions` | What the administrator approves, `<verb>:<object>`, sorted; the only verbs are `crypto`, `events`, `http`, `metrics`, `node`, `notify`, `push`, `read` and `svc`, and each verb's objects come from a closed vocabulary, see [Permissions](#permissions) |
+| `permissions` | What the administrator approves, `<verb>:<object>`, sorted; the only verbs are `crypto`, `events`, `http`, `metrics`, `node`, `notify`, `push`, `read` and `svc`, and each verb's objects come from a closed vocabulary, see [Permissions](#权限) |
 | `features` | Declared feature keys `{key, presentation, gate}`: `presentation` is `promote` (shown as locked) or `conceal` (hidden); `gate` is `none` (always full), `self` (this package answers) or `authority` (only the namespace authority answers) |
 | `routes` | The package's HTTP routes; see the table below |
 | `ui` | The console bundle: `mode` is `module` (a same-origin ES module, which needs the certificate grant) or `iframe`; `entry` is a member under `ui/`; `sdk` is the range of console SDK majors; `nav` are menu entries |
 | `node` | The node part: `app` is the application description under `node/`, `images` are image archives for offline sites under `node/images/` |
-| `runtime` | The server part: `lifecycle` is `resident` (started with the server) or `on_demand` (started on use, stopped when idle; the server's policy lets it hold no `push:` permission and declare no feature, see [The server's install policy](#the-servers-install-policy)); `mem_mib`, `cpu_milli` and `max_concurrency` (≤1024) take defaults at 0; `devices` are device nodes under `/dev`, sorted |
+| `runtime` | The server part: `lifecycle` is `resident` (started with the server) or `on_demand` (started on use, stopped when idle; the server's policy lets it hold no `push:` permission and declare no feature, see [The server's install policy](#server-的安装策略)); `mem_mib`, `cpu_milli` and `max_concurrency` (≤1024) take defaults at 0; `devices` are device nodes under `/dev`, sorted |
 | `storage` | The data directory: `kind` is `sqlite` or `files`; `ha` is `shipped` (replicated with the server database) or `leader_local` (a rebuildable cache); `state_version` is the data format version this build writes (≥1); `cold_copy_safe` means the directory may be copied while the plugin is stopped |
-| `settings` | Values an administrator configures for the package, see [Settings](#settings) |
+| `settings` | Values an administrator configures for the package, see [Settings](#设置) |
 | `host_setup` | Host steps from a closed vocabulary, never a script; today only `usb_device` (`vendor_id` and `product_id`, four lowercase hex digits each) |
 | `codes` | Every code the package can emit, sorted; each has en and zh text in the package's locales |
 | `files` | Every member except `manifest.json`, `manifest.sig` and `publisher.crt`, sorted by path: `{path, size, sha256, exec}`; paths are relative, every segment starts with a letter, digit or underscore (no `.`, `..` or hidden files), at most 512 bytes |
@@ -215,7 +215,7 @@ A certificate is a publisher's signing key and its grants. It travels as the pay
 | `format` | 1 |
 | `serial` | Unique among the certificates one trust anchor issues to the publisher, whichever of the anchor's keys signed them. The project roots are one anchor; each issuer the host operator configures is another and picks its publisher names and serials itself, so anchor + `publisher` + `serial` names one certificate; ≥1 |
 | `publisher` | The subject; manifests signed with this key must name it |
-| `keyid` / `alg` / `public_key` | The publisher's signing key, with the rules of the [signature envelope](#signature-envelope); `keyid` starts with `<publisher>-` and not with `gwroot-` |
+| `keyid` / `alg` / `public_key` | The publisher's signing key, with the rules of the [signature envelope](#签名信封); `keyid` starts with `<publisher>-` and not with `gwroot-` |
 | `not_before` / `not_after` | The signing window; `not_after` must be later than `not_before`. A package whose `created` lies in the window stays valid after `not_after`, so installed packages never expire |
 | `grants.id_prefixes` | Required: the package ids the key may sign, sorted, each with the package id grammar. An entry ending in `_` covers every id that starts with it; any other entry covers exactly that id. Every entry belongs to the subject, by the rule for a manifest's `id` (a third party's start with `<publisher>_`; the project publisher's have no `_` or start with `gpuworks_`), so a certificate never covers another publisher's ids (`acme_` does not cover `acmebank_pay`, and a project certificate cannot list `acme_`) |
 | `grants.feature_ns` | Namespaces its packages may declare feature keys in, sorted: only the publisher's own name, plus `""` (the bare namespace) for the project publisher |
@@ -305,17 +305,17 @@ Under ADR 0071, a plugin is a child process of the server and runs plaintext HTT
 | `GET /gwx/v1/health` | Health | The server's periodic probe |
 | `PUT /host/v1/state/{kind}` | Push | The plugin pushes the whole table of one kind |
 | `GET /host/v1/health` | Host health | The plugin probes the host API; the answer is a health object |
-| `POST /host/v1/node-identity` | Node identity | The plugin reads the salted hardware identity of named nodes; see [Node reads](#node-reads) |
+| `POST /host/v1/node-identity` | Node identity | The plugin reads the salted hardware identity of named nodes; see [Node reads](#节点读取) |
 | `GET /host/v1/nodes` | Node inventory | The plugin pages through the node inventory in enrollment order |
-| `GET /host/v1/state/{kind}` | Own state | The plugin reads back one table the server holds for it (see [Host API clock, readiness, own state and derived keys](#host-api-clock-readiness-own-state-and-derived-keys)) |
+| `GET /host/v1/state/{kind}` | Own state | The plugin reads back one table the server holds for it (see [Host API clock, readiness, own state and derived keys](#宿主接口的时钟就绪自有状态与派生密钥)) |
 | `POST /host/v1/state/ready` | Ready | The plugin reports that it has finished starting |
 | `GET /host/v1/meta` | Meta | The server version, boot id and clocks |
 | `POST /host/v1/clock/correct` | Clock correction | A package holding `clock_authority` corrects extclock |
 | `POST /host/v1/derive-key` | Derived key | A key bound to the package and a label |
-| `POST /host/v1/host-identity` | Host identity | The plugin reads the salted identity of the management server's machine; see [Host identity](#host-identity) |
+| `POST /host/v1/host-identity` | Host identity | The plugin reads the salted identity of the management server's machine; see [Host identity](#主机身份) |
 | Request header `Gwx-Deadline-Ms` | Unix milliseconds | The call's deadline |
 | Response header `Gwx-Product-Error` | — | Marks a plugin route's response body as an error object |
-| `/r/<path>` | Route | A request to one of the plugin's routes ([route requests](#route-requests-and-the-principal)) |
+| `/r/<path>` | Route | A request to one of the plugin's routes ([route requests](#路由请求与主体)) |
 | Request headers `Gwx-Principal`, `Gwx-Principal-Mac`, `Gwx-Feature-Access` | — | Who calls a route, and the access of its features |
 
 The handshake request:
@@ -362,7 +362,7 @@ The server offers `routes@1`, not `routes.websocket`. A forwarded request: its p
 - A body marked `Gwx-Product-Error` must be a gwx/1 error object under a 4xx or 5xx status; the server passes its code and params to the client.
 - Headers pass by an allowlist only, and `Location` only while it stays under the package's prefix.
 
-The order of the steps, the statuses and the timeouts of stream routes are in [Extension Points](../dev/extensions.md#plugin-routes).
+The order of the steps, the statuses and the timeouts of stream routes are in [Extension Points](../dev/extensions.md#插件路由).
 
 The principal:
 
@@ -600,7 +600,7 @@ The key is HKDF-SHA256 (no salt) of the server's `master.key`, with `info` being
 
 ## Host identity
 
-`POST /host/v1/host-identity` returns the salted identity of the machine the management server runs on. It needs the `read:host_identity` permission and the `host.host_identity@1` capability; an `on_demand` package may read it too. The body holds only the salt, with the rules and package binding of [Node identity](#node-identity) (1–219 bytes, bound to the package id), so one package with one salt gets one set of digests from both reads:
+`POST /host/v1/host-identity` returns the salted identity of the machine the management server runs on. It needs the `read:host_identity` permission and the `host.host_identity@1` capability; an `on_demand` package may read it too. The body holds only the salt, with the rules and package binding of [Node identity](#节点身份) (1–219 bytes, bound to the package id), so one package with one salt gets one set of digests from both reads:
 
 <!-- golden: host_identity_request/v1/valid/salt.json -->
 ```json
@@ -619,7 +619,7 @@ Each part of the answer is `{h, tail}`; a part the server could not read is abse
 - `machine_id`: `/etc/machine-id`.
 - `root_fs_uuid`: the file system UUID of the block device mounted at `/`.
 
-`h` and `tail` mean what they mean for node identity. On Linux the kernel lets only root read the system UUID and the board serial, and the server runs as its service account: before every start of the server, systemd runs [`gpuworks host-identity`](cli.md#gpuworks-host-identity) as root from the protected executable copy, which writes those two to `/run/gpuworks/host-identity.json`. The server uses the file only to fill those two when it cannot read them itself; a value it reads directly always wins, and `machine_id` and `root_fs_uuid` come only from direct reads. Refusals are those of the [node reads](#rate-limits-and-refusals); a body over 4 KiB answers 413 `REQUEST_TOO_LARGE` (`max_bytes` 4096).
+`h` and `tail` mean what they mean for node identity. On Linux the kernel lets only root read the system UUID and the board serial, and the server runs as its service account: before every start of the server, systemd runs [`gpuworks host-identity`](cli.md#gpuworks-host-identity) as root from the protected executable copy, which writes those two to `/run/gpuworks/host-identity.json`. The server uses the file only to fill those two when it cannot read them itself; a value it reads directly always wins, and `machine_id` and `root_fs_uuid` come only from direct reads. Refusals are those of the [node reads](#限速与拒绝); a body over 4 KiB answers 413 `REQUEST_TOO_LARGE` (`max_bytes` 4096).
 
 ## Pushed tables
 

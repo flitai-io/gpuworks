@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -15,6 +16,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog/community"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -61,8 +63,8 @@ type imageImportPayload struct {
 	Series       []manifestSeriesInput `json:"series" yaml:"series"`
 }
 
-// importImages accepts two bodies. A manifest (schema_version 2 or 3) is the
-// system catalog uploaded by hand. A conflicting upload is rejected in full.
+// importImages accepts two bodies. A versioned manifest is the
+// system catalog uploaded by hand, applied exactly like "check for updates".
 // A body without schema_version is the community/custom form the image page
 // submits. Any other schema_version is an old catalog format and is refused.
 func (a *apiHandlers) importImages(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +81,7 @@ func (a *apiHandlers) importImages(w http.ResponseWriter, r *http.Request) {
 		SchemaVersion *int `json:"schema_version"`
 	}
 	if json.Unmarshal(body, &probe) == nil && probe.SchemaVersion != nil {
-		a.applyOfficialManifest(w, body, false)
+		a.applyOfficialManifest(w, body, true)
 		return
 	}
 	var req imageImportPayload
@@ -114,10 +116,15 @@ func (a *apiHandlers) importImages(w http.ResponseWriter, r *http.Request) {
 const imageImportMaxBytes = 8 << 20
 
 // applyOfficialManifest imports a system catalog manifest and writes the
-// import counts. Signed channel updates skip conflicting local entries.
-func (a *apiHandlers) applyOfficialManifest(w http.ResponseWriter, body []byte, skipConflicts bool) {
-	result, err := imagecatalog.ImportManifest(a.d.Store, body, skipConflicts)
+// import counts. A conflict with a community or custom row fails the whole
+// import before anything is written. uploaded says the manifest was uploaded
+// by hand rather than fetched from the channel.
+func (a *apiHandlers) applyOfficialManifest(w http.ResponseWriter, body []byte, uploaded bool) {
+	result, err := imagecatalog.ImportManifest(a.d.Store, body)
 	switch {
+	case errors.Is(err, imagecatalog.ErrLegacyProjection):
+		writeProductError(w, http.StatusBadRequest, ErrorImageManifestLegacyProjection, "this catalog is for older servers; upload the file at image_catalog_v4.path in the signed channel index", map[string]any{"path": "image_catalog_v4.path"})
+		return
 	case errors.Is(err, imagecatalog.ErrManifestInvalid):
 		writeProductError(w, http.StatusBadRequest, ErrorImageManifestInvalid, err.Error(), map[string]any{"detail": err.Error()})
 		return
@@ -128,7 +135,10 @@ func (a *apiHandlers) applyOfficialManifest(w http.ResponseWriter, body []byte, 
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	if err := a.d.Store.RecordImageCatalogImport(result.CatalogVersion, result.SkippedNames()); err != nil {
+	// The import is committed. The record is what keeps an uploaded catalog
+	// from being replaced by the channel's, so failing to write it is an
+	// error; importing the same manifest again writes it.
+	if err := a.d.Store.RecordImageCatalogImport(result.CatalogVersion, uploaded); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -220,6 +230,10 @@ func flattenManifest(payload imageImportPayload) []imageInput {
 // syncImagesManifest is "check for updates": it imports the system image
 // catalog the distribution channel publishes (ADR 0040). Any request body is
 // ignored; where the catalog comes from is not the caller's to choose.
+//
+// A catalog uploaded by hand is not replaced by a different one from the
+// channel unless the request says replace_uploaded=true: the versions only
+// the upload has would be deleted, which whoever asks has to have been told.
 func (a *apiHandlers) syncImagesManifest(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), updatesTimeout)
 	defer cancel()
@@ -227,16 +241,26 @@ func (a *apiHandlers) syncImagesManifest(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	catalog := fetched.Index.ImageCatalog
+	catalog := fetched.Index.CurrentImageCatalog()
 	if catalog == nil {
 		writeNotPublished(w, "image_catalog")
+		return
+	}
+	state, err := a.d.Store.OfficialCatalogState()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	if replace, _ := strconv.ParseBool(r.URL.Query().Get("replace_uploaded")); state.ImageCatalogUploaded && catalog.Version != state.ImageCatalogVersion && !replace {
+		writeProductError(w, http.StatusConflict, messages.ErrorImageCatalogUploaded, "the system image catalog in force was uploaded; the channel's catalog replaces it only on request",
+			map[string]any{"current": state.ImageCatalogVersion, "latest": catalog.Version})
 		return
 	}
 	body, ok := a.channelFile(ctx, w, fetched, catalog.File)
 	if !ok {
 		return
 	}
-	a.applyOfficialManifest(w, body, true)
+	a.applyOfficialManifest(w, body, false)
 }
 
 func (a *apiHandlers) upsertImageInputs(inputs []imageInput) ([]dto.Image, error) {

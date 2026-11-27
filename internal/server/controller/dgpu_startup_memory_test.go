@@ -1,17 +1,17 @@
 package controller
 
 import (
-	"strings"
+	"strconv"
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
-	"gpuworks.ai/gpuworks/internal/server/scheduler"
+	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
-func TestReconcileRefusesStoredAscendDGPUStartupMemory(t *testing.T) {
+func TestReconcileLaunchesStoredAscendDGPUWithStartupMemoryWarning(t *testing.T) {
 	st, err := store.Open("file:controller_dgpu_startup_memory?mode=memory&cache=shared", bus.New())
 	if err != nil {
 		t.Fatal(err)
@@ -55,11 +55,22 @@ func TestReconcileRefusesStoredAscendDGPUStartupMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 	instances, err := st.InstancesForDeployment(dep.ID)
-	if err != nil || len(instances) != 0 || len(hub.updates[node.UUID]) != 0 {
-		t.Fatalf("refused deployment created instances %v or sent state updates, err=%v", instances, err)
+	if err != nil || len(instances) != 1 {
+		t.Fatalf("instances = %v, err = %v, want scheduled deployment", instances, err)
 	}
-	event, found, err := st.LatestScheduleEvent(dep.ID)
-	if err != nil || !found || !strings.Contains(event.Data, scheduler.ReasonDGPUStartupMemory) {
-		t.Fatalf("schedule event = %+v (found %v), err=%v, want dGPU startup memory refusal", event, found, err)
+	for _, update := range hub.updates[node.UUID] {
+		for _, desired := range update.Instances {
+			if desired.UUID != instances[0].UUID || desired.DesiredState != "running" {
+				continue
+			}
+			args, _, _ := deploy.LaunchArgs(desired.ResolvedLaunch)
+			raw, _ := deploy.LaunchFlag(args, "--mem-fraction-static")
+			fraction, err := strconv.ParseFloat(raw, 64)
+			if err != nil || fraction != 0.90 || desired.VRAMLimitBytes != 8<<30 {
+				t.Fatalf("scheduled launch has mem-fraction-static %q and quota %d", raw, desired.VRAMLimitBytes)
+			}
+			return
+		}
 	}
+	t.Fatal("agent did not receive a running instance")
 }

@@ -178,6 +178,7 @@ func (a *apiHandlers) buildGPUInventory() (*gpuInventoryCache, error) {
 			}
 			allocation := allocations[gpu.Index]
 			item := physicalGPU(node, partitionReports, &gpu, allocation, policy, deployment, metrics)
+			item.SchedulingHold = a.cardHoldMessage(node, gpu)
 			out.physical.Items = append(out.physical.Items, item)
 			accumulateGPUOverview(&out.physical.Overview, &gpu, &item)
 		}
@@ -252,6 +253,7 @@ func physicalGPU(node *store.Node, partitionReports partitioncap.Reports, gpu *s
 		Ownership: gpu.Ownership, ForeignProcesses: gpu.ForeignUse(),
 		SchedulingStopped: gpu.SchedulingStopped, SchedulingAllowed: gpu.SchedulingAllowedAt != nil,
 		SchedulingActions: gpu.SchedulingActions(),
+		SchedulingHeldBy:  string(gpu.SchedulingHeldBy),
 		Schedulable:       gpu.CanTakeWork(),
 		HealthStatus:      gpu.HealthStatus, HealthCode: gpu.HealthCode, HealthMessage: gpu.HealthMessage,
 		HealthEvidence: evidence, HealthGuide: guide,

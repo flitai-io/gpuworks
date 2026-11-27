@@ -46,6 +46,17 @@ test("a specific code still reads from its own text, not as a category", async (
   assert.ok(!zh.startsWith("请求无效"), zh);
 });
 
+test("a disconnected ZStack host shows its status and recovery step before SSH installation", async () => {
+  const error = await errorFrom({
+    error: "install through SSH connection: host is disconnected",
+    code: "ZSTACK_AGENT_HOST_NOT_CONNECTED",
+    params: { host: "compute-1", address: "192.0.2.11", status: "Disconnected" },
+  }, 424);
+  assert.equal(apiErrorText(await translator("zh"), error),
+    "无法安装 Agent：ZStack 物理机 compute-1（192.0.2.11）尚未连接（当前状态：Disconnected）。请在 ZStack 中重连物理机，待状态变为 Connected 后重试。");
+  assert.match(apiErrorText(await translator("en"), error), /compute-1 .*192\.0\.2\.11.*Disconnected.*Reconnect.*Connected/);
+});
+
 test("every generic code has en and zh category text", async () => {
   for (const lng of ["en", "zh"] as const) {
     const t = await translator(lng);

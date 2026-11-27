@@ -141,7 +141,7 @@ test("from the keyboard: Tab reaches More, Enter opens it, arrows move, Enter ch
   await menuItems();
   await user.keyboard("{Escape}");
   await waitFor(() => assert.equal(screen.queryAllByRole("menu").length, 0, "Escape closes it"));
-  await waitFor(() => assert.equal(document.activeElement, more, "focus returns to More"));
+  await waitFor(() => assert.ok(document.activeElement === more, "focus returns to More"));
   assert.deepEqual(picked, ["Manifest"], "closing chose nothing");
 });
 

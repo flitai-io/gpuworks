@@ -45,10 +45,26 @@ func checkRankZeroModel(template weightSource, requested *store.Model) error {
 	return nil
 }
 
-// checkRankWeightsPD refuses rank-scoped weights deployed as PD: a PD
-// deployment's ranks are numbered per role instance, not as one group.
+// readsByRank reports whether a rank reads anything of its own: the
+// selection's weights or a component's are rank-scoped. A component keeps the
+// template's subfolder, so this holds before its models are resolved too.
+func (s templateSelection) readsByRank() bool {
+	if s.rankScoped() {
+		return true
+	}
+	for _, component := range s.Components {
+		if deploy.RankScopedSubfolder(component.Subfolder) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkRankWeightsPD refuses rank-scoped weights, the spec's own or a
+// component's, deployed as PD: a PD deployment's ranks are numbered per role
+// instance, not as one group.
 func checkRankWeightsPD(selection templateSelection, pd bool) error {
-	if !pd || !selection.rankScoped() || selection.Spec == nil {
+	if !pd || !selection.readsByRank() || selection.Spec == nil {
 		return nil
 	}
 	return productError(messages.ErrorRankWeightsPDUnsupported, "spec "+selection.Spec.Name+" has rank-scoped weights, which a PD deployment cannot run",
@@ -74,6 +90,39 @@ func (s *Service) resolveRankWeights(selection *templateSelection, rank0 *store.
 		}
 		s.applyCatalogEstimationConfig(selection, model)
 		selection.RankWeights = append(selection.RankWeights, deploy.RankWeight{Rank: rank, Subfolder: model.ArtifactSubfolder, StoreModelID: model.ID})
+	}
+	return nil
+}
+
+// resolveComponentModel binds a non-primary component to its artifact. A
+// rank-scoped one is resolved as the selection's own rank-scoped weights are
+// (resolveRankWeights): rank 0's subfolder by the usual rules with its
+// revision as identity, and every other rank at rank 0's provider, repository
+// and revision with its own subfolder. StoreModelID is rank 0's artifact; the
+// component keeps the template's subfolder.
+func (s *Service) resolveComponentModel(selection *templateSelection, component *deploy.ComponentBinding, original *store.InferenceModel) error {
+	component.RankWeights = nil
+	template := component.Subfolder
+	scoped := deploy.RankScopedSubfolder(template)
+	source := weightSource{Provider: component.Provider, RepoID: component.RepoID, Revision: component.Revision, Subfolder: template}
+	model, err := s.selectionWeightModel(selection, lookupSource(source), original,
+		selection.Spec.Engine, component.Quantization, component.WeightBytes, 0, selection.StoragePins, scoped, selection.ExplicitComponents[component.Name])
+	if err != nil {
+		return fmt.Errorf("component %s weights: %w", component.Name, err)
+	}
+	component.StoreModelID = model.ID
+	if !scoped {
+		return nil
+	}
+	component.Provider, component.RepoID, component.Revision = model.Source, model.SourceID, model.Revision
+	component.RankWeights = append(component.RankWeights, deploy.RankWeight{Rank: 0, Subfolder: model.ArtifactSubfolder, StoreModelID: model.ID})
+	for rank := 1; rank < max(selection.WeightRanks, 1); rank++ {
+		source := weightSource{Provider: model.Source, RepoID: model.SourceID, Revision: model.Revision, Subfolder: deploy.ExpandRankSubfolder(template, rank)}
+		rankModel, err := s.selectionWeightModel(selection, source, original, selection.Spec.Engine, component.Quantization, component.WeightBytes, 0, selection.StoragePins, true, true)
+		if err != nil {
+			return fmt.Errorf("component %s rank %d weights %s: %w", component.Name, rank, source.Subfolder, err)
+		}
+		component.RankWeights = append(component.RankWeights, deploy.RankWeight{Rank: rank, Subfolder: rankModel.ArtifactSubfolder, StoreModelID: rankModel.ID})
 	}
 	return nil
 }

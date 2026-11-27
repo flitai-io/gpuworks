@@ -2,14 +2,19 @@ import { Button, Popconfirm, Space, Tag, Typography, message } from "antd";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, type CardScheduling, type GPU, type Node } from "../../api";
-import { apiErrorText } from "../../apiError";
+import { apiErrorText, productMessageText } from "../../apiError";
 
-// CardSchedulingTag marks a card an operator took out of scheduling, or one
-// they let work onto although the platform judged it unusable; a card left
-// to the platform shows nothing here (its health tag already speaks).
+// CardSchedulingTag marks a card an operator took out of scheduling, one an
+// extension holds out of it, or one they let work onto although the platform
+// judged it unusable; a card left to the platform shows nothing here (its
+// health tag already speaks).
 export function CardSchedulingTag({ gpu }: { gpu: GPU }) {
   const { t } = useTranslation("nodes");
-  if (gpu.scheduling_stopped) return <Tag color="orange">{t("cardScheduling.stoppedTag")}</Tag>;
+  const { t: tCommon } = useTranslation("common");
+  if (gpu.scheduling_stopped || gpu.scheduling_hold) {
+    const hold = !gpu.scheduling_stopped && gpu.scheduling_hold ? gpu.scheduling_hold : undefined;
+    return <Tag color="orange" title={hold && productMessageText(tCommon, hold)}>{t(hold ? "cardScheduling.heldTag" : "cardScheduling.stoppedTag")}</Tag>;
+  }
   if (gpu.scheduling_allowed) return <Tag color="blue">{t("cardScheduling.allowedTag")}</Tag>;
   return null;
 }
@@ -36,10 +41,12 @@ export function CardSchedulingControl({ node, gpu, onUpdated }: { node: Node; gp
     }
   };
   const heldOutside = !!gpu.foreign_processes?.length;
-  const state = gpu.scheduling_stopped ? "stopped" : gpu.scheduling_allowed ? "allowed" : gpu.schedulable ? "schedulable" : heldOutside ? "heldOutside" : "blocked";
+  const state = gpu.scheduling_stopped ? "stopped" : gpu.scheduling_allowed && !gpu.scheduling_hold ? "allowed" : gpu.schedulable ? "schedulable" : heldOutside ? "heldOutside" : "blocked";
+  // A card an extension holds says why, in the extension's own words.
+  const text = !gpu.scheduling_stopped && gpu.scheduling_hold ? productMessageText(tCommon, gpu.scheduling_hold) : t(`cardScheduling.state.${state}`);
   return (
     <Space size={8} wrap>
-      <Typography.Text>{t(`cardScheduling.state.${state}`)}</Typography.Text>
+      <Typography.Text>{text}</Typography.Text>
       {actions.includes("stopped") && (
         <Button size="small" loading={busy === "stopped"} onClick={() => set("stopped")}>
           {t("cardScheduling.stop")}

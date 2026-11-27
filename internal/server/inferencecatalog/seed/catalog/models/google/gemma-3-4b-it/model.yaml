@@ -38,6 +38,14 @@ specs:
   - --dtype
   - bfloat16
   - --enable-multimodal
+  # NPU graph mode fails on Gemma 3's first prefill with the 910B SGLang
+  # runner ("Unsupport run graph with different stream" from torchair).
+  - --disable-cuda-graph
+  performance_tradeoffs:
+  - param: --disable-cuda-graph
+    reason: hardware_plugin_requires
+    detail_en: "NPU graph mode fails on Gemma 3's first prefill with the 910B SGLang runner (torchair: Unsupport run graph with different stream)."
+    detail_zh: "910B SGLang 镜像上 Gemma 3 首个 prefill 在 NPU 图模式下失败（torchair：Unsupport run graph with different stream）。"
   placement:
     language: starlark
     resolver: |-

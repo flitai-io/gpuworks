@@ -550,6 +550,10 @@ CLI 说不了话的那些（已直通、没驱动、驱动没带起来），不�
 
 节点详情的「健康检查」页上半部分是「卡 × 检查项」表格，下半部分是这个节点的失败记录；GPU 详情的「健康检查」页是同样两部分，只看这一张卡。
 
+节点在线且报告未过期时，页面先按所选卡的设备归属说明原因：卡已配置直通、无厂商驱动或被其他驱动占用时，宿主机不执行这些卡的检查；如果所选卡全部不可由宿主机检查，即使 Agent 未声明检查能力，也不提示升级。无驱动时安装并加载 GPU 厂商驱动；卡被其他驱动占用且需要宿主机检查时，将卡绑定到厂商驱动。
+
+没有报告不代表 Agent 版本过旧。Agent 支持卡健康检查但尚未收到报告时显示等待；在线 Agent 缺少检查能力且不能由有效报告确认卡全部不可用时，提示升级 Agent。节点离线或报告过期时不把旧归属当作当前事实；无 GPU 且报告有效时显示无适用卡。没有失败记录只表示没有记录，不代表检查已执行并通过。
+
 **每项检查**：厂商健康（厂商工具的结论）、厂商工具应答、平台外占用、PCIe 链路、PCIe 错误、Xid（NVIDIA）、NVLink（NVIDIA）、GPUDirect RDMA（NVIDIA、PPU）、运行时检查。
 前五项、Xid 与 GPUDirect RDMA 随每次上报（约 1 分钟）各做一次，NVLink 每 5 分钟、运行时检查每 15 分钟一次。
 GPUDirect RDMA 只在宿主有 RDMA 网卡时检查厂商的 peer memory 模块（`nvidia_peermem`、`alixpu_peermem`）是否已加载：未加载是告警，
@@ -920,8 +924,14 @@ message 为 `insufficient disk space at <path>: available=… required=…`。
 
 **登记后缺少元数据**
 
-响应带 `metadata_notice`（`MODEL_METADATA_UNREACHABLE` / `MODEL_METADATA_FORBIDDEN`）时，检查管理节点的出站访问。
-给可用站点规则勾选 **用于管理节点获取模型元数据**，必要时给代理勾选 **用于管理节点出站访问**。
+先看 `metadata_notice` 或「获取元数据」报错里的码，它区分站点的回答与管理节点自己的问题：
+
+| 码 | 含义 | 处理 |
+|---|---|---|
+| `MODEL_REPO_NOT_FOUND` | 站点已应答，没有这个仓库 | 核对仓库 ID 与来源；同一模型在 Hugging Face 与 ModelScope 上的仓库 ID 常常不同 |
+| `MODEL_REVISION_NOT_FOUND` | 仓库存在，该版本下没有文件 | 改用该来源的分支或提交；提交 ID 不能跨站点使用 |
+| `MODEL_REPO_ACCESS_DENIED` | 站点返回 401 / 403 | 私有或受限仓库需要[凭据](configure-pull-settings.md#凭据)；未带令牌时 Hugging Face 对不存在的仓库也返回 401，先核对仓库 ID |
+| `MODEL_METADATA_UNREACHABLE` / `MODEL_METADATA_FORBIDDEN` | 管理节点没有从任何地址得到关于仓库的回答，或规则禁止了全部地址 | 检查管理节点的出站访问：给可用站点规则勾选 **用于管理节点获取模型元数据**，必要时给代理勾选 **用于管理节点出站访问** |
 
 **源节点离线，或节点间同步失败**
 
@@ -1032,6 +1042,7 @@ runveil（udocker）节点拉取镜像时，agent 日志（`<state>/agent.log`�
 |---|---|---|
 | `AUTOMATIC_PLACEMENT_STALE` | 409 | 评估之后资源被占走或节点不再满足节点条件；重新评估 |
 | `NODE_REQUIREMENTS_UNMET` | 400 | 所选节点不满足部署的节点条件；`params.detail` 写明哪个键、要求哪些值 |
+| `PLACEMENT_GPU_NOT_ON_NODE` | 400 | 创建、编辑或评估写的 GPU 序号在所选节点上没有（`params.node`、`params.gpu_index`、`params.node_gpus`）；序号只对一台节点有意义，换节点后重新选卡或不指定卡 |
 | `UNIT_PLACEMENT_NONE` | 409 | 自动放置的多机或 PD 请求（创建、评估、扩容）现在没有一组节点放得下；`params` 给出节点总数 `nodes`，以及各项检查排除的台数：`unmet`（不满足节点条件）、`cordoned`（已停止调度）、`offline`、`busy`（空闲卡不够）、`no_network`（没有可用的计算网络），`largest` 是最大的一组有几台。按最大的一项补齐条件，或改手动指定节点 |
 | `AUTO_PLACEMENT_TP_REQUIRED` | 400 | 自动放置的多机请求没写 `placement.tp`，平台不知道每台节点要几张空闲卡；填 TP（和 PP） |
 | `AUTO_PLACEMENT_PD_MULTI_NODE` | 400 | 自动放置的 PD 实例必须一台节点放得下；带 `followers` 的实例要自己写节点（`params.role` 是哪个角色） |
@@ -1043,6 +1054,7 @@ runveil（udocker）节点拉取镜像时，agent 日志（`<state>/agent.log`�
 | `ACQUISITION_CANDIDATE_STALE` | 400 / 409 | 请求指定的保存存储已不存在或不再存有模型，或所选权重来源已不在模板里；重新评估，服务端不会替换 |
 | `MODEL_SOURCE_UNAVAILABLE` | 409 | 本地模型在目标节点没有可用来源，或来源校验失败；查看错误详情，不将它等同于公网下载超时 |
 | `TEMPLATE_MODEL_MISMATCH` | 400 | 模板部署指定的模型（`params.model_id`）的仓库 ID 与模板任何一个权重来源都对不上（`params.repo_id`、`params.revision` 是模板解析出的来源）；平台不会改用别的模型。选该仓库的模型；本地模型可在模型详情里把来源 ID 改成模板的仓库 ID |
+| `TEMPLATE_IMAGE_PINNED_BY_RUNTIME_PATCH` | 警告 | 该模板的档位会在容器内修补引擎，补丁按它自己镜像（`params.image`）的源码编写；所选镜像（`params.requested`）可能被补丁拒绝而启动失败。平台只警告不阻止；除非确认补丁适用于该镜像，否则请用模板自带的镜像 |
 | `MANUAL_COMMAND_RANK_BLIND` | 400 | 多机或 PD 部署的手工命令由所有 rank 共用，却没有引用能区分 rank 的变量（`params.missing` 列出缺少的变量名）。多机要引用 `${GPUWORKS_NODE_RANK}` 或 `${GPUWORKS_HEADLESS}`，PD 要引用 `${GPUWORKS_PD_ROLE}`；从部署页「编辑命令文本」得到的脚本初稿已经引用。已存下的部署不受影响 |
 | `COMMAND_OVERRIDE_RANK_BLIND` | 400 | 多机或 PD 部署在 `engine` 或 `image-entry` 模式下覆盖了 Cmd：这段参数会原样交给每个 rank，没有变量能区分它们。清空 Cmd 覆盖，或改用手工命令。 |
 | `DISTRIBUTED_*`、`REPLICAS_*`、`MASTER_PORT_INVALID` | 400 | 多机 / 副本参数不合法 |
@@ -1062,6 +1074,7 @@ runveil（udocker）节点拉取镜像时，agent 日志（`<state>/agent.log`�
 | `no_healthy_gpu` | 节点自己的卡都不在能服务的健康级别 |
 | `no_owned_gpu` | 节点没有归本机使用的卡：一张都没有，或全部直通给虚拟机、厂商驱动不可用、被其他驱动持有 |
 | `gpus_held_outside_platform` | 卡本身健康，但能用的（指定了卡时为指定的卡）都被平台外的进程占着，且这个部署不能与它们共用：整卡部署，或外部进程的显存未知，或节点 agent 较旧 |
+| `gpus_held` | 能用的卡（指定了卡时为指定的卡）被扩展模块保持在停止调度状态；参数 `gpus`、`count`、`node`。管理员不能对这些卡启用调度，卡在节点 GPU 表里显示扩展给出的原因；按原因处理扩展那一侧，或换节点 |
 | `held_outside_platform_sleep` | 只有与平台外进程共用的卡能放这个带显存上限的部署，但它会休眠：这些进程还在时，它睡下后在这张卡上唤不醒。处理：关掉这个部署的休眠，或换一张卡 |
 | `held_outside_platform_not_allowed` | 能放这个带显存上限部署的卡上有平台外进程，而这些卡没有启用调度，本部署也没有手工选它们；参数 `gpus`、`count`、`node`。节点上另有干净卡但忙或放不下时也报这个码。处理：在节点的 GPU 表里对这些卡启用调度，或手工选这张卡 |
 | `foreign_shared_gpus_used` | 方案说明（不是拒绝）：所选卡里有 `count` 张与平台外进程共用（外部占用最多 `foreign_gib` GiB），因为没有干净卡放得下 |
@@ -1245,6 +1258,7 @@ SGLang 默认的 `/health` 会向调度器提交一个只生成 1 个 token 的�
 | 404 | `MODEL_NOT_FOUND` | 模型名不是部署的 served name（`GET /v1/models` 可列出），或部署已停止 |
 | 404 | `MODEL_ROUTE_NOT_EXPOSED` | 只有试验场（`/api/v1/playground/v1/*`）会做 contract 检查并返回它：该部署的 API contract 不包含这个接口（比如对 Chat 模型调 `/v1/embeddings`）；`GET /api/v1/playground/openapi.json` 可查看它声明了哪些接口。公网 `/v1` 不做这项检查，请求原样转给引擎，由引擎自己返回 404 等 |
 | 404 | `ROUTE_NOT_FOUND` | 访问的监听地址不承载推理 API，检查 `listen.gateway` |
+| 429 + `Retry-After: 1` | `MODEL_BUSY` | 请求带了 `X-GPUWorks-If-Busy: reject`，而模型的副本都没有空闲运行位；稍后重发，或去掉这个头让请求照常排队，见[繁忙婉拒](../reference/openai-gateway.md#繁忙婉拒) |
 | 503 | `MODEL_ASLEEP` | 没有可服务的清醒副本；在控制台或调用 `POST /api/v1/deployments/{id}/wake` 唤醒，定时计划或等位中的唤醒也会唤醒它，见[调度分析](scheduling-center.md)。休眠意图发出后，所选实例即不再接收新请求 |
 | 503 | `MODEL_NOT_READY`、`DEPLOYMENT_START_FAILED` | 没有 running 副本：还在启动、失败或被停止；看实例状态 |
 | 503 | `MODEL_NODE_OFFLINE` | 副本在运行，但所在节点的 agent 没有连接；看节点连接状态 |

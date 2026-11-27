@@ -28,6 +28,7 @@ export type TimelineState = "awake" | "asleep" | "switching" | "starting";
 export interface TimelineSegment {
   deployment_id: number;
   deployment: string;
+  deployment_deleted?: boolean;
   instance: string;
   state: TimelineState;
   level?: number;
@@ -63,6 +64,7 @@ export interface TimelineSummary {
 export interface TimelineSummaryDeployment {
   deployment_id: number;
   deployment: string;
+  deployment_deleted?: boolean;
   awake_seconds: number;
   asleep_seconds: number;
   switching_seconds: number;

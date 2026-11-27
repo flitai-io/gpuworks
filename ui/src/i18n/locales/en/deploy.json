@@ -91,6 +91,7 @@
     "cloneFailed": "Failed to clone template: {{detail}}"
   },
   "warning": {
+    "DGPU_STARTUP_MEMORY": "At {{utilization}}, Decode graph capture may run out of memory in the {{quota_gib}} GiB dGPU slice. You can continue, or use {{max_utilization}} or lower to leave more room.",
     "EXTRA_ARGS_ENGINE_UNVERIFIED": "GPUWorks cannot confirm that {{flag}} is supported by this {{engine}} image; it is listed for {{documented_engine}}. Check the image's supported arguments. The argument will be passed through unchanged.",
     "W1": "W1: Max batched tokens ({{max_num_batched_tokens}}) exceeds max sequences × context length ({{max_num_seqs}} × {{max_model_len}}) and may waste VRAM.",
     "W2": "W2: The KV memory tier ({{kv_offloading_size}} GiB) is no larger than the estimated GPU KV cache ({{estimated_gpu_kv_gib}} GiB), so its hit rate may not improve.",
@@ -106,6 +107,7 @@
     "IMAGE_OVERRIDE_INCOMPATIBLE": "The selected image {{image}} is incompatible with the node vendor, framework, operating system, or host architecture. Choose a different image or node.",
     "IMAGE_ENGINE_DEFAULT_INCOMPATIBLE": "The default engine image {{image}} supports NVIDIA CUDA nodes only and is incompatible with the selected node. Choose a different image or node.",
     "IMAGE_OVERRIDE_UNVERIFIED": "The selected image {{image}} is not in the Image Catalog, so its compatibility with this node cannot be verified automatically.",
+    "TEMPLATE_IMAGE_PINNED_BY_RUNTIME_PATCH": "This template patches the engine inside its container, pinned to its own image {{image}}. {{requested}} may fail the start; use {{image}} unless you know the patch applies to the other image.",
     "MANUAL_DRAFT_UNAVAILABLE": "The ranks of this deployment differ in something no platform variable carries (for example the RDMA devices of two nodes), so no single script can start them all and the command cannot be edited. Each rank's resolved launch is shown separately below.",
     "COMPUTE_NETWORK_FALLBACK": "Some of the selected nodes are on a compute network, but not all of them are on the same one, so this deployment runs over the management network. To avoid it, put every node on one compute network, or turn off compute traffic on the management network for those nodes.",
     "IMAGE_DIGEST_UNVERIFIED": "The selected image {{image}} is pinned to a digest. The node's actual local digest will be used; verify it on the confirmation page.",
@@ -151,6 +153,7 @@
     "storage_not_found": "Storage {{storage}}, which the deployment is limited to, no longer exists. Change the deployment’s storage node condition."
   },
   "schedule": {
+    "dgpu_startup_memory": "Deployment was refused at {{utilization}}: Decode graph capture needs more headroom in this {{quota_gib}} GiB dGPU slice. Use {{max_utilization}} or lower.",
     "runtime_unavailable": "The node has no available container runtime; install and start Docker (with NVIDIA Container Toolkit for NVIDIA GPUs). The built-in runveil needs a Linux node on x86_64 or arm64.",
     "serving_unavailable": "The node has no network that may carry serving traffic: it is on no serving network, and its management network may not carry serving. Allow serving on the node's management network, attach a serving network, or select another node.",
     "dtype_unsupported": "The current GPU architecture does not support the selected precision or quantization method. Adjust the precision or quantization method, or choose another GPU.",
@@ -173,6 +176,7 @@
     "no_healthy_gpu": "None of the node's own accelerators is at a health level that can serve. Resolve the GPU warnings or faults, or select another node.",
     "no_owned_gpu": "The node has no accelerator of its own to use: they may all be passed through to virtual machines, have no driver bound, or be held by another driver. Check the node's accelerator list or select another node.",
     "gpus_held_outside_platform": "The accelerators this deployment may use are occupied by processes outside the platform. Free them, enable scheduling on those cards, or select another node.",
+    "gpus_held": "GPU {{gpus}} on this node are held out of scheduling by an extension, and an administrator cannot enable scheduling on them. The node's GPU tab shows the extension's reason; act on it there, or select another node.",
     "held_outside_platform_sleep": "The card this deployment could share is also used by processes outside the platform, and a deployment that sleeps could not be woken there while they run. Turn off sleep for this deployment or select another card.",
     "held_outside_platform_not_allowed": "GPU {{gpus}} on this node are used by processes outside the platform and scheduling is not enabled on them. Enable scheduling on them in the node's GPU tab, or pick the cards yourself.",
     "no_free_gpu": "The selected node has no free GPUs. Stop or sleep another deployment, or select another node.",
@@ -211,8 +215,7 @@
     "runtime_unreported": "{{vendor}} requires {{required}}; this node has not reported all required runtime facts.",
     "accelerator_feature_unsupported": "{{vendor}} does not support {{feature}}. Change the launch options or select another accelerator.",
     "accelerator_device_selection_required": "{{vendor}} requires an explicit GPU assignment before launch.",
-    "launch_features_unknown": "The launch command could not be inspected for {{vendor}}. Use a recognized engine entrypoint or structured launch parameters.",
-    "dgpu_startup_memory": "$t(common:apiError.DGPU_STARTUP_MEMORY)"
+    "launch_features_unknown": "The launch command could not be inspected for {{vendor}}. Use a recognized engine entrypoint or structured launch parameters."
   },
   "placementReason": {
     "node_cordoned": "The node is cordoned. Resume scheduling on it or choose another node.",
@@ -289,6 +292,13 @@
     "next": "Next",
     "saveInferenceTemplate": "Save as Inference Template",
     "deploy": "Deploy"
+  },
+  "sourceTest": {
+    "testing": "Testing the source…",
+    "served": "{{host}} serves this model.",
+    "present": "The model's files are already in place; nothing is downloaded.",
+    "failed": "The source could not be tested: {{detail}}",
+    "again": "Test again"
   },
   "weightSourceModal": {
     "localDescription": "This template references registered local weights and does not include the model files. Choose the registered model to deploy.",
@@ -721,6 +731,7 @@
         "gpu_not_schedulable": "This GPU is not schedulable; check its device state",
         "gpu_index_unavailable": "This GPU has no usable device index",
         "gpus_held_outside_platform": "This GPU is held by a process outside the platform",
+        "gpus_held": "This GPU is held out of scheduling by an extension",
         "held_outside_platform_sleep": "This GPU is shared with a process outside the platform; a deployment that sleeps cannot be placed on it",
         "no_free_gpu": "This GPU has no free resources",
         "gpu_whole_allocated": "This GPU is fully allocated to an inference service",
@@ -845,6 +856,7 @@
       "imageUnavailable": "No runtime image is available",
       "imageUnavailableDescription": "No runtime image matches the current model, engine, and accelerator.",
       "imageOptions": "Selectable runtime images",
+      "imageOtherEngines": "Other engines; choosing one switches the engine",
       "imageOptionTitle": {
         "node_cached": "Cached on this node",
         "template_image": "Template image",

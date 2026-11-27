@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,6 +20,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/cluster"
 	"gpuworks.ai/gpuworks/internal/server/cluster/identity"
 	"gpuworks.ai/gpuworks/internal/server/store"
+	"gpuworks.ai/gpuworks/internal/testenv/testport"
 )
 
 // This fixture uses actual authorized native voters and production pinned mTLS
@@ -52,14 +52,7 @@ func newReplicationInvalidationFixture(t *testing.T, ctx context.Context, interc
 	var certificates, privateKeys [][]byte
 	policy := identity.TransportPolicy{ClusterID: clusterID, CAFingerprint: pin, Revision: 1}
 	for range 3 {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		address := ln.Addr().String()
-		if err := ln.Close(); err != nil {
-			t.Fatal(err)
-		}
+		address := testport.Address(t)
 		key, err := identity.NewMemberKey()
 		if err != nil {
 			t.Fatal(err)

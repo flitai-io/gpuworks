@@ -364,7 +364,7 @@ test("the Kubernetes cluster tab is reached with the arrows like any other and s
   const tab = (name: string) => screen.getByRole("tab", { name });
   tab("Other").focus();
   await user.keyboard("{ArrowRight}");
-  await waitFor(() => assert.deepEqual(footerButtons(), [k.drawer.cancel, k.drawer.submit]));
+  await waitFor(() => assert.deepEqual(footerButtons(), [k.drawer.cancel, k.precheck.open, k.drawer.submit]));
   assert.equal(await choice.en.chosenType(), K8S);
   assert.equal(platformSelects().length, 0);
   // The tabs are the stop before the cluster form's first field: the way back to the vendors is two keys.
@@ -406,8 +406,8 @@ test("the Kubernetes cluster tab puts the cluster form in place of the vendor's,
   assert.equal(within(forms[0]).queryAllByLabelText(/^API Key/).length, 0, "the vendor's fields are gone with its form");
   assert.equal(forms[0].contains(within(dialog()).getByLabelText(new RegExp(`^${k.drawer.serverUrl}`))), true);
   assert.equal(forms[0].contains(screen.getByRole("tablist")), false, "the platform choice stays with the dialog");
-  // The cluster form's own buttons: its Connect submits that form.
-  assert.deepEqual(footerButtons(), [k.drawer.cancel, k.drawer.submit]);
+  // The cluster form's own buttons: Pre-check (recommended, never required) and Connect, which submits that form.
+  assert.deepEqual(footerButtons(), [k.drawer.cancel, k.precheck.open, k.drawer.submit]);
   const connect = within(dialog()).getByRole("button", { name: k.drawer.submit }) as HTMLButtonElement;
   assert.equal(connect.type, "submit");
   assert.ok(connect.form === forms[0], "the Connect button belongs to the cluster form");
@@ -436,7 +436,7 @@ test("opened on Kubernetes the dialog is on the cluster form even when the serve
   // One type is still shown as a tab: it says what the form below is for.
   assert.deepEqual(typeTabs(), [[K8S, true]]);
   assert.equal(platformSelects().length, 0);
-  assert.deepEqual(footerButtons(), [k.drawer.cancel, k.drawer.submit]);
+  assert.deepEqual(footerButtons(), [k.drawer.cancel, k.precheck.open, k.drawer.submit]);
 
   // The page never asks this of a viewer; if it did, the dialog falls back to the first vendor.
   cleanup();
@@ -471,7 +471,7 @@ test("in Chinese the platform types, their vendors and what Kubernetes connects 
   ]));
   assert.equal(within(dialog()).queryAllByText(/更省事/).length, 0);
   assert.equal(platformSelects().length, 0);
-  assert.deepEqual(footerButtons(), ["取消", "接入"]);
+  assert.deepEqual(footerButtons(), ["取消", "预检查", "接入"]);
   assert.equal(document.body.textContent?.includes("{{"), false, "no sentence is left with an unfilled placeholder");
 
   await choice.zh.pickType(user, "公有云");
@@ -535,5 +535,5 @@ test("the Kubernetes tab is the category the server marks as added with the clus
   await waitFor(() => assert.deepEqual(fieldLabels().slice(0, 4), [p.config.type, ...CLUSTER_FIELDS]));
   assert.deepEqual(typeTabs(), [["Public cloud", false], [K8S, true]]);
   assert.deepEqual(connects("It connects"), [["Kubernetes", p.config.howOwnCluster]]);
-  assert.deepEqual(footerButtons(), [k.drawer.cancel, k.drawer.submit]);
+  assert.deepEqual(footerButtons(), [k.drawer.cancel, k.precheck.open, k.drawer.submit]);
 });

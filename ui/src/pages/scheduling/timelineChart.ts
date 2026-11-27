@@ -137,19 +137,19 @@ export interface Lane {
 export function lanesOf(segments: TimelineSegment[], stats: TimelineDeployment[], summary: TimelineSummary[] = []): Lane[] {
   const rows = new Map(stats.map((row) => [row.deployment_id, row]));
   const lanes = new Map<number, Lane>();
-  const laneOf = (deploymentID: number, name: string): Lane => {
+  const laneOf = (deploymentID: number, name: string, deleted?: boolean): Lane => {
     let lane = lanes.get(deploymentID);
     if (!lane) {
       const row = rows.get(deploymentID);
-      lane = { deploymentID, deployment: name, policy: row?.yield_policy || "never", deleted: row?.deployment_deleted ?? false, summary: [], segments: [] };
+      lane = { deploymentID, deployment: name, policy: row?.yield_policy || "never", deleted: deleted ?? row?.deployment_deleted ?? false, summary: [], segments: [] };
       lanes.set(deploymentID, lane);
     }
     return lane;
   };
   for (const slice of summary) {
-    for (const deployment of slice.deployments) laneOf(deployment.deployment_id, deployment.deployment).summary.push({ slice, deployment });
+    for (const deployment of slice.deployments) laneOf(deployment.deployment_id, deployment.deployment, deployment.deployment_deleted).summary.push({ slice, deployment });
   }
-  for (const segment of segments) laneOf(segment.deployment_id, segment.deployment).segments.push(segment);
+  for (const segment of segments) laneOf(segment.deployment_id, segment.deployment, segment.deployment_deleted).segments.push(segment);
   return [...lanes.values()];
 }
 

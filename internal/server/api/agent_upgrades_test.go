@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/agentupgrade"
@@ -263,6 +264,54 @@ func TestServerUpgradeUsesAgentUpgradeGate(t *testing.T) {
 		rec := r.do(http.MethodPost, "/api/v1/updates/server/upload", "application/octet-stream", "archive")
 		if rec.Code != 409 || len(server.archives) != 0 {
 			t.Fatalf("server upgrade bypassed active run: %d %s", rec.Code, rec.Body)
+		}
+		// The refusal says what the upgrade waits for, as a code and params
+		// the console words itself: here a batch with two nodes still queued.
+		for _, want := range []string{`"code":"SERVER_UPGRADE_WAITS_FOR_AGENT_BATCH"`, `"run_id":1`, `"queued":2`, `"reason":"AGENT_UPGRADE_ACTIVE"`} {
+			if !strings.Contains(rec.Body.String(), want) {
+				t.Fatalf("refusal lacks %s: %s", want, rec.Body)
+			}
+		}
+	})
+	t.Run("an attempt in flight names its node and how long it can last", func(t *testing.T) {
+		r, _ := newAgentUpgradeAPIRig(t)
+		_, body := previewUpgradeRequest(t, r)
+		if rec := r.do(http.MethodPost, "/api/v1/agent-upgrades", "application/json", body); rec.Code != 202 {
+			t.Fatalf("create %d %s", rec.Code, rec.Body)
+		}
+		items, err := r.store.AgentUpgradeItems(1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var queued *store.AgentUpgradeItem
+		for index := range items {
+			if items[index].Phase == "queued" {
+				queued = &items[index]
+				break
+			}
+		}
+		if queued == nil {
+			t.Fatalf("no queued item in %+v", items)
+		}
+		now := time.Now().UTC()
+		if claimed, err := r.store.ClaimAgentUpgrade(queued.ID, "old-"+queued.NodeUUID, now, now.Add(17*time.Minute), now.Add(-5*time.Minute)); err != nil || !claimed {
+			t.Fatalf("claim = %v, %v", claimed, err)
+		}
+		// Stopping cancels the node still queued and leaves the one in flight
+		// observed: what the server waits for is then that one attempt.
+		if rec := r.do(http.MethodPost, "/api/v1/agent-upgrades/1/stop", "application/json", ""); rec.Code != 202 {
+			t.Fatalf("stop %d %s", rec.Code, rec.Body)
+		}
+		r.deps.Server = &upgradingServer{}
+		r.router = Router(r.deps)
+		rec := r.do(http.MethodPost, "/api/v1/updates/server/upload", "application/octet-stream", "archive")
+		if rec.Code != 409 {
+			t.Fatalf("server upgrade bypassed an attempt in flight: %d %s", rec.Code, rec.Body)
+		}
+		for _, want := range []string{`"code":"SERVER_UPGRADE_WAITS_FOR_AGENT"`, `"node":"` + queued.NodeUUID + `"`, `"minutes":22`, `"run_id":1`} {
+			if !strings.Contains(rec.Body.String(), want) {
+				t.Fatalf("refusal lacks %s: %s", want, rec.Body)
+			}
 		}
 	})
 	t.Run("rejected server installation releases maintenance gate", func(t *testing.T) {

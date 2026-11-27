@@ -21,7 +21,7 @@ import (
 func (p *Proxy) serveConcurrentPrefill(w http.ResponseWriter, r *http.Request, tgtp *target, deploymentID uint) (bool, func()) {
 	noop := func() {}
 	route := tgtp.pd
-	lease := p.pickPrefill(route, tgtp.affinity, tgtp.nodeUUID, nil)
+	lease := p.pickPrefill(route, tgtp.affinity, tgtp.nodeUUID, nil, admissionFrom(r.Context()))
 	if lease == nil || lease.c.kvHost == "" || lease.c.kvPort == 0 {
 		reason := pdFallbackNoPrefill
 		if lease != nil {

@@ -360,6 +360,23 @@ type TemplateWeightModels struct {
 	Sources []TemplateWeightMatch `json:"sources"`
 }
 
+// WeightSourceProbe answers GET /inference-templates/weight-source-probe:
+// whether the deploy form may register and deploy from one declared weight
+// source. The form does not judge the outcome itself; it shows Reason and
+// follows Proceed.
+type WeightSourceProbe struct {
+	// Proceed: the source served the repository, or its files are in place.
+	Proceed bool `json:"proceed"`
+	// Present: choosing the source reuses a registered model whose files are
+	// ready on a node or in a shared storage; the site was then not asked.
+	Present bool `json:"present,omitempty"`
+	// Host is the address that served the repository, when one did.
+	Host string `json:"host,omitempty"`
+	// Reason is why Proceed is false, with the codes a registration's
+	// metadata_notice carries (Model.MetadataNotice).
+	Reason *ProductMessage `json:"reason,omitempty"`
+}
+
 // TemplateWeightMatch is one declared source, in the spec's order, and the
 // registered model a choice of that source reuses: the newest one from the
 // same provider that serves it. Absent when the source would be registered.

@@ -282,6 +282,20 @@
           "image": "acme/adapter:latest",
           "reason": "template_image",
           "compatible": true
+        },
+        {
+          "image": "gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "callable",
+          "engine_version": "1.0"
+        },
+        {
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-r5",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "callable",
+          "engine_version": "0.1.38"
         }
       ]
     },

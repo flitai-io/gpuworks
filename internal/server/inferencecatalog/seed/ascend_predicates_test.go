@@ -96,14 +96,12 @@ func TestInheritedA3SpecsMatchTheir910BOriginal(t *testing.T) {
 	}
 	intentionalArgDifferences := map[string]string{
 		"qwen/qwen3-vl-8b-instruct/bf16-vllm-ascend-a3-4eac0a8b":            "TP1 needs the measured 196608-token cap",
-		"google/gemma-3-4b-it/bf16-sglang-ascend-a3-4cdeb491":               "A3 graph capture hangs; eager mode passed text and image chat",
 		"google/gemma-4-26b-a4b-it/bf16-vllm-ascend-a3-d8ff96c2":            "A3 graph capture fails; eager mode passed text and image chat",
 		"zai-org/glm-4.5v/bf16-sglang-ascend-a3-36013872":                   "A3 graph capture stalls across ranks; eager mode passed image chat",
 		"qwen/qwen3-next-80b-a3b-instruct/int8-sglang-ascend-a3-7d129784":   "A3 NCCL graph capture stalls; eager mode passed chat",
 		"qwen/qwen3-vl-30b-a3b-instruct/bf16-sglang-ascend-a3-8659b2c8":     "A3 graph capture stalls; eager mode passed text and image chat",
 		"qwen/qwen3-235b-a22b/int8-vllm-ascend-a3-abf48ff4":                 "16-rank ACL graph capture exhausts notify resources; eager mode passed chat",
 		"qwen/qwen3.6-35b-a3b/bf16-sglang-ascend-a3-67436760":               "A3 graph capture stalls; eager mode passed text and image chat",
-		"openbmb/minicpm3-4b/bf16-sglang-ascend-a3-25156446":                "A3 graph capture aborts the child; eager mode passed chat",
 		"openbmb/minicpm-v-4_5/int4-sglang-ascend-a3-8fe71b3c":              "AWQ must leave the unquantized vision tower and resampler out; eager mode passed text and image chat",
 		"qwen/qwen3-30b-a3b-instruct-2507/bf16-sglang-ascend-a3-04996b03":   "A3 graph capture did not become healthy; eager mode passed chat",
 		"qwen/qwen3-omni-30b-a3b-instruct/bf16-sglang-ascend-a3-68c174cb":   "A3 graph capture did not become healthy; eager mode passed chat",

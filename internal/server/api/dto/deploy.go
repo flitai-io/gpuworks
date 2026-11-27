@@ -39,15 +39,18 @@ type Model struct {
 	// Storages lists the model's copies in shared storages.
 	Storages []ModelStoragePresence `json:"storages,omitempty"`
 	// MetadataNotice is set on a registration's answer only, when the
-	// management node read no metadata: it could not reach any address the
-	// rules give it (MODEL_METADATA_UNREACHABLE), or the rules forbid it
-	// every address (MODEL_METADATA_FORBIDDEN). The model is registered
-	// either way.
+	// management node read no metadata: the site said why
+	// (MODEL_REPO_NOT_FOUND, MODEL_REVISION_NOT_FOUND,
+	// MODEL_REPO_ACCESS_DENIED), it could not reach any address the rules
+	// give it (MODEL_METADATA_UNREACHABLE), or the rules forbid it every
+	// address (MODEL_METADATA_FORBIDDEN). The model is registered either way.
 	MetadataNotice *ProductMessage `json:"metadata_notice,omitempty"`
 }
 
 // Deployment is the API view of a deployment.
 type Deployment struct {
+	// Warnings is populated on create when the launch has an advisory.
+	Warnings                 []messages.Warning    `json:"warnings,omitempty"`
 	Operations               []DeploymentOperation `json:"operations"`
 	ID                       uint                  `json:"id"`
 	TemplateID               uint                  `json:"template_id,omitempty"`

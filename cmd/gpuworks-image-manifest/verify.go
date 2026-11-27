@@ -33,7 +33,8 @@ const manifestAccept = "application/vnd.oci.image.index.v1+json," +
 	"application/vnd.docker.distribution.manifest.v2+json"
 
 type verifier struct {
-	client *http.Client
+	pinnedSources map[string]string
+	client        *http.Client
 	// endpoint maps a registry host to the base URL its v2 API is served at.
 	endpoint func(host string) string
 	attempts int
@@ -81,10 +82,42 @@ type verifyReport struct {
 // refResult is one reference's outcome: its platform manifests by platform
 // (an image without an index is keyed "") and what was wrong with it.
 type refResult struct {
+	digest    string
 	ref       string
 	platforms map[string]string
 	blobs     int
 	problems  []string
+}
+
+// Release publication only needs registry metadata to validate the immutable
+// source pins. The full verifier also checks platform manifests and layers.
+func verifyPublicationPins(ctx context.Context, body []byte, v *verifier) (int, error) {
+	m, err := manifest.Parse(body)
+	if err != nil {
+		return 0, err
+	}
+	checked := 0
+	for _, s := range m.Series {
+		for _, r := range s.Versions {
+			if r.RegistryDigest == "" {
+				continue
+			}
+			ref := v.pinnedSources[r.Name]
+			host, repo, tag, err := splitRef(ref)
+			if err != nil {
+				return checked, err
+			}
+			actual, err := v.resolve(ctx, host, repo, tag)
+			if err != nil {
+				return checked, fmt.Errorf("%s: %w", ref, err)
+			}
+			if actual != r.RegistryDigest {
+				return checked, fmt.Errorf("%s: registry digest %s, matrix pins %s", ref, actual, r.RegistryDigest)
+			}
+			checked++
+		}
+	}
+	return checked, nil
 }
 
 func verifyManifest(ctx context.Context, data []byte, v *verifier) (verifyReport, error) {
@@ -92,12 +125,16 @@ func verifyManifest(ctx context.Context, data []byte, v *verifier) (verifyReport
 	if err != nil {
 		return verifyReport{}, err
 	}
-	type entry struct{ canonical, ref string }
+	type entry struct{ canonical, ref, digest, pinRef string }
 	var entries []entry
 	for _, series := range m.Series {
 		for _, version := range series.Versions {
+			pinRef := version.ImageRef
+			if origin := v.pinnedSources[version.Name]; origin != "" {
+				pinRef = origin
+			}
 			for _, ref := range append([]string{version.ImageRef}, version.RegistrySources...) {
-				entries = append(entries, entry{canonical: version.ImageRef, ref: ref})
+				entries = append(entries, entry{canonical: version.ImageRef, ref: ref, digest: version.RegistryDigest, pinRef: pinRef})
 			}
 		}
 	}
@@ -127,6 +164,9 @@ func verifyManifest(ctx context.Context, data []byte, v *verifier) (verifyReport
 	var report verifyReport
 	for _, e := range entries {
 		result := results[e.ref]
+		if e.digest != "" && e.ref == e.pinRef && result.digest != "" && result.digest != e.digest {
+			report.Problems = append(report.Problems, fmt.Sprintf("%s: registry digest %s, matrix pins %s", e.ref, result.digest, e.digest))
+		}
 		report.Refs++
 		report.Platforms += len(result.platforms)
 		report.Blobs += result.blobs
@@ -212,6 +252,7 @@ func (v *verifier) checkRef(ctx context.Context, ref string) refResult {
 		result.problems = append(result.problems, err.Error())
 		return result
 	}
+	result.digest = digest
 	top, err := v.body(ctx, host, repo, digest)
 	if err != nil {
 		result.problems = append(result.problems, err.Error())

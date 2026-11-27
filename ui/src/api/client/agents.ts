@@ -18,6 +18,4 @@ export const agentsApi = {
     getJSON<AgentUpgradePage<AgentUpgradeItem>>(`/api/v1/agent-upgrades/${id}/items?page=${page}&page_size=${pageSize}${state ? `&state=${encodeURIComponent(state)}` : ""}`),
   stopAgentUpgrade: (id: number) => sendJSON<AgentUpgradeRun>("POST", `/api/v1/agent-upgrades/${id}/stop`),
   continueAgentUpgradePreview: (id: number) => sendJSON<AgentUpgradePreview>("POST", `/api/v1/agent-upgrades/${id}/continue-preview`),
-  releaseAgentUpgrade: (id: number, uuid: string, note: string) =>
-    sendJSON<void>("POST", `/api/v1/agent-upgrades/${id}/items/${encodeURIComponent(uuid)}/release`, { note }),
 };

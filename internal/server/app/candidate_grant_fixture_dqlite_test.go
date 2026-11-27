@@ -8,7 +8,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,6 +23,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/cluster"
 	"gpuworks.ai/gpuworks/internal/server/cluster/identity"
 	"gpuworks.ai/gpuworks/internal/server/store"
+	"gpuworks.ai/gpuworks/internal/testenv/testport"
 )
 
 type candidateGrantFixture struct {
@@ -37,8 +37,12 @@ type candidateGrantFixture struct {
 	keys         []string
 	pairs        []tls.Certificate
 	requests     atomic.Int64
-	mu           sync.Mutex
-	before       func()
+	// asked counts every request each member's material endpoint received;
+	// down makes a member's endpoint drop its connections unanswered.
+	asked  [3]atomic.Int64
+	down   [3]atomic.Bool
+	mu     sync.Mutex
+	before func()
 }
 
 // The fixture owns actual authorized native voters and production mTLS batch
@@ -77,14 +81,7 @@ func newCandidateGrantFixtureWithSourceID(t *testing.T, ctx context.Context, sou
 	var certificates, privateKeys [][]byte
 	policy := identity.TransportPolicy{ClusterID: clusterID, CAFingerprint: pin, Revision: 1}
 	for range 3 {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		address := ln.Addr().String()
-		if err := ln.Close(); err != nil {
-			t.Fatal(err)
-		}
+		address := testport.Address(t)
 		key, err := identity.NewMemberKey()
 		if err != nil {
 			t.Fatal(err)
@@ -216,6 +213,15 @@ func newCandidateGrantFixtureWithSourceID(t *testing.T, ctx context.Context, sou
 		f.receivers = append(f.receivers, receiver)
 		handler := enrollmentMaterialHandlerWithReceiver(bundle, st, http.NotFoundHandler(), nil, receiver)
 		server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			f.asked[i].Add(1)
+			if f.down[i].Load() {
+				if hijacker, ok := w.(http.Hijacker); ok {
+					if conn, _, err := hijacker.Hijack(); err == nil {
+						_ = conn.Close()
+						return
+					}
+				}
+			}
 			if r.Method == http.MethodPost && r.URL.Path == materialBatchPath {
 				f.requests.Add(1)
 				f.mu.Lock()
@@ -252,28 +258,39 @@ func newCandidateGrantFixtureWithSourceID(t *testing.T, ctx context.Context, sou
 		}
 	}
 	for source := 1; source < 3; source++ {
-		manifest := materialManifest{Version: materialManifestVersion, ClusterID: clusterID, SourceMemberID: f.databases[source].ID, SourceKey: f.keys[source], Classes: slices.Clone(requiredMaterialClasses), Files: []materialManifestFile{
-			{Class: MaterialAgentOverride, Path: "dl/tiny-agent", SHA256: materialTestDigest(override), Bytes: int64(len(override))},
-			{Class: MaterialMasterSecret, Path: "master.key", SHA256: materialTestDigest(master), Bytes: int64(len(master))},
-		}}
-		slices.SortFunc(manifest.Files, func(a, b materialManifestFile) int { return strings.Compare(string(a.Class), string(b.Class)) })
-		raw, err := json.Marshal(manifest)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := parseMaterialManifest(raw, expected, manifest.SourceMemberID, manifest.SourceKey); err != nil {
-			t.Fatal(err)
-		}
-		for i := range f.receivers {
-			f.put(t, ctx, i, raw)
-		}
-		pointer := store.MaterialManifestRecord{SourceMemberID: int64(manifest.SourceMemberID), ClusterID: clusterID, SourceKey: f.keys[source], Digest: materialTestDigest(raw), Bytes: int64(len(raw)), RecordedAt: now}
-		if err := f.stores[0].DB().WithContext(ctx).Create(&pointer).Error; err != nil {
-			t.Fatal(err)
-		}
-		f.pointers = append(f.pointers, pointer)
+		f.pointers = append(f.pointers, f.publish(t, ctx, source))
 	}
 	return f
+}
+
+// publish records a member as a source of the fixture's two material files:
+// its manifest is put on every member and its pointer written to the
+// database. The fixture publishes the second and third member; a test that
+// needs the first as a source as well calls it.
+func (f *candidateGrantFixture) publish(t *testing.T, ctx context.Context, source int) store.MaterialManifestRecord {
+	t.Helper()
+	master, override := []byte("shared tiny master"), []byte("tiny agent override")
+	expected := f.expected()
+	manifest := materialManifest{Version: materialManifestVersion, ClusterID: expected.ClusterID, SourceMemberID: f.databases[source].ID, SourceKey: f.keys[source], Classes: slices.Clone(requiredMaterialClasses), Files: []materialManifestFile{
+		{Class: MaterialAgentOverride, Path: "dl/tiny-agent", SHA256: materialTestDigest(override), Bytes: int64(len(override))},
+		{Class: MaterialMasterSecret, Path: "master.key", SHA256: materialTestDigest(master), Bytes: int64(len(master))},
+	}}
+	slices.SortFunc(manifest.Files, func(a, b materialManifestFile) int { return strings.Compare(string(a.Class), string(b.Class)) })
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parseMaterialManifest(raw, expected, manifest.SourceMemberID, manifest.SourceKey); err != nil {
+		t.Fatal(err)
+	}
+	for i := range f.receivers {
+		f.put(t, ctx, i, raw)
+	}
+	pointer := store.MaterialManifestRecord{SourceMemberID: int64(manifest.SourceMemberID), ClusterID: expected.ClusterID, SourceKey: f.keys[source], Digest: materialTestDigest(raw), Bytes: int64(len(raw)), RecordedAt: time.Now().UTC()}
+	if err := f.stores[0].DB().WithContext(ctx).Create(&pointer).Error; err != nil {
+		t.Fatal(err)
+	}
+	return pointer
 }
 
 func (f *candidateGrantFixture) put(t *testing.T, ctx context.Context, index int, body []byte) {

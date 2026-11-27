@@ -364,10 +364,13 @@ test("every refused docker arg shows beside the docker args field, not only the 
     "the --network error sits beside it too, not overwritten by the next one",
   );
   // The evaluation summary says the draft did not pass instead of staying
-  // blank while every error sits on a field.
-  const summary = screen
-    .getByText(i18n.t("deploy:summary.fieldErrors", { count: 2 }))
-    .closest('[role="alert"]');
+  // blank while every error sits on a field. It is looked up with the shared
+  // wait budget: the field errors can render a commit before the summary, and
+  // a synchronous getByText fails on a loaded runner exactly then (job
+  // 139724800235).
+  const summary = (
+    await screen.findByText(i18n.t("deploy:summary.fieldErrors", { count: 2 }))
+  ).closest('[role="alert"]');
   assert.ok(summary, "the summary names how many settings need changing");
 });
 

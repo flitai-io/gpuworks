@@ -11,11 +11,11 @@ func (p *Proxy) selectStatus(modelName string) (*store.Deployment, target, int, 
 }
 
 func (p *Proxy) selectScopedStatus(scope *store.APIKeyIdentity, modelName, affinity string) (*store.Deployment, target, int, string, bool) {
-	dep, tgt, rejection, asleep := p.selectScopedDeploymentInstance(scope, modelName, affinity)
+	dep, tgt, rejection, asleep := p.selectScopedDeploymentInstance(scope, modelName, affinity, admission{})
 	return dep, tgt, rejection.status(), rejection.message(), asleep
 }
 
 func (p *Proxy) selectDistributedStatus(dep *store.Deployment, insts []store.Instance, modelName, affinity string) (target, int, string, bool) {
-	tgt, rejection, asleep := p.selectDistributedInstance(dep, insts, modelName, affinity)
+	tgt, rejection, asleep := p.selectDistributedInstance(dep, insts, modelName, affinity, admission{})
 	return tgt, rejection.status(), rejection.message(), asleep
 }

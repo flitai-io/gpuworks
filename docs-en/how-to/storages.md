@@ -178,7 +178,7 @@ Common remaining items and what to do:
 - A model kept only in a node cache with no copy on the NFS: put the model back on the NFS first, or delete that copy on the node.
 - An unreachable node: wait for it to reconnect. An offline node with no cache of this storage does not stop the switch.
 
-Files left in an old cache directory after a directory change are no longer managed anyway (see [Default Policy and Node Overrides](#default-policy-and-node-overrides)) and do not stop the switch; delete them on the node if needed. The cache directory and limit settings are kept and apply again if you switch back to **NFS with local cache**.
+Files left in an old cache directory after a directory change are no longer managed anyway (see [Default Policy and Node Overrides](#默认策略与节点例外)) and do not stop the switch; delete them on the node if needed. The cache directory and limit settings are kept and apply again if you switch back to **NFS with local cache**.
 
 ## Share One NFS Across Multiple gpuworks Installations
 
@@ -226,8 +226,12 @@ Images are not stored in storage; they reside in each node's container runtime. 
   - The same NFS server backs another mount on this node that still answers or is in use: a forced unmount could interrupt that one. The agent acts only when all of its mounts of that server on the node are stuck and unused; otherwise remount by hand on the node when the other mount can be interrupted.
   - 8 calls the agent gave up are still blocked: it stops forcing the mount off; fix the NFS server or the mount, then restart the agent.
   When the remount after a forced unmount fails, the storage shows as failed (server unreachable) and the mount is retried at every check; no task writes to the directory until it is available again.
-- **Pre-start check**: before creating a container, the agent checks whether the model directory exists, with a 2-second time limit. If it does not exist, startup fails with `MODEL_PATH_UNAVAILABLE`;
-  the engine is not started against an empty directory.
+- **Pre-start check**: before creating a container, the agent checks the model directory, with a 2-second time limit; the engine is not started against an empty directory. A directory that does not exist fails the start with `MODEL_PATH_MISSING`;
+  one that does not answer within the limit, or is not a directory, fails it with `MODEL_PATH_UNAVAILABLE`.
+- **A record without its files**: when a model copy on a node's own disk (local storage, node cache) is deleted by hand or lost in a reinstall, the platform's record still says "cached".
+  When a start fails with `MODEL_PATH_MISSING`, the platform takes back the record this instance read on that node, and the model is acquired again under the deployment's source rules before the next start;
+  that one failure counts toward the retry limit as usual. When a node reconnects, the agent also checks the copies it received from other nodes and reports a directory that is gone; the platform takes that record back too.
+  A record of a manually registered path is not deleted; it becomes "absent". A shared storage's record is not taken back because one node cannot see it; the storage rescan decides that.
 - **The node model root directory** is now part of local storage. To switch disks, change the local storage path or add new local storage; it is no longer configured separately on the node.
 
 <!-- translation-source-sha256: 1883433ec089697a91004ce376497f3dd0e72d84e8ea90c1f08ab28ade8eae4f # Use Storage: Local Directories, NFS, and NFS With Local Cache -->
@@ -244,4 +248,4 @@ Images are not stored in storage; they reside in each node's container runtime. 
 <!-- translation-source-sha256: ea9a5e17e1cac6fc5224092e5b9f78aa66050ce9300e304f0b6063be4100f12d ## Share One NFS Across Multiple gpuworks Installations -->
 <!-- translation-source-sha256: 350e82793b2a15216d295619b822fb1245d1bf18a050355d613e4b0f3e0872f5 ## Browse Files in Storage -->
 <!-- translation-source-sha256: 5cc3b267c055b2cd86821fe0651951bff9386c5f779252a9ab45e69d652cb282 ## Disable Storage -->
-<!-- translation-source-sha256: fafc498adcc775fa5519f5c83a10dba9f6b08fd84de807d2e1cff38e5a1f4cbc ## Notes -->
+<!-- translation-source-sha256: ee78fee4359e13da5d6b11a8caeaf02bfd99f4d8a9661235a3f8d9e0e595b619 ## Notes -->

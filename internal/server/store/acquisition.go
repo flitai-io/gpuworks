@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 
 	"gorm.io/gorm"
@@ -27,12 +28,33 @@ func (s *Store) ResolveImageRef(ref string) (*Image, error) {
 	if ref == "" {
 		return nil, ErrNotFound
 	}
+	// Templates can spell the same Docker Hub reference with or without the
+	// host. Try these indexed canonical identities before searching mirrors.
+	key := pullref.RefKey(ref)
+	needle := key
+	if path, ok := strings.CutPrefix(key, "docker.io/"); ok {
+		needle = path
+		if short, ok := strings.CutPrefix(path, "library/"); ok && !strings.Contains(short, "/") {
+			needle = short
+		}
+		// A path like mirror.example/team/image addresses another registry
+		// when used without docker.io/. Only try equivalent spellings.
+		aliases := slices.DeleteFunc([]string{key, path, needle}, func(candidate string) bool { return !pullref.SameRef(candidate, ref) })
+		var alias Image
+		err := s.reader().Where("image_ref IN ?", aliases).Order("id ASC").First(&alias).Error
+		if err == nil {
+			return &alias, nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	}
 	// Only a row whose registry_sources document contains the reference can
 	// declare it; the database narrows to those before any is decoded. A
 	// reference the catalog does not know (a template's own image) is asked
 	// about on every launch and replay, and must not cost a decode of the
 	// whole catalog each time.
-	pattern := "%" + likeEscaper.Replace(ref) + "%"
+	pattern := "%" + likeEscaper.Replace(needle) + "%"
 	var rows []Image
 	if err := s.reader().Where(`registry_sources LIKE ? ESCAPE '\'`, pattern).Order("id ASC").Find(&rows).Error; err != nil {
 		return nil, err
@@ -49,7 +71,7 @@ func (s *Store) ResolveImageRef(ref string) (*Image, error) {
 			if source == "" || pullref.IsArchiveURL(source) {
 				continue
 			}
-			if source == ref {
+			if pullref.SameRef(source, ref) {
 				return &row, nil
 			}
 		}

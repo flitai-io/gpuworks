@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/messages"
@@ -293,4 +294,77 @@ func (h *fixedHolder) Hold(f store.NodeHoldFacts) store.NodeHold {
 		return store.NodeHold{}
 	}
 	return store.NodeHold{Code: "MAINT_WINDOW", Fallback: "maintenance until 06:00", Params: map[string]any{"until": "06:00"}}
+}
+
+type fixedCardHolder struct {
+	source store.SchedulingSource
+	ident  string
+}
+
+func (h *fixedCardHolder) Source() store.SchedulingSource { return h.source }
+
+func (h *fixedCardHolder) HoldCard(f store.CardHoldFacts) store.CardHold {
+	if f.Ident != h.ident {
+		return store.CardHold{}
+	}
+	return store.CardHold{Code: "CARD_CAP", Fallback: "beyond the fleet's card capacity", Params: map[string]any{"cap": 1}}
+}
+
+// A held card answers an enable with 409 and the holder's code and still
+// takes an operator's stop; the node's view says which card is held, by
+// whom and why, and offers only the stop. A card nobody holds carries
+// neither field on the wire.
+func TestEnablingAHeldCardIs409WithTheHoldersCode(t *testing.T) {
+	h, st, _ := schedulingFixture(t)
+	ok := true
+	cards := []proto.GPUInfo{
+		{Index: 0, UUID: "GPU-a", Vendor: "nvidia", PCIeBDF: "0000:3f:00.0", MemoryTotalBytes: 24 << 30, Healthy: true},
+		{Index: 1, UUID: "GPU-b", Vendor: "nvidia", PCIeBDF: "0000:40:00.0", MemoryTotalBytes: 24 << 30, Healthy: true},
+	}
+	if err := st.AddCardSchedulingHolder(&fixedCardHolder{source: "cap", ident: accelerator.CardIdent("GPU-b", "0000:40:00.0")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdateNodeStatus("drain-a", proto.NodeStatus{GPUProbeOK: &ok, GPUs: cards, Sys: proto.SysInfo{RuntimeDriver: "docker"}}); err != nil {
+		t.Fatal(err)
+	}
+	status, body := callNode(t, h.setCardScheduling, http.MethodPut, "drain-a", "/gpus/scheduling", `{"pcie_bdf":"0000:40:00.0","scheduling":"schedulable"}`)
+	want := `{"code":"CARD_CAP","error":"card is held out of scheduling: beyond the fleet's card capacity","params":{"cap":1}}`
+	if status != http.StatusConflict || strings.TrimSpace(body) != want {
+		t.Fatalf("enable a held card = %d %s, want 409 %s", status, body, want)
+	}
+	node, err := st.NodeWithGPUs("drain-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := h.nodeView(node)
+	type wireCard struct {
+		PCIeBDF           string   `json:"pcie_bdf"`
+		Schedulable       bool     `json:"schedulable"`
+		SchedulingActions []string `json:"scheduling_actions,omitempty"`
+		SchedulingHeldBy  string   `json:"scheduling_held_by,omitempty"`
+		SchedulingHold    any      `json:"scheduling_hold,omitempty"`
+	}
+	var got []wireCard
+	for _, g := range view.GPUs {
+		raw, _ := json.Marshal(g)
+		var c wireCard
+		if err := json.Unmarshal(raw, &c); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, c)
+	}
+	raw, _ := json.Marshal(got)
+	if string(raw) != `[{"pcie_bdf":"0000:3f:00.0","schedulable":true,"scheduling_actions":["stopped"]},`+
+		`{"pcie_bdf":"0000:40:00.0","schedulable":false,"scheduling_actions":["stopped"],"scheduling_held_by":"cap","scheduling_hold":{"code":"CARD_CAP","message":"beyond the fleet's card capacity","params":{"cap":1}}}]` {
+		t.Fatalf("cards = %s", raw)
+	}
+	for _, g := range view.GPUs {
+		raw, _ := json.Marshal(g)
+		if g.PCIeBDF == "0000:3f:00.0" && (strings.Contains(string(raw), "scheduling_held_by") || strings.Contains(string(raw), "scheduling_hold")) {
+			t.Fatalf("a free card carries hold fields: %s", raw)
+		}
+	}
+	if status, body := callNode(t, h.setCardScheduling, http.MethodPut, "drain-a", "/gpus/scheduling", `{"pcie_bdf":"0000:40:00.0","scheduling":"stopped"}`); status != http.StatusOK || !strings.Contains(body, `"scheduling_held_by":"cap"`) {
+		t.Fatalf("stop a held card = %d %s", status, body)
+	}
 }

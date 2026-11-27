@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,6 +18,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/store"
+	"gpuworks.ai/gpuworks/internal/testenv/testport"
 )
 
 func TestClosedMaterialStartupSignedTLSUnavailable(t *testing.T) {
@@ -162,14 +162,7 @@ func TestClosedMaterialStartupDrainsCanceledLookup(t *testing.T) {
 
 func TestClosedMaterialStartupTransitionsToRealReceiver(t *testing.T) {
 	f, s := newClosedDiscoveryRouteFixture(t)
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.bundle.info.ListenAddress = ln.Addr().String()
-	if err := ln.Close(); err != nil {
-		t.Fatal(err)
-	}
+	f.bundle.info.ListenAddress = testport.Address(t)
 	server := startClosedDiscoveryFixture(t, f, s)
 	client := f.client(t, &f.requesterPair)
 	content := []byte("canonical bytes after actual receiver construction")

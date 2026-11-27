@@ -1380,6 +1380,19 @@ var migrations = []migration{
 	{Version: 244, Name: "maintenance_resume_open", Apply: migrateMaintenanceResumeOpen},
 	{Version: 245, Name: "catalog_gc_barrier", Apply: migrateCatalogGCBarrier},
 	{Version: 246, Name: "drop_node_placement_policy", Apply: dropNodePlacementPolicy},
+	{Version: 247, Name: "canceled_downloads_without_owner", Apply: clearCanceledDownloadOwners},
+	// 248 is allocated to the image size migration. Keep 249 reserved for
+	// review builds that recorded image_manual_selection: migrateDB skips
+	// recorded versions even when the migration name changes.
+	{Version: 250, Name: "image_auto_selection", Apply: migrateImageAutoSelection},
+	{Version: 251, Name: "gpu_scheduling_held_by", Apply: func(db *gorm.DB) error {
+		if !db.Migrator().HasTable(&GPU{}) || db.Migrator().HasColumn(&GPU{}, "SchedulingHeldBy") {
+			return nil
+		}
+		// Empty on every existing card: no card holder has answered for
+		// it yet, and the next report or hold pass asks them.
+		return db.Migrator().AddColumn(&GPU{}, "SchedulingHeldBy")
+	}},
 }
 
 // modelFileNetworkColumns are the columns migrations 76 and 77 added to

@@ -362,6 +362,8 @@ func (p *Proxy) AuthenticatedHandler() http.HandlerFunc {
 }
 
 func (p *Proxy) serveAuthenticated(w http.ResponseWriter, r *http.Request) {
+	// Only a generation can be refused for being busy (busy_reject.go).
+	declared := takeBusyDeclaration(r)
 	r, ok := p.decidePriority(w, r)
 	if !ok {
 		return
@@ -380,7 +382,9 @@ func (p *Proxy) serveAuthenticated(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, r, ErrorModelRequired, nil)
 		return
 	}
-
+	if declared {
+		r = r.WithContext(withBusyDeclaration(r.Context(), true))
+	}
 	p.serveModel(w, r, modelName)
 }
 
@@ -391,8 +395,7 @@ func (p *Proxy) serveModel(w http.ResponseWriter, r *http.Request, modelName str
 		dep, tgt, rejection, asleep = p.holdForWake(r.Context(), w, modelName, affinity, dep)
 	}
 	if rejection != nil {
-		p.acct.RecordImmediate(deploymentIDOrZero(dep), rejection.status(), asleep)
-		writeRefusal(w, r, rejection)
+		p.answerRefusal(w, r, deploymentIDOrZero(dep), rejection, asleep)
 		return
 	}
 	p.serveResolved(w, r, modelName, affinity, dep, tgt)

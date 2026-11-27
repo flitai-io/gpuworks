@@ -45,7 +45,7 @@ func RenderUnit(cfg UnitConfig) string {
 	var b strings.Builder
 	b.WriteString("[Unit]\n")
 	b.WriteString("Description=gpuworks control plane\n")
-	b.WriteString("Documentation=https://gpuworks.zstack.ai/\n")
+	b.WriteString("Documentation=https://flitai.io/docs/gpuworks\n")
 	b.WriteString("After=network-online.target\n")
 	fmt.Fprintf(&b, "RequiresMountsFor=%s\n", systemdQuote(cfg.DataDir))
 	b.WriteString("\n[Service]\n")

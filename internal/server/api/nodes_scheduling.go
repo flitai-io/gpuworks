@@ -102,6 +102,11 @@ func (a *apiHandlers) setCardScheduling(w http.ResponseWriter, r *http.Request) 
 	case errors.Is(err, store.ErrCardNotOwned):
 		writeProductError(w, http.StatusConflict, ErrorCardNotOwned, "the card is not this node's to use", map[string]any{"pcie_bdf": req.PCIeBDF})
 		return
+	case errors.Is(err, store.ErrCardHeld):
+		// An extension holds the card: the error carries its code and
+		// params, which the operator is shown.
+		writeErr(w, http.StatusConflict, err)
+		return
 	case err != nil:
 		writeErr(w, http.StatusInternalServerError, err)
 		return

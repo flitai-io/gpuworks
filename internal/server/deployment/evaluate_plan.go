@@ -111,7 +111,6 @@ func (s *Service) evaluatePlan(env evaluatePlanEnv) (evaluatePlanResult, bool) {
 			// Why it does not fit, as the controller would say it: waiting for
 			// holders to yield, or for sleepers' cards, reads as such.
 			result.Message = previewPlan.Output.Refusal(node, yieldpolicy.Policy{Yield: requestYield(req.YieldPolicy)})
-			env.errs.add("", dgpuStartupMemoryError(result.Message))
 		}
 		resp.Plan = result
 		if len(previewPlan.Output.Eviction) > 0 {
@@ -161,6 +160,10 @@ func (r *evaluateState) planRanks() bool {
 
 	// Estimate + schedule (shared with the controller).
 	gpuCount := len(r.placement.GPUIndexes)
+	if r.errs.add("placement.gpus", RequestCardsOnNode(r.req, r.node)) {
+		r.writeFieldErrors()
+		return false
+	}
 	resolver := templatePlacementResolver(r.selection.Placement)
 	templateArgs := append([]string(nil), r.launch.TemplateResidual...)
 	templateEnv := cloneStringMap(r.selection.Env)

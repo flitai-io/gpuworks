@@ -70,13 +70,13 @@ export default function AgentUpgradeManager({ isAdmin, requestedRunID, selectedN
       {isAdmin && <Button disabled={!selectedNodeUUIDs.length || previewLoading || busy || !!blocker} onClick={() => {
         selectedSnapshot.current = [...selectedNodeUUIDs]; loadPreview();
       }}>{t("batchUpgrade.selected")}</Button>}
-      <Button danger={!!blocker} onClick={() => { setHistoryOpen(true); refresh(); }}>{t("batchUpgrade.history")}</Button>
+      <Button onClick={() => { setHistoryOpen(true); refresh(); }}>{t("batchUpgrade.history")}</Button>
     </Space>
     <Modal open={historyOpen} title={t("batchUpgrade.history")} onCancel={() => setHistoryOpen(false)} footer={<Button onClick={refresh}>{t("batchUpgrade.refresh")}</Button>} width={850}>
       <Space direction="vertical" style={{ width: "100%" }}>
         {runs.loading && <Spin aria-label={t("batchUpgrade.loadingRuns")} />}
         {runs.error && <Alert type="error" showIcon message={runs.error.message} />}
-        {blocker && <Alert type="warning" showIcon message={t(blocker.reason === "unconfirmed" ? "batchUpgrade.blocked" : "batchUpgrade.activeBlock", { name: blocker.name || blocker.node_uuid })} action={<Button size="small" onClick={() => { setRunID(blocker.run_id); setHistoryOpen(false); }}>{t("batchUpgrade.details")}</Button>} />}
+        {blocker && <Alert type={blocker.reason === "unconfirmed" ? "info" : "warning"} showIcon message={t(blocker.reason === "unconfirmed" ? "batchUpgrade.blocked" : "batchUpgrade.activeBlock", { name: blocker.name || blocker.node_uuid })} action={<Button size="small" onClick={() => { setRunID(blocker.run_id); setHistoryOpen(false); }}>{t("batchUpgrade.details")}</Button>} />}
         {latest ? <>
           <Space wrap><Typography.Text>{t("batchUpgrade.target", { version: latest.target_version })}</Typography.Text><Typography.Text>{t(`batchUpgrade.runState.${latest.state}`, { defaultValue: t("batchUpgrade.runState.unknown") })}</Typography.Text><Button onClick={() => { setRunID(latest.id); setHistoryOpen(false); }}>{t("batchUpgrade.details")}</Button></Space>
           <UpgradeSummary counts={latest.counts} />

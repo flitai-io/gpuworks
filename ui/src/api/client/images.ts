@@ -49,8 +49,9 @@ export const imagesApi = {
     return (await res.json()) as ImageCatalogSyncResult;
   },
   // The catalog comes from the distribution channel; the request has no body.
-  syncImages: () =>
-    sendJSON<ImageCatalogSyncResult>("POST", "/api/v1/images/sync"),
+  // An uploaded catalog is replaced only with replaceUploaded (409 IMAGE_CATALOG_UPLOADED without it).
+  syncImages: (replaceUploaded = false) =>
+    sendJSON<ImageCatalogSyncResult>("POST", `/api/v1/images/sync${replaceUploaded ? "?replace_uploaded=true" : ""}`),
   runtimeImages: (node: string, namespace: string, signal?: AbortSignal) =>
     getJSON<RuntimeImageList>(`/api/v1/images/nodes/${encodeURIComponent(node)}/runtime-images?namespace=${encodeURIComponent(namespace)}`, signal),
   inspectRuntimeImage: (selection: NodeImageSelection, signal?: AbortSignal) =>

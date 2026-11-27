@@ -4,7 +4,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"gpuworks.ai/gpuworks/internal/server/cluster"
@@ -26,10 +25,7 @@ type singleMemberDatabase struct {
 // ErrClusterUpgradeSingleMember refuses an upgrade step that changes the
 // cluster on a member that runs as a single member: such a step belongs to
 // an established member's session, which owns the migration.
-var ErrClusterUpgradeSingleMember error = clusterUpgradeRefusal{
-	code:   ClusterUpgradeRefusedSingleMember,
-	reason: "this member runs as a single member: with more members in the cluster, restart it once before it takes part in an upgrade; a cluster of one member applies its migrations when its new program starts and needs no upgrade step",
-}
+var ErrClusterUpgradeSingleMember = refuseClusterUpgrade("this member runs as a single member: with more members in the cluster, restart it once before it takes part in an upgrade; a cluster of one member applies its migrations when its new program starts and needs no upgrade step")
 
 // SingleMemberObservation answers the observation questions an established
 // member's session answers (the quorum facts, the discovery of the members,
@@ -99,29 +95,4 @@ func bindSingleMemberDatabase(st *Store, db *cluster.Database, raftDir string) {
 		singleMemberDatabases.Delete(st)
 		return closeDatabase()
 	}
-}
-
-// ClusterUpgradeRefusedSingleMember is the code of the refusal a member that
-// runs as a single member gives to a step that changes the cluster.
-const ClusterUpgradeRefusedSingleMember = "single_member"
-
-// clusterUpgradeRefusal is a refusal a caller acts on, not only reports: it
-// carries a stable code beside its reason, for a caller to tell this refusal
-// apart. The enterprise upgrade command is to restart a member that answers
-// "single_member" before the upgrade's first step (GWKS-487).
-type clusterUpgradeRefusal struct{ code, reason string }
-
-func (r clusterUpgradeRefusal) Error() string {
-	return ErrClusterUpgradeRefused.Error() + ": " + r.reason
-}
-func (r clusterUpgradeRefusal) Unwrap() error { return ErrClusterUpgradeRefused }
-
-// ClusterUpgradeRefusalCode is the stable code of a refusal that carries
-// one, and empty for every other error.
-func ClusterUpgradeRefusalCode(err error) string {
-	var refusal clusterUpgradeRefusal
-	if errors.As(err, &refusal) {
-		return refusal.code
-	}
-	return ""
 }

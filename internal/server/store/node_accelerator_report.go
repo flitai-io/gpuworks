@@ -111,17 +111,34 @@ func acceleratorReportUpdates(updates map[string]any, st proto.NodeStatus, now t
 // an operator's allowance on one expired: a report that changed a card's
 // facts (its health, a process outside the platform, the card set) changes
 // what placement decides on.
-func reconcileAcceleratorReport(tx *gorm.DB, nodeID uint, st proto.NodeStatus, adopt cardAdoption) (cardsChanged bool, err error) {
-	renumbered, cardsChanged, err := reconcileGPUs(tx, nodeID, st.GPUs, adopt)
+//
+// holdOf is the card holders' answer for a card (cardHoldSource); the
+// report stores it on the card's row. factsChanged is whether a card's
+// hold facts (CardHoldFacts) changed: a card added or removed, or one
+// whose index, vendor or ownership changed.
+func reconcileAcceleratorReport(tx *gorm.DB, nodeID uint, st proto.NodeStatus, adopt cardAdoption, holdOf func(*GPU) SchedulingSource) (cards cardReconcile, err error) {
+	cards, err = reconcileGPUs(tx, nodeID, st.GPUs, adopt, holdOf)
 	if err != nil {
-		return false, err
+		return cardReconcile{}, err
 	}
-	if !renumbered {
+	if !cards.renumbered {
 		// Only a probe that moved a card can have moved an instance's
 		// cards, so a fleet whose cards stay put pays nothing for this.
-		return cardsChanged, nil
+		return cards, nil
 	}
-	return cardsChanged, realignInstanceGPUs(tx, nodeID, st.GPUs)
+	return cards, realignInstanceGPUs(tx, nodeID, st.GPUs)
+}
+
+// cardReconcile is what a report's write of the cards changed.
+type cardReconcile struct {
+	// renumbered: a card already known now carries another device index.
+	renumbered bool
+	// changed: a card row was created, rewritten or deleted.
+	changed bool
+	// factsChanged: a card's hold facts changed (CardHoldFacts).
+	factsChanged bool
+	// holdsChanged: a card was held or released by a card holder.
+	holdsChanged bool
 }
 
 // newCardRow is the one place a card's row is built from a probe's report.
@@ -174,6 +191,11 @@ var cardRowColumns = []string{
 	"MIGEnabled", "Ownership", "ForeignProcesses",
 	"HealthStatus", "HealthCode", "HealthMessage",
 }
+
+// cardReportColumns are what an update of a card already known writes: the
+// report's facts (cardRowColumns) and the card holders' answer, which the
+// report asks again (card_hold.go).
+var cardReportColumns = append(append([]string(nil), cardRowColumns...), "SchedulingHeldBy")
 
 // presenceOnlyRow is the row to write when only PCI could be read: the
 // card's stored facts, with what PCI read laid over them. It starts from
@@ -249,10 +271,10 @@ func cardIdent(g proto.GPUInfo) string {
 // every card after one that appears or goes. Keying on it is what used to
 // make this function juggle rows through negative indexes to get past its
 // own unique constraint.
-func reconcileGPUs(tx *gorm.DB, nodeID uint, gpus []proto.GPUInfo, adopt cardAdoption) (renumbered, changed bool, err error) {
+func reconcileGPUs(tx *gorm.DB, nodeID uint, gpus []proto.GPUInfo, adopt cardAdoption, holdOf func(*GPU) SchedulingSource) (out cardReconcile, err error) {
 	var current []GPU
 	if err := tx.Where("node_id = ?", nodeID).Find(&current).Error; err != nil {
-		return false, false, err
+		return cardReconcile{}, err
 	}
 	existing := make(map[string]GPU, len(current))
 	for _, row := range current {
@@ -265,10 +287,14 @@ func reconcileGPUs(tx *gorm.DB, nodeID uint, gpus []proto.GPUInfo, adopt cardAdo
 		row := newCardRow(nodeID, ident, g)
 		old, known := existing[ident]
 		if !known {
-			if err := tx.Create(&row).Error; err != nil {
-				return false, false, err
+			if holdOf != nil {
+				row.SchedulingHeldBy = holdOf(&row)
 			}
-			changed = true
+			if err := tx.Create(&row).Error; err != nil {
+				return cardReconcile{}, err
+			}
+			out.changed, out.factsChanged = true, true
+			out.holdsChanged = out.holdsChanged || row.HeldByHolder()
 			// A second card reporting the same key would otherwise take
 			// this path again and fail the unique index, and because the
 			// cards are written inside the node's own status transaction
@@ -282,7 +308,17 @@ func reconcileGPUs(tx *gorm.DB, nodeID uint, gpus []proto.GPUInfo, adopt cardAdo
 			// said about itself and takes only what PCI read.
 			row = presenceOnlyRow(old, row)
 		} else if old.Index != g.Index {
-			renumbered = true
+			out.renumbered = true
+		}
+		if old.Index != row.Index || old.Vendor != row.Vendor || old.Ownership != row.Ownership {
+			out.factsChanged = true
+		}
+		row.SchedulingHeldBy = SchedulingBySelf
+		if holdOf != nil {
+			row.SchedulingHeldBy = holdOf(&row)
+		}
+		if row.SchedulingHeldBy != old.SchedulingHeldBy {
+			out.holdsChanged = true
 		}
 		if sameCardRow(old, row) {
 			// Every node reports every minute and a card's facts rarely
@@ -290,26 +326,26 @@ func reconcileGPUs(tx *gorm.DB, nodeID uint, gpus []proto.GPUInfo, adopt cardAdo
 			// write per card per minute across the fleet.
 			continue
 		}
-		if err := tx.Model(&GPU{}).Where("id = ?", old.ID).Select(cardRowColumns).
+		if err := tx.Model(&GPU{}).Where("id = ?", old.ID).Select(cardReportColumns).
 			Updates(&row).Error; err != nil {
-			return false, false, err
+			return cardReconcile{}, err
 		}
-		changed = true
+		out.changed = true
 	}
 	for _, old := range current {
 		if !reported[old.Ident] {
 			if err := tx.Delete(&GPU{}, old.ID).Error; err != nil {
-				return false, false, err
+				return cardReconcile{}, err
 			}
-			changed = true
+			out.changed, out.factsChanged = true, true
 		}
 	}
-	return renumbered, changed, nil
+	return out, nil
 }
 
 // sameCardRow reports whether writing row over old would change any column
-// a report writes (cardRowColumns). The bookkeeping columns are not facts
-// of the card and are taken from old.
+// a report writes (cardReportColumns). The bookkeeping columns and the
+// operator's decisions are not facts of the card and are taken from old.
 func sameCardRow(old, row GPU) bool {
 	row.ID, row.CreatedAt, row.UpdatedAt = old.ID, old.CreatedAt, old.UpdatedAt
 	row.SchedulingStopped, row.SchedulingAllowedAt = old.SchedulingStopped, old.SchedulingAllowedAt

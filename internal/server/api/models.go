@@ -52,6 +52,8 @@ func (a *apiHandlers) createModel(w http.ResponseWriter, r *http.Request) {
 		WeightBytes     int64  `json:"weight_bytes"`
 		LogoData        string `json:"logo_data"`
 		BrowserMetadata bool   `json:"browser_metadata"`
+		// Force registers a repository its site says it does not have.
+		Force bool `json:"force"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
@@ -105,7 +107,16 @@ func (a *apiHandlers) createModel(w http.ResponseWriter, r *http.Request) {
 		// works before download. Network failures leave fields unknown, and the
 		// answer says why.
 		if meta, err := a.deployments().FetchModelMeta(r.Context(), req.Source, req.SourceID, req.Revision, "", ""); err == nil {
-			notice = a.metadataNotice(meta, req.Source, "")
+			notice = a.metadataNotice(meta, entity)
+			// A site that says it has no such repository or revision has
+			// nothing to register: the model would stay without metadata and
+			// without files to download. A site that gave no answer does not
+			// refuse anything, since an offline one still registers models
+			// whose files are copied in by hand.
+			if notice != nil && meta != nil && meta.Answer.Definite() && !req.Force {
+				writeProductError(w, http.StatusUnprocessableEntity, notice.Code, notice.Message, notice.Params)
+				return
+			}
 			a.applyFetchedMetadata(r.Context(), entity, meta)
 			// A registration without a chosen ref would otherwise follow a moving
 			// default branch: every node could download different bytes under the

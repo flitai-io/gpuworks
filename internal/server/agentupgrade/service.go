@@ -243,15 +243,89 @@ func (s *Service) UpgradeNode(ctx context.Context, uuid, actor string) (RunView,
 	return s.Create(ctx, CreateRequest{NodeUUIDs: p.NodeUUIDs, ExpectedTargetVersion: p.TargetVersion, ExpectedManifestFingerprint: p.ManifestFingerprint, IdempotencyKey: fmt.Sprintf("single-%s-%d", uuid, s.now().UnixNano()), RequestedBy: actor})
 }
 
-func (s *Service) BeginServerUpgrade() (func(bool), error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	blocker, err := s.blocker()
+// serverUpgradeBlocker is what a server upgrade has to wait for: an attempt
+// that holds the slot (in flight, or unconfirmed within the hold; both end by
+// themselves within a bounded time), or a queue that will still be dispatched.
+// A queue whose batch is paused, interrupted or stopped is not waited for: it
+// dispatches nothing until an administrator continues it, and the upgrade
+// would otherwise wait on a decision nobody was asked to make.
+func (s *Service) serverUpgradeBlocker() (*Blocker, error) {
+	item, err := s.st.AgentUpgradeBlocker(s.heldSince())
 	if err != nil {
 		return nil, err
 	}
-	if blocker != nil || s.maintenance {
-		return nil, &Error{Code: "AGENT_UPGRADE_ACTIVE", Detail: "finish or verify the outstanding Agent upgrade before upgrading the server"}
+	if item != nil {
+		// In flight it holds the slot until its deadline and then, if still
+		// unconfirmed, for the hold; unconfirmed, for what is left of the hold.
+		until := s.now().Add(s.cfg.TransferTimeout + s.cfg.ConfirmTimeout + s.cfg.UnconfirmedHold)
+		if item.Phase == "unconfirmed" && item.FinishedAt != nil {
+			until = item.FinishedAt.Add(s.cfg.UnconfirmedHold)
+		} else if item.DeadlineAt != nil {
+			until = item.DeadlineAt.Add(s.cfg.UnconfirmedHold)
+		}
+		minutes := int((until.Sub(s.now()) + time.Minute - 1) / time.Minute)
+		held := &Blocker{RunID: item.RunID, NodeUUID: item.NodeUUID, Name: item.Name, Reason: item.Phase, WaitMinutes: max(minutes, 1)}
+		// More nodes of a live batch are waiting behind this attempt: the
+		// server waits for the batch, not just for these minutes.
+		queue, err := s.liveQueue()
+		if err != nil {
+			return nil, err
+		}
+		if queue != nil {
+			return queue, nil
+		}
+		return held, nil
+	}
+	return s.liveQueue()
+}
+
+// liveQueue is the first batch that will still dispatch nodes (not paused,
+// interrupted or stopped) and how many it has queued, nil when none does.
+func (s *Service) liveQueue() (*Blocker, error) {
+	pending, err := s.st.AgentUpgradePendingItems()
+	if err != nil {
+		return nil, err
+	}
+	runs, err := s.st.AgentUpgradeRuns()
+	if err != nil {
+		return nil, err
+	}
+	live := map[uint]bool{}
+	for _, r := range runs {
+		live[r.ID] = r.PauseReason == "" && r.InterruptedReason == "" && r.StopRequestedAt == nil
+	}
+	var first *store.AgentUpgradeItem
+	queued := 0
+	for index := range pending {
+		i := &pending[index]
+		if i.Phase != "queued" || !live[i.RunID] {
+			continue
+		}
+		if first == nil {
+			first = i
+		}
+		if i.RunID == first.RunID {
+			queued++
+		}
+	}
+	if first == nil {
+		return nil, nil
+	}
+	return &Blocker{RunID: first.RunID, NodeUUID: first.NodeUUID, Name: first.Name, Reason: "active_run", Queued: queued}, nil
+}
+
+func (s *Service) BeginServerUpgrade() (func(bool), error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	blocker, err := s.serverUpgradeBlocker()
+	if err != nil {
+		return nil, err
+	}
+	if blocker != nil {
+		return nil, &Error{Code: "AGENT_UPGRADE_ACTIVE", Detail: "an Agent upgrade is still going on; the server can be upgraded once it has ended", Blocker: blocker}
+	}
+	if s.maintenance {
+		return nil, &Error{Code: "AGENT_UPGRADE_ACTIVE", Detail: "the server is upgrading"}
 	}
 	s.maintenance = true
 	var once sync.Once

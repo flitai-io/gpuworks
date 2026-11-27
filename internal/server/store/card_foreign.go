@@ -36,12 +36,13 @@ func (g GPU) ForeignBytes() (int64, bool) {
 // SharesMemoryWithForeign is whether a memory-limited partition may share
 // this card with the processes outside the platform that hold it, and what
 // they hold: a card of this node's own at a level that serves, not stopped
-// by an operator, held, and every holder's memory known (ForeignBytes). It
+// by an operator nor held by a card holder (card_hold.go), held, and every
+// holder's memory known (ForeignBytes). It
 // never makes the card take whole-card work - CanTakeWork keeps saying no -
 // and whether the node's agent keeps the holders reported once a partition
 // runs beside them is the planner's to ask (ADR 0068).
 func (g GPU) SharesMemoryWithForeign() (int64, bool) {
-	if !g.HeldOutsidePlatform() || g.SchedulingStopped || !accelerator.CardHealthy(g.Ownership, g.HealthStatus) {
+	if !g.HeldOutsidePlatform() || g.SchedulingStopped || g.HeldByHolder() || !accelerator.CardHealthy(g.Ownership, g.HealthStatus) {
 		return 0, false
 	}
 	bytes, known := g.ForeignBytes()

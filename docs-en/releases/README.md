@@ -7,6 +7,7 @@ For upgrade steps, see [Upgrades and Version Compatibility](../how-to/upgrade-an
 
 | Version | Release date | Type | Highlights |
 |---|---|---|---|
+| [v26.12.0](v26.12.0.md) | 2026-11-26 | First release of the line | Kubernetes and Slurm clusters connect as a whole, AMD and Kunlunxin accelerators, request priority, `/v1` requires an API key by default, save a deployment as an inference template |
 | [v26.11.4](v26.11.4.md) | 2026-11-18 | Patch release | SGLang instances no longer retired as unresponsive during long prefills (decode no longer loses its prefill under PD disaggregation), official inference template catalog read tolerantly, template platform variables accept the `GPUWORKS_` prefix |
 | [v26.11.3](v26.11.3.md) | 2026-11-12 | Patch release | Hygon cards reporting only `BW` match built-in templates, Hygon cards other than card 0 work under Docker/nerdctl, deployments no longer refused when the selected model and weight source disagree |
 | [v26.11.2](v26.11.2.md) | 2026-11-08 | Patch release | Private-network sources work by default, storage paths no longer limited to default directories, local models deploy with inference templates, benchmark metrics corrected for reasoning models, Go 1.26.10 |
@@ -26,6 +27,6 @@ upgrades from the console read the ed25519-signed release index. For a manual do
 and `SHA256SUMS` in the same directory lists the checksum of each platform's archive. The download sources keep every release's archives permanently and the most recent 30 nightly builds.
 
 <!-- translation-source-sha256: b15b632d1fffd668837bd63ef40a5fd5ac1ab4fb1443bb7fa67ef515cdbb4a1a # Release Notes -->
-<!-- translation-source-sha256: a8d74466b24083f06951a3d9dab579520dc351f3fd8ed6d4d8a8e420ffaf51d8 ## Versions -->
+<!-- translation-source-sha256: ef87bae392660aab21cc179396405b6d1a17c2c073495963e1e982478524760d ## Versions -->
 <!-- translation-source-sha256: 2356c69d50f2318a392ac496d2d7448ced9eb77e41975461dccd775a5a0a6b5b ## Version Numbers -->
 <!-- translation-source-sha256: eb06c57bf2a46137de22dad65edbdb35256e954664e8a5bedd6944afa74b35b1 ## Downloading and Verifying -->

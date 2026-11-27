@@ -19,6 +19,8 @@ export const modelsApi = {
     weight_bytes?: number;
     logo_data?: string;
     browser_metadata?: boolean;
+    /** Registers a repository its site says it does not have (422 MODEL_REPO_NOT_FOUND / MODEL_REVISION_NOT_FOUND without it). */
+    force?: boolean;
   }) => sendJSON<Model>("POST", "/api/v1/models", body),
   quickRegisterModel: (body: {
     source: string;

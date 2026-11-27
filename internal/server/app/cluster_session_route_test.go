@@ -17,6 +17,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/store"
+	"gpuworks.ai/gpuworks/internal/testenv/testport"
 )
 
 // recordingSessionHub is a member-session router that records what the route
@@ -158,12 +159,7 @@ func TestMemberSessionRouteFailuresAndFallbacks(t *testing.T) {
 		var journal bytes.Buffer
 		a := sessionRouteApp(t, &journal)
 		a.cfg.DataDir = t.TempDir()
-		probe, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		addr := probe.Addr().String()
-		_ = probe.Close()
+		addr := testport.Address(t)
 		a.store.NoteClusterSessionRoute(store.ClusterSessionRoute{ID: 7, Listen: addr, Secure: true})
 		hub := newRecordingSessionHub()
 		if stop, err := a.routeClusterMemberSessions(t.Context(), hub); stop != nil || err == nil {

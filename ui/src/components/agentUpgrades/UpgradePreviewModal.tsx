@@ -36,7 +36,7 @@ export default function UpgradePreviewModal({ open, preview, loading, busy, erro
         <ServerBuildSummary version={preview.target_version} build={preview.target_build} />
         <Typography.Paragraph>{t("batchUpgrade.targetSource")} <Typography.Link href="/settings#updates" target="_blank" rel="noopener noreferrer">{t("batchUpgrade.versionDetails")}</Typography.Link></Typography.Paragraph>
         <Typography.Text>{t("batchUpgrade.previewCounts", { total: preview.node_uuids.length, eligible, skipped: preview.node_uuids.length - eligible })}</Typography.Text>
-        {preview.blocked_by_item && <Alert type="warning" showIcon message={t(preview.blocked_by_item.reason === "unconfirmed" ? "batchUpgrade.blocked" : "batchUpgrade.activeBlock", { name: preview.blocked_by_item.name || preview.blocked_by_item.node_uuid })} />}
+        {preview.blocked_by_item && <Alert type={preview.blocked_by_item.reason === "unconfirmed" ? "info" : "warning"} showIcon message={t(preview.blocked_by_item.reason === "unconfirmed" ? "batchUpgrade.blocked" : "batchUpgrade.activeBlock", { name: preview.blocked_by_item.name || preview.blocked_by_item.node_uuid })} />}
         {!eligible && <Alert type="info" showIcon message={t("batchUpgrade.noEligible")} />}
         <Table<AgentUpgradeCandidate> size="small" rowKey="node_uuid" dataSource={preview.nodes} pagination={{ pageSize: 10, showSizeChanger: false }} columns={[
           { title: t("batchUpgrade.columns.node"), key: "node", render: (_, node) => <Space direction="vertical" size={0}><Typography.Text>{node.name || node.node_uuid}</Typography.Text><Typography.Text type="secondary">{node.node_uuid}</Typography.Text></Space> },

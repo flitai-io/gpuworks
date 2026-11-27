@@ -5,7 +5,6 @@ package app
 import (
 	"context"
 	"errors"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,6 +16,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/cluster"
 	"gpuworks.ai/gpuworks/internal/server/cluster/identity"
 	"gpuworks.ai/gpuworks/internal/server/store"
+	"gpuworks.ai/gpuworks/internal/testenv/testport"
 )
 
 func TestRuntimeDqliteAddressActivationRecoversPublication(t *testing.T) {
@@ -58,19 +58,7 @@ func TestRuntimeDqliteAddressActivationRecoversPublication(t *testing.T) {
 	if err := st.Close(); err != nil {
 		t.Fatal(err)
 	}
-	freeAddress := func() string {
-		t.Helper()
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		address := listener.Addr().String()
-		if err := listener.Close(); err != nil {
-			t.Fatal(err)
-		}
-		return address
-	}
-	address, wrongAddress := freeAddress(), freeAddress()
+	address, wrongAddress := testport.Address(t), testport.Address(t)
 	cut := errors.New("injected publication stop")
 	var expected cluster.Member
 	var intent addressActivationIntent

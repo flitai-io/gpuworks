@@ -3,9 +3,10 @@ import { useTranslation } from "react-i18next";
 import type {
   AcquisitionResult,
   ImageCatalogEntry,
+  ImageOption,
   ProductWarning,
 } from "../../api";
-import { deploymentEngineForImage } from "./useDeployImageState";
+import { engineDisplayName } from "../../engineLabels";
 import { warningText } from "./deployWarnings";
 import { useControlLocked } from "./DeployEditContext";
 
@@ -35,7 +36,7 @@ export default function DeployImageRow({
   const compatibleOptions = (image?.options || []).filter(
     (option) => option.compatible,
   );
-  const selectableOptions =
+  const selectableOptions: ImageOption[] =
     compatibleOptions.some((option) => option.image === canonicalImage) ||
     !canonicalImage
       ? compatibleOptions
@@ -44,6 +45,25 @@ export default function DeployImageRow({
           ...compatibleOptions,
         ];
   const effectiveImage = selectedImage || canonicalImage || "";
+  const entry = (option: ImageOption) => ({
+    value: option.image,
+    label: (
+      <span className="deploy-image-option">
+        <span>{option.image}</span>
+        {option.engine && (
+          <span className="deploy-image-option-engine">
+            {[engineDisplayName(option.engine), option.engine_version]
+              .filter(Boolean)
+              .join(" ")}
+          </span>
+        )}
+      </span>
+    ),
+  });
+  const ownEngine = selectableOptions.filter((option) => !option.selects_engine);
+  const otherEngines = selectableOptions.filter(
+    (option) => option.selects_engine,
+  );
 
   return (
     <div className="deploy-workbench-row">
@@ -54,21 +74,29 @@ export default function DeployImageRow({
         <AutoComplete
           aria-label={t("workbench.acquisition.imageOptions")}
           value={effectiveImage}
-          options={selectableOptions.map((option) => ({
-            value: option.image,
-            label: option.image,
-          }))}
+          options={[
+            ...ownEngine.map(entry),
+            ...(otherEngines.length
+              ? [
+                  {
+                    label: t("workbench.acquisition.imageOtherEngines"),
+                    options: otherEngines.map(entry),
+                  },
+                ]
+              : []),
+          ]}
           onChange={(value: string) => {
-            const catalogImage = images.find(
-              (candidate) =>
-                candidate.image_ref.toLowerCase() === value.toLowerCase(),
-            );
+            const same = (ref: string) =>
+              ref.toLowerCase() === value.toLowerCase();
+            // A typed reference is not among the options; the catalog entry
+            // then says which engine the image belongs to.
+            const engine =
+              otherEngines.find((option) => same(option.image))
+                ?.selects_engine ??
+              images.find((candidate) => same(candidate.image_ref))?.engine;
             // The image follows the engine; an edit cannot change the engine.
-            if (!templateID && catalogImage?.engine && !engineLocked) {
-              form.setFieldsValue({
-                image: value,
-                engine: deploymentEngineForImage(catalogImage.engine),
-              });
+            if (!templateID && engine && !engineLocked) {
+              form.setFieldsValue({ image: value, engine });
               return;
             }
             form.setFieldValue("image", value);

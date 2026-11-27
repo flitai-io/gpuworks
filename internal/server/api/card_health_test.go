@@ -151,7 +151,7 @@ func TestNodeHealthChecks(t *testing.T) {
 func TestNodeHealthChecksBeforeAnyReport(t *testing.T) {
 	a, _, _, _, _ := cardHealthFixture(t)
 	code, body := callNode(t, a.nodeHealthChecks, http.MethodGet, "drain-b", "/health-checks", "")
-	want := `{"node_uuid":"drain-b","online":true,"reports":false,"stale":true,"checks":[],"cards":[],"summary":{}}`
+	want := `{"node_uuid":"drain-b","online":true,"reports":false,"stale":true,"checks":[],"cards":[],"summary":{},"notice":{"code":"CARD_CHECKS_WAITING","level":"info"}}`
 	if code != http.StatusOK || strings.TrimSpace(body) != want {
 		t.Fatalf("= %d %s\nwant %s", code, body, want)
 	}

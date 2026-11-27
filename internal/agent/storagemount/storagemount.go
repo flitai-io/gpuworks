@@ -43,7 +43,10 @@ const (
 	ReasonNotRoot        = "not_root"
 	ReasonPathMissing    = "path_missing"
 	ReasonNotMounted     = "not_mounted"
-	ReasonOther          = "other"
+	// The agent mounts on its node from a pod, and the mount point is not a
+	// directory the two share (nodeview.go).
+	ReasonNotSharedWithNode = "not_shared_with_node"
+	ReasonOther             = "other"
 )
 
 // Reason codes of an unresponsive storage: what the agent will do about a
@@ -145,6 +148,14 @@ type Options struct {
 	// be blocked before the agent stops forcing its mount off; default 8.
 	StuckMaxAbandoned int
 	Now               func() time.Time // default time.Now
+	// NodeRoot is the node's root directory as this process sees it, set
+	// when Runner runs mount and umount in the node's mount namespace and
+	// the agent itself lives in another (an agent pod: "/proc/1/root").
+	// Empty when the agent runs in the node's own namespace.
+	NodeRoot string
+	// NodeMountinfoPath is the node's mount table when NodeRoot is set;
+	// default "/proc/1/mountinfo".
+	NodeMountinfoPath string
 	Logger            *slog.Logger
 }
 
@@ -174,6 +185,9 @@ func New(o Options) *Manager {
 	}
 	if o.MountinfoPath == "" {
 		o.MountinfoPath = "/proc/self/mountinfo"
+	}
+	if o.NodeRoot != "" && o.NodeMountinfoPath == "" {
+		o.NodeMountinfoPath = "/proc/1/mountinfo"
 	}
 	if o.Statfs == nil {
 		o.Statfs = defaultStatfs

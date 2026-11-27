@@ -51,7 +51,7 @@ Some recipes need a writable host directory at start: the session store and spil
 - New column `inference_specs.dirs` (migration 231), `dirs` on the template DTO and in the deployment snapshot, and `purpose: managed-dir` among the evaluation preview's mounts.
 - Protocol: `MountSpec.managed_dir`, `Hello.managed_dir_groups`, `DesiredState.released_dir_groups`, `StateUpdate.released_dir_deployments`, `PathUsage.shares_disk_with`, agent capability `mount.managed_dirs`, failure code `MANAGED_DIR_PREPARE_FAILED`, scheduling reasons `insufficient_managed_dir_disk` and `agent_capability_missing`, import error code `CATALOG_MOUNT_PATH_CONFLICT`.
 - An older agent's node takes no launch that declares `dirs`; it fits there once the node's agent is upgraded.
-- Syntax and behavior: [Inference Catalog model.yaml Syntax Reference](../reference/inference-catalog-spec.md#dirs-managed-writable-directories).
+- Syntax and behavior: [Inference Catalog model.yaml Syntax Reference](../reference/inference-catalog-spec.md#dirs托管的可写目录).
 
 <!-- translation-source-sha256: 12c202b0daac2bec7c82f6d21e948cbfb31434ce76a32dc77354284f237d149f # ADR 0077: Managed Writable Directories: Templates Declare `dirs`, One Mechanism with the KV Disk Tier -->
 <!-- translation-source-sha256: b797f4dfb83ef6f6d5166c87602ebb216c20a73e097b132b727382b203fbf7cd ## Background -->

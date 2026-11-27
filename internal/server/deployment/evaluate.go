@@ -207,7 +207,7 @@ func (r *evaluateState) finish() bool {
 		candidateReq.Image = r.resp.Image
 		admissionSelection := r.selection
 		admissionSelection.ExtraArgs = r.launch.TemplateResidual
-		if err := r.s.checkPoolCanEverFit(r.ctx, &candidateReq, r.reqs, r.eng, r.model, admissionSelection, r.placement, r.quick, r.launch.UserResidual, r.servedName, r.modelMount, r.componentMounts, r.requestOverrides); err != nil {
+		if _, err := r.s.checkPoolCanEverFit(r.ctx, &candidateReq, r.reqs, r.eng, r.model, admissionSelection, r.placement, r.quick, r.launch.UserResidual, r.servedName, r.modelMount, r.componentMounts, r.requestOverrides); err != nil {
 			r.out.admissionErr = err
 			r.errs.add("", err)
 		}

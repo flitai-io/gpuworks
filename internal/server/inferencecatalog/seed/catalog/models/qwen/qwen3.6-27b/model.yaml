@@ -171,6 +171,8 @@ specs:
   - qwen3
   - --mm-encoder-tp-mode
   - data
+  - --max-num-seqs
+  - '128'
   api:
     health_endpoint: /health
     operations:
@@ -477,6 +479,8 @@ specs:
   - qwen3
   - --mm-encoder-tp-mode
   - data
+  - --max-num-seqs
+  - '96'
   api:
     health_endpoint: /health
     operations:

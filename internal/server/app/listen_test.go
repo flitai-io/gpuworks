@@ -10,22 +10,25 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/serverconfig"
+	"gpuworks.ai/gpuworks/internal/testenv/testport"
 )
 
 func freePortFor(t *testing.T, ip string) string {
 	t.Helper()
+	// An address this machine does not have is a reason to skip, not a
+	// finding about ports.
 	ln, err := net.Listen("tcp", net.JoinHostPort(ip, "0"))
 	if err != nil {
 		t.Skipf("cannot bind %s: %v", ip, err)
 	}
-	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	_ = ln.Close()
-	return port
+	return strconv.Itoa(testport.Port(t, ip))
 }
 
 // listenApp starts an App bound per function on distinct loopback addresses

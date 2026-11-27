@@ -71,7 +71,9 @@ type storageRuntime struct {
 	trigger chan bool // true forces a status report
 }
 
-func newStorageRuntime(stateDir string, busy func(string) bool, users []func(dir string) bool, runner storagemount.Runner) *storageRuntime {
+// runner and nodeRoot are set together, for an agent that mounts on its node
+// from a pod (storagemount.Options.NodeRoot).
+func newStorageRuntime(stateDir string, busy func(string) bool, users []func(dir string) bool, runner storagemount.Runner, nodeRoot string) *storageRuntime {
 	s := &storageRuntime{
 		timeouts: defaultStorageTimeouts(), users: users,
 		tasks: map[uint]proto.StorageTask{}, statuses: map[uint]storagemount.Status{},
@@ -89,6 +91,7 @@ func newStorageRuntime(stateDir string, busy func(string) bool, users []func(dir
 		Busy:         busy,
 		InUse:        s.inUse,
 		Runner:       runner,
+		NodeRoot:     nodeRoot,
 	})
 	return s
 }

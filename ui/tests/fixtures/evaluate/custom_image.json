@@ -338,34 +338,87 @@
       "cache_reason": "query_failed",
       "options": [
         {
-          "image": "gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4",
+          "image": "gpuworks/gpuworks-runner:cuda13.0-vllm0.34.0-r1",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.34.0"
         },
         {
-          "image": "gpuworks/gpuworks-runner:cuda12.9-sglang0.5.18-r2",
+          "image": "gpuworks/gpuworks-runner:cuda12.8-v100-vllm1cat1.5.1-r1",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "1cat1.5.1"
+        },
+        {
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.17.1-r1",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.17.1"
         },
         {
           "image": "gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.31.0"
+        },
+        {
+          "image": "gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.30.0"
+        },
+        {
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-sglang0.5.9-r1",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "sglang",
+          "engine_version": "0.5.9",
+          "selects_engine": "sglang"
+        },
+        {
+          "image": "gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "callable",
+          "engine_version": "1.0",
+          "selects_engine": "callable"
+        },
+        {
+          "image": "gpuworks/gpuworks-runner:cuda12.9-sglang0.5.18-r2",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "sglang",
+          "engine_version": "0.5.18",
+          "selects_engine": "sglang"
+        },
+        {
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.9-sglang0.5.19-r1",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "sglang",
+          "engine_version": "0.5.19",
+          "selects_engine": "sglang"
         },
         {
           "image": "gpuworks/gpuworks-runner:cuda13.0-sglang0.5.21-r2",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "sglang",
+          "engine_version": "0.5.21",
+          "selects_engine": "sglang"
         },
         {
-          "image": "gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.30.0-r4",
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-r5",
           "reason": "catalog_match",
-          "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.34.0-r1",
-          "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "callable",
+          "engine_version": "0.1.38",
+          "selects_engine": "callable"
         },
         {
           "image": "private.example/vllm:custom",

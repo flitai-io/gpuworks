@@ -42,6 +42,8 @@ export interface CardHealthChecks {
   checks: CardHealthColumn[];
   cards: CardHealthCard[];
   summary: Record<string, number>;
+  /** The server's explanation when checks are unavailable. */
+  notice?: { code: string; level: "info" | "warning" };
 }
 // A stretch in which a check warned or failed (GET /nodes/{uuid}/health-records).
 export interface CardHealthRecord {

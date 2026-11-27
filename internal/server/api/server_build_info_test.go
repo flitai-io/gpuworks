@@ -89,6 +89,7 @@ func TestServerBuildInfoDoesNotInferPublicationFromBuildLabels(t *testing.T) {
 		{"v1.2.3", buildInfoCommit, buildInfoDate, "release", "unknown"},
 		{"v1.2.3-rc.1", buildInfoCommit, buildInfoDate, "release", "unknown"},
 		{"a69b04107", buildInfoCommit, buildInfoDate, "nightly", "development"},
+		{"74285901", buildInfoCommit, buildInfoDate, "release", "development"},
 		{"anything", buildInfoCommit, buildInfoDate, "custom", "unknown"},
 		{"v1.2.3", "01234567", buildInfoDate, "release", "unknown"},
 		{"v1.2.3", "none", buildInfoDate, "release", "unknown"},

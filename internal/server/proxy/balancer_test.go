@@ -19,7 +19,7 @@ func TestBalancerLeastRequestSpreadsConcurrentLeases(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			lease := b.pick(candidates, nil, func(string) bool { return true })
+			lease, _ := b.pick(candidates, nil, func(string) bool { return true }, admission{})
 			if lease == nil {
 				t.Error("pick returned nil")
 				return
@@ -37,7 +37,7 @@ func TestBalancerLeastRequestSpreadsConcurrentLeases(t *testing.T) {
 		lease.release(outcomeOK)
 	}
 	for _, uuid := range []string{"a", "b", "c"} {
-		if got := b.states[uuid].inflight; got != 0 {
+		if got := b.states[uuid].inflight.total; got != 0 {
 			t.Fatalf("instance %s inflight=%d after release, want 0", uuid, got)
 		}
 	}
@@ -59,12 +59,12 @@ func TestBalancerFailoverHonorsCandidatePriorityAndCooldown(t *testing.T) {
 		{instanceID: 9, instanceUUID: "new", nodeUUID: "node", modelName: "model"},
 		{instanceID: 8, instanceUUID: "old", nodeUUID: "node", modelName: "model"},
 	}
-	first := b.pickFailover(candidates, nil, func(string) bool { return true })
+	first, _ := b.pickFailover(candidates, nil, func(string) bool { return true }, admission{})
 	if first == nil || first.c.instanceUUID != "new" {
 		t.Fatalf("first failover target=%v, want new", first)
 	}
 	first.release(outcomeConnFailure)
-	second := b.pickFailover(candidates, nil, func(string) bool { return true })
+	second, _ := b.pickFailover(candidates, nil, func(string) bool { return true }, admission{})
 	if second == nil || second.c.instanceUUID != "old" {
 		t.Fatalf("cooldown failover target=%v, want old", second)
 	}
@@ -78,8 +78,8 @@ func TestBalancerAffinityIsDeterministic(t *testing.T) {
 		{instanceUUID: "c", nodeUUID: "node-c", modelName: "model"},
 	}
 	left, right := newBalancer(nil), newBalancer(nil)
-	a := left.pickAffinity(candidates, "conversation-1", nil, func(string) bool { return true })
-	b := right.pickAffinity(candidates, "conversation-1", nil, func(string) bool { return true })
+	a, _ := left.pickAffinity(candidates, "conversation-1", nil, func(string) bool { return true }, admission{})
+	b, _ := right.pickAffinity(candidates, "conversation-1", nil, func(string) bool { return true }, admission{})
 	if a == nil || b == nil || a.c.instanceUUID != b.c.instanceUUID {
 		t.Fatalf("affinity choices differ: %v and %v", a, b)
 	}

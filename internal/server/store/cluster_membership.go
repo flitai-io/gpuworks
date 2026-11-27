@@ -122,11 +122,40 @@ func normalizeLiveClusterMembers(input []cluster.Member) ([]cluster.Member, erro
 	return members, nil
 }
 
+// BindClusterMembers is the one definition of which members of the database
+// are members of the cluster, for a caller that holds the database's member
+// list and the admission rows itself. See bindLiveClusterAdmissions.
+func BindClusterMembers(live []cluster.Member, admissions []ClusterAdmission) ([]ClusterTransportMember, error) {
+	members, err := normalizeLiveClusterMembers(live)
+	if err != nil {
+		return nil, err
+	}
+	return bindLiveClusterAdmissions(members, admissions)
+}
+
+// bindLiveClusterAdmissions gives each member of the database its admission
+// and returns the members that hold one.
+//
+// A member of the database is left out when its address has a revoked
+// admission and no admission that is not revoked. A member whose address has
+// no admission row at all fails the whole binding.
+//
+// The rule is keyed on the address, and revoked rows are never deleted: a
+// later member of the database at an address that once held a revoked
+// admission, and that was never admitted itself, is left out as well, where
+// a member at a fresh address fails the binding.
+//
+// The returned list can be shorter than the database's member list. A caller
+// that counts over it counts the members returned.
 func bindLiveClusterAdmissions(live []cluster.Member, admissions []ClusterAdmission) ([]ClusterTransportMember, error) {
 	active := make(map[string]ClusterAdmission, len(admissions))
 	keys := make(map[string]bool, len(admissions))
+	revoked := make(map[string]bool)
 	for _, admission := range admissions {
 		if admission.RevokedAt != nil {
+			// Matched as stored: a live address is normalized, so a
+			// revoked row with any other spelling matches nothing.
+			revoked[admission.Address] = true
 			continue
 		}
 		address, err := normalizeClusterMemberAddress(admission.Address)
@@ -149,6 +178,9 @@ func bindLiveClusterAdmissions(live []cluster.Member, admissions []ClusterAdmiss
 	boundKeys := make(map[string]bool, len(live))
 	for _, member := range live {
 		admission, exists := active[member.Address]
+		if !exists && revoked[member.Address] {
+			continue
+		}
 		if !exists || boundKeys[admission.KeyFingerprint] {
 			return nil, errors.New("live cluster member has no unique active admission")
 		}

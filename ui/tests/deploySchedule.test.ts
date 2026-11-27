@@ -42,6 +42,17 @@ test("historical scheduler strings remain unchanged", () => {
   assert.equal(scheduleText(t, "历史调度说明"), "历史调度说明");
 });
 
+test("persisted dGPU startup refusals still translate in Chinese", () => {
+  const text = scheduleText(i18n.getFixedT("zh", "deploy"), {
+    code: "dgpu_startup_memory",
+    message: "Legacy English reason",
+    params: { quota_gib: 8, utilization: 0.9, max_utilization: 0.88 },
+  });
+  assert.match(text, /当时已拒绝部署/);
+  assert.match(text, /8 GiB/);
+  assert.match(text, /0\.88/);
+});
+
 test("missing scheduler translations fall back to legacy message and then code", () => {
   const t = ((key: string) => key) as never;
   assert.equal(scheduleText(t, { code: "future_code", message: "Legacy fallback" }), "Legacy fallback");

@@ -33,6 +33,8 @@ type nodeAdmission struct {
 	mu      sync.Mutex // serializes registration
 	guards  atomic.Pointer[[]NodeEnrollmentGuard]
 	holders atomic.Pointer[[]SchedulingHolder]
+	// cardHolders are the card holders (card_hold.go).
+	cardHolders atomic.Pointer[[]CardSchedulingHolder]
 }
 
 func (a *nodeAdmission) enrollmentGuards() []NodeEnrollmentGuard {

@@ -79,10 +79,10 @@ func TestEmbeddedCatalogsApplyOncePerBuild(t *testing.T) {
 	}
 
 	// An online update of both catalogs.
-	if _, err := imagecatalog.ImportManifest(st, []byte(onlineImageCatalog), false); err != nil {
+	if _, err := imagecatalog.ImportManifest(st, []byte(onlineImageCatalog)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.RecordImageCatalogImport("2026-10-11.0nl1ne00", nil); err != nil {
+	if err := st.RecordImageCatalogImport("2026-10-11.0nl1ne00", false); err != nil {
 		t.Fatal(err)
 	}
 	online := strings.Repeat("ab", 32)

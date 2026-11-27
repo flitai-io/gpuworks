@@ -25,7 +25,7 @@
                 "type": "string"
               },
               "subfolder": {
-                "description": "Repository subpath when weights are nested: a directory, or a single file when no directory has that name. In the spec's own weights it may name the rank, as in rank${GPUWORKS_NODE_RANK} (the older ${NODE_RANK} is an alias): each rank of a multi-node deployment then downloads and mounts only its own subfolder, and weight_bytes is one rank's size.",
+                "description": "Repository subpath when weights are nested: a directory, or a single file when no directory has that name. In the spec's own weights or a component's it may name the rank, as in rank${GPUWORKS_NODE_RANK} (the older ${NODE_RANK} is an alias): each rank of a multi-node deployment then downloads and mounts only its own subfolder, and the block's weight_bytes is one rank's size.",
                 "type": "string"
               }
             },
@@ -62,7 +62,7 @@
                 "type": "string"
               },
               "subfolder": {
-                "description": "Repository subpath when weights are nested: a directory, or a single file when no directory has that name. In the spec's own weights it may name the rank, as in rank${GPUWORKS_NODE_RANK} (the older ${NODE_RANK} is an alias): each rank of a multi-node deployment then downloads and mounts only its own subfolder, and weight_bytes is one rank's size.",
+                "description": "Repository subpath when weights are nested: a directory, or a single file when no directory has that name. In the spec's own weights or a component's it may name the rank, as in rank${GPUWORKS_NODE_RANK} (the older ${NODE_RANK} is an alias): each rank of a multi-node deployment then downloads and mounts only its own subfolder, and the block's weight_bytes is one rank's size.",
                 "type": "string"
               }
             },
@@ -93,7 +93,7 @@
                 "type": "string"
               },
               "subfolder": {
-                "description": "Repository subpath when weights are nested: a directory, or a single file when no directory has that name. In the spec's own weights it may name the rank, as in rank${GPUWORKS_NODE_RANK} (the older ${NODE_RANK} is an alias): each rank of a multi-node deployment then downloads and mounts only its own subfolder, and weight_bytes is one rank's size.",
+                "description": "Repository subpath when weights are nested: a directory, or a single file when no directory has that name. In the spec's own weights or a component's it may name the rank, as in rank${GPUWORKS_NODE_RANK} (the older ${NODE_RANK} is an alias): each rank of a multi-node deployment then downloads and mounts only its own subfolder, and the block's weight_bytes is one rank's size.",
                 "type": "string"
               }
             },

@@ -37,7 +37,6 @@ api.agentUpgradeItems = async (_id,page=1,pageSize=20,phase='') => {
  const filtered=rows.filter(x=>!phase||x.phase===phase);
  return {items:filtered.slice((page-1)*pageSize,page*pageSize),total:filtered.length,page,page_size:pageSize};
 };
-api.releaseAgentUpgrade = async () => {throw new Error('Fixture actions disabled');};
 i18n.init({lng:'zh',fallbackLng:'zh',defaultNS:'nodes',interpolation:{escapeValue:false},resources:{zh:{
  nodes:require('./src/i18n/locales/zh/nodes.json'),common:require('./src/i18n/locales/zh/common.json')
 }}}).then(()=>createRoot(document.getElementById('root')).render(h(ConfigProvider,{theme:themeConfig},
@@ -96,23 +95,22 @@ class AgentUpgradeResultsLayout(unittest.TestCase):
                 self.assertTrue(all(x["height"] <= x["lineHeight"] + 1 for x in lines), lines)
                 self.capture(page, f"results-{width}.png")
 
-    def test_action_is_visible_only_for_the_unconfirmed_row_and_stays_in_view(self):
+    def test_an_unknown_outcome_offers_no_action_and_stays_in_view(self):
         page, drawer = self.render_results(1024, "?actions")
-        expect(drawer.get_by_role("columnheader", name="操作", exact=True)).to_be_visible()
-        action = drawer.get_by_role("button", name="核实旧操作已结束", exact=True)
-        expect(action).to_be_visible()
-        box = action.bounding_box()
-        self.capture(page, "results-actions-1024.png")
-        self.assertGreaterEqual(box["x"], 0)
-        self.assertLessEqual(box["x"] + box["width"], 1024)
-        row = drawer.get_by_role("row").filter(has_text="MOCK-success")
-        expect(row.locator("td").last).to_have_text("—")
-
-    def test_viewer_has_no_operation_column_even_with_unconfirmed_results(self):
-        _, drawer = self.render_results(1280, "?actions&viewer")
+        # No operation column exists any more: an outcome the platform settles
+        # by itself is a result, not a chore for the administrator.
         expect(drawer.get_by_role("columnheader", name="操作", exact=True)).to_have_count(0)
         expect(drawer.get_by_role("button", name="核实旧操作已结束", exact=True)).to_have_count(0)
-
+        row = drawer.get_by_role("row").filter(has_text="MOCK-unconfirmed")
+        expect(row).to_contain_text("结果未知")
+        expect(row).to_contain_text("没有在时限内确认升级结果")
+        self.capture(page, "results-unknown-1024.png")
+        # The table scrolls as a whole now that nothing is pinned to the right;
+        # what matters is that the last column is reachable.
+        drawer.locator(".ant-table-content, .ant-table-body").first.evaluate("el=>{el.scrollLeft=el.scrollWidth}")
+        time_cell = row.locator("td").last
+        expect(time_cell).to_be_visible()
+        self.assertEqual(len(drawer.locator("thead th").evaluate_all("cells=>cells.map(x=>x.getBoundingClientRect().width)")), 6)
 
 if __name__ == "__main__":
     unittest.main()

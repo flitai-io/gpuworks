@@ -64,6 +64,9 @@ type objectAPI struct {
 	mu      sync.Mutex
 	objects map[string]bool
 	refuse  string
+	// reads answers GETs by path with a body as the API server sends it
+	// (a DaemonSet with its status, a pod list): what a rollout reads.
+	reads map[string]string
 }
 
 func (f *objectAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +83,10 @@ func (f *objectAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
+		if body, ok := f.reads[r.URL.Path]; ok {
+			fmt.Fprint(w, body)
+			return
+		}
 		if r.URL.Path == "/apis/apps/v1/daemonsets" {
 			fmt.Fprint(w, `{"items":[]}`)
 			return

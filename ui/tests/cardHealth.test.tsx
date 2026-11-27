@@ -68,6 +68,108 @@ const record = {
 const show = (ui: React.ReactNode) => render(<I18nextProvider i18n={i18n}>{ui}</I18nextProvider>);
 const fill = (template: string, values: Record<string, unknown>) => template.replace(/{{(\w+)}}/g, (_, k) => String(values[k]));
 
+test("every server card-health notice has English and Chinese copy", () => {
+  const source = fs.readFileSync(new URL("../../internal/server/messages/card_health.go", import.meta.url), "utf8");
+  const codes = [...source.matchAll(/=\s*"(CARD_CHECKS_[A-Z_]+)"/g)].map((match) => match[1]);
+  assert.ok(codes.length > 0, "server notice codes must be discovered");
+  for (const locale of ["en", "zh"]) {
+    const messages = JSON.parse(fs.readFileSync(new URL(`../src/i18n/locales/${locale}/nodes.json`, import.meta.url), "utf8"));
+    for (const code of codes) {
+      assert.equal(typeof messages.cardHealth.banner[code], "string", `${locale}: ${code}`);
+      assert.ok(messages.cardHealth.banner[code].trim().length > 0, `${locale}: ${code}`);
+    }
+  }
+});
+
+test("missing-driver and occupied-driver notices explain the recovery action", async () => {
+  for (const [code, message] of [
+    ["CARD_CHECKS_NO_DRIVER", "Install and load the GPU vendor driver to enable host health checks."],
+    ["CARD_CHECKS_HELD_ELSEWHERE", "The GPUs are bound to another driver. To run host health checks, bind them to the GPU vendor driver."],
+  ]) {
+    apiAny.nodeHealthChecks = async () => table({ notice: { code, level: "info" } });
+    apiAny.nodeHealthRecords = async () => records();
+    show(<NodeHealthTab nodeUUID="n-1" />);
+    assert.equal((await screen.findByRole("alert")).textContent, message);
+    cleanup();
+  }
+});
+
+test("passthrough checks use the server notice without suggesting an Agent upgrade", async () => {
+  apiAny.nodeHealthChecks = async () => table({
+    reports: false, cards: [], checks: [], summary: {},
+    notice: { code: "CARD_CHECKS_PASSTHROUGH", level: "info" },
+  });
+  apiAny.nodeHealthRecords = async () => records();
+  show(<NodeHealthTab nodeUUID="n-1" />);
+  await screen.findByRole("alert");
+  assert.equal(screen.getByRole("alert").textContent, "GPU passthrough is configured; the host does not run health checks for these cards.");
+  assert.equal(screen.queryByText(ch.banner.CARD_CHECKS_UNSUPPORTED), null);
+  assert.ok(screen.getByText("No failure records in the last 30 days."));
+  cleanup();
+  show(<CardHealthTab nodeUUID="n-1" card={{ pcie_bdf: "0000:09:00.0" }} cardLabel="GPU 0" />);
+  await screen.findByRole("alert");
+  assert.equal(screen.getByRole("alert").textContent, "GPU passthrough is configured; the host does not run health checks for these cards.");
+  assert.equal(screen.queryByText(ch.banner.CARD_CHECKS_UNSUPPORTED), null);
+});
+
+test("missing reports alone do not imply an old Agent", async () => {
+  apiAny.nodeHealthChecks = async () => table({
+    reports: false, cards: [], checks: [], summary: {},
+    notice: { code: "CARD_CHECKS_WAITING", level: "info" },
+  });
+  apiAny.nodeHealthRecords = async () => records();
+  show(<NodeHealthTab nodeUUID="n-1" />);
+  await screen.findByRole("alert");
+  assert.equal(screen.getByRole("alert").textContent, ch.banner.CARD_CHECKS_WAITING);
+  assert.equal(screen.queryByText(ch.banner.CARD_CHECKS_UNSUPPORTED), null);
+});
+
+test("an unknown notice code shows the localized fallback", async () => {
+  apiAny.nodeHealthChecks = async () => table({ notice: { code: "CARD_CHECKS_NEW_REASON", level: "info" } });
+  apiAny.nodeHealthRecords = async () => records();
+  show(<NodeHealthTab nodeUUID="n-1" />);
+  assert.equal((await screen.findByRole("alert")).textContent, ch.banner.unavailable);
+  assert.equal(screen.queryByText("cardHealth.banner.CARD_CHECKS_NEW_REASON"), null);
+});
+
+test("unavailable devices display their specific server reason", async () => {
+  for (const [code, key] of [
+    ["CARD_CHECKS_NO_DRIVER", "CARD_CHECKS_NO_DRIVER"],
+    ["CARD_CHECKS_HELD_ELSEWHERE", "CARD_CHECKS_HELD_ELSEWHERE"],
+    ["CARD_CHECKS_NO_USABLE_CARDS", "CARD_CHECKS_NO_USABLE_CARDS"],
+    ["CARD_CHECKS_NO_CARDS", "CARD_CHECKS_NO_CARDS"],
+    ["CARD_CHECKS_STALE", "CARD_CHECKS_STALE"],
+  ]) {
+    apiAny.nodeHealthChecks = async () => table({
+      reports: false, cards: [], checks: [], summary: {},
+      notice: { code, level: code === "CARD_CHECKS_STALE" ? "warning" : "info" },
+    });
+    apiAny.nodeHealthRecords = async () => records();
+    show(<NodeHealthTab nodeUUID="n-1" />);
+    await screen.findByRole("alert");
+    assert.equal(screen.getByRole("alert").textContent, ch.banner[key]);
+    assert.equal(screen.queryByText(ch.banner.CARD_CHECKS_UNSUPPORTED), null);
+    cleanup();
+  }
+});
+
+test("Chinese passthrough notice explains ownership without suggesting an upgrade", async () => {
+  const zh = createInstance();
+  await zh.use(initReactI18next).init({ lng: "zh", resources: { zh: {
+    nodes: JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/zh/nodes.json", import.meta.url), "utf8")),
+    common: JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/zh/common.json", import.meta.url), "utf8")),
+  } }, interpolation: { escapeValue: false } });
+  apiAny.nodeHealthChecks = async () => table({
+    reports: false, cards: [], checks: [], summary: {},
+    notice: { code: "CARD_CHECKS_PASSTHROUGH", level: "info" },
+  });
+  apiAny.nodeHealthRecords = async () => records();
+  render(<I18nextProvider i18n={zh}><NodeHealthTab nodeUUID="n-1" /></I18nextProvider>);
+  await screen.findByRole("alert");
+  assert.equal(screen.getByRole("alert").textContent, "GPU 已配置直通，宿主机不执行这些卡的健康检查。");
+  assert.equal(screen.queryByText(/agent 版本过旧/), null);
+});
+
 test("the table shows the server's columns and each card's cells, and the records below", async () => {
   apiAny.nodeHealthChecks = async () => table();
   apiAny.nodeHealthRecords = async () => records([record]);
@@ -147,16 +249,16 @@ test("rechecking a card's runtime check reports its answer and reads the table a
 });
 
 test("an offline node says its results are the last known; an old agent says to upgrade", async () => {
-  apiAny.nodeHealthChecks = async () => table({ online: false, stale: true });
+  apiAny.nodeHealthChecks = async () => table({ online: false, stale: true, notice: { code: "CARD_CHECKS_OFFLINE", level: "warning" } });
   apiAny.nodeHealthRecords = async () => records();
   show(<NodeHealthTab nodeUUID="n-1" />);
-  await screen.findByText(ch.banner.offline);
+  await screen.findByText(ch.banner.CARD_CHECKS_OFFLINE);
   assert.ok(screen.getByText(fill(ch.records.empty, { days: 30 })));
   cleanup();
 
-  apiAny.nodeHealthChecks = async () => table({ reports: false, cards: [], checks: [], summary: {} });
+  apiAny.nodeHealthChecks = async () => table({ reports: false, cards: [], checks: [], summary: {}, notice: { code: "CARD_CHECKS_UNSUPPORTED", level: "info" } });
   show(<NodeHealthTab nodeUUID="n-1" />);
-  await screen.findByText(ch.banner.noReports);
+  await screen.findByText(ch.banner.CARD_CHECKS_UNSUPPORTED);
 });
 
 test("a failure to load says why", async () => {

@@ -184,132 +184,184 @@
         {
           "image": "gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r4",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.21.0"
         },
         {
           "image": "gpuworks/gpuworks-runner:cann8.5-910b-vllm0.18.0-r2",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.18.0"
         },
         {
-          "image": "gpuworks/gpuworks-runner:cann9.0-910b-vllm-omni0.23.0rc1-r1",
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann8.5-vllm0.18.0-r1",
           "reason": "catalog_match",
-          "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cann9.0-a3-vllm-omni0.23.0rc1-r1",
-          "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.18.0"
         },
         {
           "image": "gpuworks/gpuworks-runner:cann9.1-310p-vllm0.27.1rc1-r3",
           "reason": "catalog_match",
-          "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cann9.1-910b-vllm-omni0.30.0-r3",
-          "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.27.1rc1"
         },
         {
           "image": "gpuworks/gpuworks-runner:cann9.1-910b-vllm0.26.0rc1-r2",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.26.0rc1"
         },
         {
           "image": "gpuworks/gpuworks-runner:cann9.1-910b-vllm0.27.1rc1-r2",
           "reason": "catalog_match",
-          "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cann9.1-950-vllm-omni0.30.0-r3",
-          "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.27.1rc1"
         },
         {
           "image": "gpuworks/gpuworks-runner:cann9.1-950-vllm0.27.1rc1-r2",
           "reason": "catalog_match",
-          "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cann9.1-a3-vllm-omni0.30.0-r3",
-          "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.27.1rc1"
         },
         {
           "image": "gpuworks/gpuworks-runner:cann9.1-a3-vllm0.26.0rc1-r2",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.26.0rc1"
         },
         {
           "image": "gpuworks/gpuworks-runner:cann9.1-a3-vllm0.27.1rc1-r2",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.27.1rc1"
+        },
+        {
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-vllm0.23.0-r1",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.23.0"
         },
         {
           "image": "gpuworks/gpuworks-runner:cann9.2-310p-vllm0.30.0rc2-r1",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.30.0rc2"
         },
         {
-          "image": "gpuworks/gpuworks-runner:cann9.2-910b-vllm0.30.0rc2-r1",
+          "image": "gpuworks/gpuworks-runner:cann9.2-910b-vllm0.32.0rc1-r1",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.32.0rc1"
         },
         {
           "image": "gpuworks/gpuworks-runner:cann9.2-950-vllm0.30.0rc2-r1",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.30.0rc2"
         },
         {
           "image": "gpuworks/gpuworks-runner:cann9.2-a3-vllm0.30.0rc2-r1",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.30.0rc2"
+        },
+        {
+          "image": "gpuworks/gpuworks-runner:cann9.2-a3-vllm0.32.0rc1-r1",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.32.0rc1"
+        },
+        {
+          "image": "gpuworks/gpuworks-runner:cuda12.8-v100-vllm1cat1.5.1-r1",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "1cat1.5.1"
+        },
+        {
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-vllm0.17.1-r1",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.17.1"
         },
         {
           "image": "gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2",
           "reason": "catalog_match",
-          "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.30.0-r4",
-          "reason": "catalog_match",
-          "compatible": true
-        },
-        {
-          "image": "gpuworks/gpuworks-runner:cuda13.0-vllm-omni0.34.0-r1",
-          "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.31.0"
         },
         {
           "image": "gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.30.0"
+        },
+        {
+          "image": "gpuworks/gpuworks-runner:cuda13.0-vllm0.34.0-r1",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.34.0"
         },
         {
           "image": "gpuworks/gpuworks-runner:dtk26.04-vllm0.18.1-r2",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.18.1"
         },
         {
           "image": "gpuworks/gpuworks-runner:hggc13.0-vllm0.23.0-r2",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.23.0"
+        },
+        {
+          "image": "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:hggc13.0-vllm0.34.0-r1",
+          "reason": "catalog_match",
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.34.0"
         },
         {
           "image": "gpuworks/gpuworks-runner:metal15.0-vllm0.31.0-r2",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.31.0"
         },
         {
           "image": "gpuworks/gpuworks-runner:rocm7.2.3-vllm0.30.0-r1",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.30.0"
         },
         {
           "image": "gpuworks/gpuworks-runner:xre5.0.21.46-vllm0.25.1-r1",
           "reason": "catalog_match",
-          "compatible": true
+          "compatible": true,
+          "engine": "vllm",
+          "engine_version": "0.25.1"
         }
       ]
     }

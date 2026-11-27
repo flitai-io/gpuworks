@@ -115,7 +115,7 @@ The management node needs no allowlist by default to access ordinary private mod
 
 | Registered Source | If Reading Fails |
 |---|---|
-| Hugging Face / ModelScope | Registration is still allowed, but metadata may be missing. If the page shows `MODEL_METADATA_UNREACHABLE` or `MODEL_METADATA_FORBIDDEN`, check management node rules and outbound access. Successful registration does not mean the model is ready. |
+| Hugging Face / ModelScope | When the site answers that it has no such repository or revision (`MODEL_REPO_NOT_FOUND` / `MODEL_REVISION_NOT_FOUND`), registration is refused; choose **Register anyway** in the dialog to override. Otherwise registration is still allowed, but metadata may be missing. If the page shows `MODEL_METADATA_UNREACHABLE` or `MODEL_METADATA_FORBIDDEN`, check management node rules and outbound access. Successful registration does not mean the model is ready. |
 | HTTP directory URL | The management node must first read and parse the directory. Failure blocks registration. Site rules do not rewrite the directory address, and the management node proxy controls outbound access. See [Import from an HTTP Directory](import-from-http.md). |
 
 The browser can also read Hugging Face metadata from the same set of management node candidate addresses. It is marked as read by the browser only if content is actually retrieved; otherwise, the management node tries. Temporarily unavailable metadata on a public site does not by itself cause deployment admission to fail. Model files and other deployment requirements must still be satisfied.
@@ -318,7 +318,7 @@ Behavior changes:
 <!-- translation-source-sha256: e9714272db01a3a0ee3070ab26c9bfa46124826a4e1bffb3f4754d3b7c8617b3 ## Source Rules -->
 <!-- translation-source-sha256: 29fe09cad805358fe6694f3bfc90ba4a4811da6b304fbf2325ae632f3868c7a9 ### Image Rules -->
 <!-- translation-source-sha256: 28a4b6917b37d7b6fe5bf5f879afe4e83d2420334180b307a5bfbea504093446 ### Common Rule Examples -->
-<!-- translation-source-sha256: ef6708e98dae6c1db0e7561a7dddf48d9e1126d1f1ce58cb4f0719c3ba22fd9c ### Site Rules (Models) -->
+<!-- translation-source-sha256: 3edca40905b0d3194b262b882b0550a9f86df4e94e52ae5f3b014647b68adc87 ### Site Rules (Models) -->
 <!-- translation-source-sha256: c6e410ed567a5735700cc9adb8f1ea8fe72d5914495e5455a6ac0a8939f7b1e9 ## Common Network Configuration Examples -->
 <!-- translation-source-sha256: 1ecb03a13fe31a59b9a1e157fa19de2f9d03bb444b7f8491b0807d528b4b377a ### About hf-mirror.com -->
 <!-- translation-source-sha256: dd2e0614e8a2a81d9a49a625fe8418243f243f3d3e2fc72be28221c44792c7af ### Fully Offline: Two Blocking Rules -->

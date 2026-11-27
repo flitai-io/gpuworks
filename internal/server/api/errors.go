@@ -27,7 +27,7 @@ const (
 	ErrorCardNotOwned = "CARD_NOT_OWNED"
 	// ErrorCardChecksUnsupported answers a request about a card's checks to a
 	// node whose agent predates them.
-	ErrorCardChecksUnsupported                  = "CARD_CHECKS_UNSUPPORTED"
+	ErrorCardChecksUnsupported                  = messages.ErrorCardChecksUnsupported
 	ErrorNodeAcceleratorHasInstances            = "NODE_ACCELERATOR_HAS_INSTANCES"
 	ErrorNodeDeleteHasInstances                 = "NODE_DELETE_HAS_INSTANCES"
 	ErrorNodeDeleteCacheBusy                    = "NODE_DELETE_CACHE_BUSY"
@@ -220,7 +220,7 @@ const (
 	ErrorLocalModelMetadataRefresh        = "LOCAL_MODEL_METADATA_REFRESH"
 	ErrorModelMetadataUnavailable         = "MODEL_METADATA_UNAVAILABLE"
 	// ErrorModelMetadataUnreachable: the management node reached none of
-	// {hosts}, the addresses the site rules give it for {source}.
+	// {hosts} for {source}; {status} when one answered another error status.
 	ErrorModelMetadataUnreachable          = "MODEL_METADATA_UNREACHABLE"
 	ErrorModelMetadataForbidden            = messages.ErrorModelMetadataForbidden
 	ErrorModelSourceUnavailable            = messages.ErrorModelSourceUnavailable
@@ -233,33 +233,6 @@ const (
 	ErrorPreflightDurationInvalid          = messages.ErrorPreflightDurationInvalid
 	ErrorPreflightNodeInvalid              = messages.ErrorPreflightNodeInvalid
 	ErrorPreflightNodeOffline              = messages.ErrorPreflightNodeOffline
-	ErrorImageSeriesPatchInvalid           = "IMAGE_SERIES_PATCH_INVALID"
-	ErrorOfficialImageSeriesManaged        = "OFFICIAL_IMAGE_SERIES_MANAGED"
-	ErrorImageCommonArgFlagRequired        = "IMAGE_COMMON_ARG_FLAG_REQUIRED"
-	ErrorImageCommonEnvKeyRequired         = "IMAGE_COMMON_ENV_KEY_REQUIRED"
-	ErrorImageSeriesPatchEmpty             = "IMAGE_SERIES_PATCH_EMPTY"
-	ErrorImageVersionPatchInvalid          = "IMAGE_VERSION_PATCH_INVALID"
-	ErrorImageVersionPatchEmpty            = "IMAGE_VERSION_PATCH_EMPTY"
-	ErrorImageInUse                        = "IMAGE_IN_USE"
-	ErrorOfficialImageDeleteForbidden      = "OFFICIAL_IMAGE_DELETE_FORBIDDEN"
-	ErrorImageSyncUnavailable              = "IMAGE_SYNC_UNAVAILABLE"
-	ErrorImageRetryUnavailable             = "IMAGE_RETRY_UNAVAILABLE"
-	ErrorImageInspectionUnavailable        = "IMAGE_INSPECTION_UNAVAILABLE"
-	ErrorImageImportTooLarge               = "IMAGE_IMPORT_TOO_LARGE"
-	ErrorImageFrameworkVersionRequired     = messages.ErrorImageFrameworkVersionRequired
-	ErrorImageSeriesVersionRequired        = "IMAGE_SERIES_VERSION_REQUIRED"
-	ErrorCatalogPackageDigestInvalid       = "CATALOG_PACKAGE_DIGEST_INVALID"
-	ErrorCatalogPackageRequiredForFiles    = "CATALOG_PACKAGE_REQUIRED_FOR_FILES"
-	ErrorImageImportInvalid                = "IMAGE_IMPORT_INVALID"
-	ErrorImageImportUnsupported            = "IMAGE_IMPORT_UNSUPPORTED"
-	ErrorImageImportConflict               = "IMAGE_IMPORT_CONFLICT"
-	ErrorImageManifestInvalid              = "IMAGE_MANIFEST_INVALID"
-	ErrorUpdateSourcesUnavailable          = "UPDATE_SOURCES_UNAVAILABLE"
-	ErrorUpdateDownloadFailed              = "UPDATE_DOWNLOAD_FAILED"
-	ErrorUpdateNotPublished                = "UPDATE_NOT_PUBLISHED"
-	ErrorUpdateCatalogIncompatible         = "UPDATE_CATALOG_INCOMPATIBLE"
-	ErrorOfficialCatalogPackageRequired    = "OFFICIAL_CATALOG_PACKAGE_REQUIRED"
-	ErrorOfficialCatalogNeedsNewerServer   = "OFFICIAL_CATALOG_NEEDS_NEWER_SERVER"
 	ErrorServerUpgradeUnavailable          = "SERVER_UPGRADE_UNAVAILABLE"
 	ErrorServerUpgradeArchiveInvalid       = "SERVER_UPGRADE_ARCHIVE_INVALID"
 	ErrorServerAlreadyAtRelease            = "SERVER_ALREADY_AT_RELEASE"
@@ -431,6 +404,7 @@ const (
 	ErrorUnitPlacementNone        = messages.ErrorUnitPlacementNone
 	ErrorAutoPlacementTPRequired  = messages.ErrorAutoPlacementTPRequired
 	ErrorAutoPlacementPDMultiNode = messages.ErrorAutoPlacementPDMultiNode
+	ErrorPlacementGPUNotOnNode    = messages.ErrorPlacementGPUNotOnNode
 	// ErrorPlacementModeShape: PUT /deployments/{id}/placement-mode on a
 	// single-node deployment, which states its placement in its node
 	// requirements.

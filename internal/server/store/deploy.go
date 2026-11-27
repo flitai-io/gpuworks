@@ -879,6 +879,9 @@ func (s *Store) updateInstanceStatus(inst *Instance, st proto.InstanceStatus) er
 		if prev != st.State && (st.State == proto.InstRunning || st.State == proto.InstStopped) {
 			s.touchInstanceModelFiles(inst)
 		}
+		if st.State == proto.InstFailed && st.RuntimeFailure != nil && st.RuntimeFailure.Code == proto.ErrorModelPathMissing {
+			s.retractMissingModelFiles(inst, st.RuntimeFailure.Resource)
+		}
 		s.Bus.PublishChange("instance", st.UUID, st.State)
 		return nil
 	}

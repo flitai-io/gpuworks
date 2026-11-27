@@ -60,15 +60,20 @@ type ServerBuildInfo struct {
 // the installation the server runs from (the directory of its server.yaml),
 // for the commands the page offers; empty when it was started without one.
 type ServerUpdate struct {
-	CurrentBuild       ServerBuildInfo `json:"current_build"`
-	Current            string          `json:"current"`
-	Latest             string          `json:"latest,omitempty"`
-	BuiltAt            string          `json:"built_at,omitempty"`
-	UpdateAvailable    bool            `json:"update_available"`
-	Installable        bool            `json:"installable"`
-	SelfUpgrade        bool            `json:"self_upgrade"`
-	SelfUpgradeBlocker string          `json:"self_upgrade_blocker,omitempty"`
-	InstallDir         string          `json:"install_dir,omitempty"`
+	CurrentBuild    ServerBuildInfo `json:"current_build"`
+	Current         string          `json:"current"`
+	Latest          string          `json:"latest,omitempty"`
+	BuiltAt         string          `json:"built_at,omitempty"`
+	UpdateAvailable bool            `json:"update_available"`
+	// UnpublishedBuild: this server was built for the channel after its
+	// newest release and is not a release the channel lists (a branch or
+	// local build). It is then neither up to date nor behind: the channel's
+	// releases can be chosen, and none is offered as an update.
+	UnpublishedBuild   bool   `json:"unpublished_build,omitempty"`
+	Installable        bool   `json:"installable"`
+	SelfUpgrade        bool   `json:"self_upgrade"`
+	SelfUpgradeBlocker string `json:"self_upgrade_blocker,omitempty"`
+	InstallDir         string `json:"install_dir,omitempty"`
 }
 
 // ServerUpgradeStarted answers a console upgrade: the binary is swapped and
@@ -100,6 +105,11 @@ type ServerVersionChoice struct {
 	BuiltAt string `json:"built_at"`
 	SHA256  string `json:"sha256,omitempty"`
 	Reason  string `json:"reason,omitempty"`
+	// DowngradesSchema: the release was built for a database schema older than
+	// the one this server's database holds (the signed index's database
+	// migration number). Installing it is still allowed; the release then
+	// refuses to start and the upgrade is rolled back.
+	DowngradesSchema bool `json:"downgrades_schema,omitempty"`
 }
 
 type ServerUpgradeProgress struct {
@@ -114,11 +124,16 @@ type ServerUpgradeProgress struct {
 // requires a catalog this server can read; CheckError distinguishes a failed
 // check from a package requiring a newer server.
 type CatalogUpdate struct {
-	Skipped         []string `json:"skipped,omitempty"` // Conflicting names from the last image catalog import.
-	Current         string   `json:"current"`
-	Latest          string   `json:"latest,omitempty"`
-	UpdateAvailable bool     `json:"update_available"`
-	Compatible      bool     `json:"compatible"`
+	Current         string `json:"current"`
+	Latest          string `json:"latest,omitempty"`
+	UpdateAvailable bool   `json:"update_available"`
+	// Uploaded: the catalog in force was uploaded by hand (the image catalog
+	// only). The channel's catalog is then not an update of it.
+	Uploaded bool `json:"uploaded,omitempty"`
+	// ReplacesUpload: applying the channel's catalog would replace an
+	// uploaded one, which POST /images/sync does only with replace_uploaded.
+	ReplacesUpload bool `json:"replaces_upload,omitempty"`
+	Compatible     bool `json:"compatible"`
 	// CheckError means compatibility could not be checked, rather than that
 	// the package requires a newer server. Other update offers remain usable.
 	CheckError *ProductMessage `json:"check_error,omitempty"`

@@ -43,6 +43,14 @@ export default function useDeployFormChanges({
         });
       }
     }
+    if (
+      Object.prototype.hasOwnProperty.call(changed, "node_uuid") &&
+      !Object.prototype.hasOwnProperty.call(changed, "gpu_indexes")
+    ) {
+      // Card indexes belong to the previous node; the server refuses a card
+      // the node lacks (PLACEMENT_GPU_NOT_ON_NODE).
+      form.setFieldValue("gpu_indexes", undefined);
+    }
     if (Object.prototype.hasOwnProperty.call(changed, "image_mode")) {
       const mode = changed.image_mode as ImageSelectionMode;
       form.setFieldsValue({

@@ -21,12 +21,11 @@ const closeChannels = trackMessageChannels();
 
 const settingsLocale = JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/settings.json", import.meta.url), "utf8"));
 const commonLocale = JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/common.json", import.meta.url), "utf8"));
-const imagesLocale = JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/images.json", import.meta.url), "utf8"));
 const i18n = createInstance();
 await i18n.use(initReactI18next).init({
   lng: "en",
   fallbackLng: "en",
-  resources: { en: { nodes: JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/nodes.json", import.meta.url), "utf8")), settings: settingsLocale, common: commonLocale, images: imagesLocale } },
+  resources: { en: { nodes: JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/nodes.json", import.meta.url), "utf8")), settings: settingsLocale, common: commonLocale } },
   defaultNS: "settings",
   interpolation: { escapeValue: false },
 });
@@ -84,7 +83,7 @@ function stub(answers: Array<UpdateStatus | Error>) {
     if (answer instanceof Error) throw answer;
     return answer;
   };
-  apiModule.api.syncImages = async () => { calls.push("syncImages"); return { catalog_version: "2026-10-12.11111111", created: 0, updated: 1, deleted: 0, deprecated: 0, skipped: [], series: [] }; };
+  apiModule.api.syncImages = async (replaceUploaded = false) => { calls.push(replaceUploaded ? "syncImages:replaceUploaded" : "syncImages"); return { catalog_version: "2026-10-12.11111111", created: 0, updated: 1, deleted: 0, deprecated: 0, skipped: [], series: [] }; };
   apiModule.api.syncInferenceTemplates = async () => { calls.push("syncTemplates"); return { models: 382, package_digest: "aabbccdd", version: "2026-10-11.aabbccdd" }; };
   apiModule.api.uploadOfficialInferenceCatalog = async (file: File) => { calls.push(`uploadTemplates:${file.name}`); return { models: 382, package_digest: "eeff", version: "2026-10-11.eeff0011" }; };
   apiModule.api.importImageCatalogFile = async (file: File) => { calls.push(`uploadImages:${file.name}`); return { catalog_version: "2026-10-12.22222222", created: 1, updated: 0, deleted: 0, deprecated: 0, skipped: [], series: [] }; };
@@ -151,6 +150,51 @@ test("updating a catalog applies it and checks again", async () => {
     await waitFor(() => assert.deepEqual(s.calls, ["syncTemplates"]));
     await waitFor(() => assert.equal(s.checks(), 2));
     await waitFor(() => assert.ok(within(row(u.templates)).getByText(u.upToDate)));
+  } finally {
+    s.restore();
+  }
+});
+
+// An uploaded system image catalog differs from the channel's because an administrator chose it:
+// the row says so instead of offering an update, and the channel's catalog replaces it only after
+// the administrator is told what that deletes.
+test("an uploaded image catalog is not shown as out of date, and the channel's replaces it only after a confirmation", async () => {
+  const uploaded = { current: "2026-11-23.swr-p1-p2-demo", latest: "2026-11-22.80600a3e", update_available: false, uploaded: true, replaces_upload: true, compatible: true };
+  const s = stub([statusFixture({ image_catalog: uploaded }), statusFixture({ image_catalog: { current: "2026-11-22.80600a3e", latest: "2026-11-22.80600a3e", update_available: false, compatible: true } })]);
+  try {
+    renderCard();
+    const images = await waitFor(() => row(u.images));
+    assert.ok(within(images).getByText(u.uploaded));
+    assert.equal(within(images).queryByText(u.available), null);
+    assert.equal(within(images).queryByRole("button", { name: u.apply }), null);
+
+    // Declining leaves the uploaded catalog in force.
+    await userEvent.click(within(images).getByRole("button", { name: u.useChannel }));
+    let dialog = await screen.findByRole("dialog", { name: u.useChannelTitle });
+    assert.ok(within(dialog).getByText("The channel's catalog 2026-11-22.80600a3e replaces the uploaded 2026-11-23.swr-p1-p2-demo. Versions only the upload has are deleted, or kept as old versions while in use."));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => assert.equal(screen.queryByRole("dialog", { name: u.useChannelTitle }), null));
+    assert.deepEqual(s.calls, []);
+
+    await userEvent.click(within(row(u.images)).getByRole("button", { name: u.useChannel }));
+    dialog = await screen.findByRole("dialog", { name: u.useChannelTitle });
+    await userEvent.click(within(dialog).getByRole("button", { name: u.useChannel }));
+    // The server replaces an uploaded catalog only when told to.
+    await waitFor(() => assert.deepEqual(s.calls, ["syncImages:replaceUploaded"]));
+    await waitFor(() => assert.ok(within(row(u.images)).getByText(u.upToDate)));
+    assert.equal(within(row(u.images)).queryByRole("button", { name: u.useChannel }), null);
+  } finally {
+    s.restore();
+  }
+});
+
+// An uploaded catalog that is the channel's own is simply current.
+test("an uploaded image catalog equal to the channel's is up to date", async () => {
+  const s = stub([statusFixture({ image_catalog: { current: "2026-10-09.f085e40b", latest: "2026-10-09.f085e40b", update_available: false, uploaded: true, compatible: true } })]);
+  try {
+    renderCard();
+    await waitFor(() => assert.ok(within(row(u.images)).getByText(u.upToDate)));
+    assert.equal(within(row(u.images)).queryByRole("button", { name: u.useChannel }), null);
   } finally {
     s.restore();
   }
@@ -408,6 +452,55 @@ test("the console upgrades the server after confirming and waits for the new ver
     within(notice).getByRole("button", { name: "Close" }).focus();
     await userEvent.keyboard("{Enter}");
     await waitFor(() => assert.ok(!screen.queryByRole("link", { name: u.viewNodes }), "the upgrade notice is hidden"));
+  } finally {
+    s.restore();
+  }
+});
+
+test("a release that cannot open this server's database is named in the confirmation", async () => {
+  const server = { ...selfUpgradable, current: "b5137981c", update_available: false, unpublished_build: true,
+    current_build: { version: "b5137981c", kind: "development" as const, build_channel: "nightly" } };
+  const s = stubServerUpgrade([statusFixture({ server }), statusFixture({ server: { ...selfUpgradable, current: "f90e474e", update_available: false } })], ["f90e474e"]);
+  const versions = apiModule.api.serverVersions;
+  apiModule.api.serverVersions = async channel => ({ channel, platform: "linux/arm64", versions: [
+    { version: "newer-head", built_at: "2026-10-12", sha256: "head" },
+    { version: "f90e474e", built_at: "2026-10-11", sha256: "selected", downgrades_schema: true },
+  ] });
+  void versions;
+  try {
+    renderCard();
+    await userEvent.click(await readyServerUpgrade());
+    const drawer = await screen.findByRole("dialog");
+    await userEvent.click(await within(drawer).findByRole("radio", { name: "f90e474e" }));
+    await userEvent.click(within(drawer).getByRole("button", { name: picker.upgradeTo.replace("{{version}}", "f90e474e") }));
+    const dialog = await screen.findByRole("dialog", { name: picker.confirmTitle.replace("{{version}}", "f90e474e") });
+    assert.ok(within(dialog).getByText(picker.schemaWarning));
+  } finally {
+    s.restore();
+  }
+});
+
+// GWKS-519: a branch build made after the channel's newest release is not one of its releases.
+// The server says so; the page then neither calls it up to date nor locks the picker, and
+// warns before a channel release replaces it.
+test("a build the channel did not publish is not called up to date and can be replaced by a channel release", async () => {
+  const server = { ...selfUpgradable, current: "b5137981c", update_available: false, unpublished_build: true,
+    current_build: { version: "b5137981c", kind: "development" as const, build_channel: "nightly" } };
+  const s = stubServerUpgrade([statusFixture({ server }), statusFixture({ server: { ...selfUpgradable, current: "f90e474e", update_available: false } })], ["f90e474e"]);
+  try {
+    renderCard();
+    await waitFor(() => assert.ok(within(row(u.server)).getByText(u.unpublishedBuild)));
+    assert.equal(within(row(u.server)).queryByText(u.upToDate), null);
+    await userEvent.click(await readyServerUpgrade());
+    const drawer = await screen.findByRole("dialog");
+    await userEvent.click(await within(drawer).findByRole("radio", { name: "f90e474e" }));
+    await userEvent.click(within(drawer).getByRole("button", { name: picker.upgradeTo.replace("{{version}}", "f90e474e") }));
+    const dialog = await screen.findByRole("dialog", { name: picker.confirmTitle.replace("{{version}}", "f90e474e") });
+    assert.ok(within(dialog).getByText(picker.unpublishedWarning));
+    assert.equal(within(dialog).queryByText(picker.crossChannelWarning), null);
+    assert.deepEqual(s.calls, [], "nothing happens before the confirmation");
+    await userEvent.click(within(dialog).getByRole("button", { name: picker.confirm }));
+    await waitFor(() => assert.deepEqual(s.calls, ["upgradeServer"]));
   } finally {
     s.restore();
   }
@@ -839,74 +932,4 @@ test("logging in again cannot restore the previous session's upgrade", async () 
     assert.equal(requests, 0);
     assert.ok(!screen.queryByRole("link", { name: u.viewNodes }));
   } finally { dom.window.localStorage.removeItem("gpuworks.session"); s.restore(); }
-});
-
-test("same-version conflicts remain visible and can be retried without enabling Update", async () => {
-  const complete = statusFixture();
-  const ref = "swr.example/runner:tag";
-  const s = stub([statusFixture({ image_catalog: { ...complete.image_catalog, skipped: [ref] } }), complete]);
-  apiModule.api.syncImages = async () => {
-    s.calls.push("syncImages");
-    return { catalog_version: complete.image_catalog.current, created: 1, updated: 0, deleted: 0, deprecated: 0, skipped: [], series: [] };
-  };
-  try {
-    renderCard();
-    const retry = await screen.findByRole("button", { name: u.retryImageCatalog });
-    const notice = screen.getByText(imagesLocale.page.catalog.conflicts.replace("{{n}}", "1")).closest<HTMLElement>("[role=status]");
-    assert.ok(notice);
-    const conflicts = within(notice);
-    await userEvent.click(conflicts.getByText(imagesLocale.page.catalog.conflictNames));
-    assert.ok(conflicts.getByText(ref));
-    const images = within(row(u.images));
-    assert.ok(images.getByText(u.imagesPartiallyApplied.replace("{{version}}", complete.image_catalog.current)));
-    assert.equal((images.getByRole("button", { name: u.apply }) as HTMLButtonElement).disabled, true);
-    retry.focus();
-    await userEvent.keyboard("{Enter}");
-    await waitFor(() => assert.equal(screen.queryByRole("button", { name: u.retryImageCatalog }) === null, true));
-    assert.ok(images.getByText(u.upToDate));
-    assert.deepEqual(s.calls, ["syncImages"]);
-  } finally { s.restore(); }
-});
-
-test("offline catalog conflicts explain how to retry using a manifest", async () => {
-  const ref = "swr.example/runner:tag";
-  const imageCatalog = statusFixture().image_catalog;
-  const offline = statusFixture({
-    available: false, source: undefined, unavailable_reason: "unreachable",
-    sources: [{ url: "https://dl.gpuworks.ai", ok: false, latency_ms: 0, error: "i/o timeout" }],
-    image_catalog: { ...imageCatalog, latest: undefined, skipped: [ref] },
-  });
-  const s = stub([offline, { ...offline, image_catalog: { ...offline.image_catalog, skipped: [] } }]);
-  try {
-    const { container } = renderCard();
-    await screen.findByText(u.imageConflictsSourceUnavailable);
-    const notice = screen.getByText(imagesLocale.page.catalog.conflicts.replace("{{n}}", "1")).closest<HTMLElement>("[role=status]");
-    assert.ok(notice);
-    const conflicts = within(notice);
-    await userEvent.click(conflicts.getByText(imagesLocale.page.catalog.conflictNames));
-    assert.ok(conflicts.getByText(ref));
-    assert.equal(screen.queryByRole("button", { name: u.retryImageCatalog }) === null, true);
-    const upload = container.querySelector<HTMLInputElement>("input[accept='.json,application/json']");
-    assert.ok(upload);
-    await userEvent.upload(upload, new File([JSON.stringify({ schema_version: 3, catalog_version: imageCatalog.current })], "manifest.json", { type: "application/json" }));
-    await waitFor(() => assert.equal(screen.queryByText(u.imageConflictsSourceUnavailable) === null, true));
-    assert.deepEqual(s.calls, ["uploadImages:manifest.json"]);
-  } finally { s.restore(); }
-});
-
-test("a newer catalog remains available when the installed version has conflicts", async () => {
-  const current = statusFixture().image_catalog;
-  const ref = "swr.example/runner:tag";
-  const s = stub([statusFixture({
-    image_catalog: { ...current, latest: "2026-10-12.11111111", update_available: true, skipped: [ref] },
-  })]);
-  try {
-    renderCard();
-    await screen.findByText(u.imageConflictsOtherVersion);
-    const images = within(row(u.images));
-    assert.ok(images.getByText(u.available));
-    assert.equal((images.getByRole("button", { name: u.apply }) as HTMLButtonElement).disabled, false);
-    assert.equal(screen.queryByRole("button", { name: u.retryImageCatalog }) === null, true);
-    assert.ok(screen.getByText(ref));
-  } finally { s.restore(); }
 });

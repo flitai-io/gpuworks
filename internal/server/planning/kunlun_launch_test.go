@@ -113,11 +113,11 @@ func TestKunlunEverFitsSleepIsIndependentOfNodeOrder(t *testing.T) {
 		return r, deploy.CatalogSelection{}, nil
 	}
 	for _, nodes := range [][]*store.Node{{base.Node, &nvidia}, {&nvidia, base.Node}} {
-		if never, err := EverFits(t.Context(), st, storeNetworks(st), nodes, NodeFacts{}, nil, build); err != nil || never != nil {
+		if _, never, err := EverFits(t.Context(), st, storeNetworks(st), nodes, NodeFacts{}, nil, build); err != nil || never != nil {
 			t.Fatal(never, err)
 		}
 	}
-	if never, err := EverFits(t.Context(), st, storeNetworks(st), []*store.Node{base.Node}, NodeFacts{}, nil, build); err != nil || never == nil || never.Reason.Code != "accelerator_feature_unsupported" {
+	if _, never, err := EverFits(t.Context(), st, storeNetworks(st), []*store.Node{base.Node}, NodeFacts{}, nil, build); err != nil || never == nil || never.Reason.Code != "accelerator_feature_unsupported" {
 		t.Fatal(never, err)
 	}
 }

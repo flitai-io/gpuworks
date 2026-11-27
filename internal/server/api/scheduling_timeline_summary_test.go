@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -283,6 +284,42 @@ func TestSummarizeBoundsTheOutput(t *testing.T) {
 	for _, s := range got.summary {
 		if len(s.Deployments) == 0 {
 			t.Fatalf("an empty slice was listed: %+v", s)
+		}
+	}
+}
+
+func TestTimelineSummaryPreservesDeletedDeployment(t *testing.T) {
+	segments := swaps(0, 30*time.Second, 600)
+	for i := range segments {
+		segments[i].DeploymentDeleted = segments[i].DeploymentID == 1
+	}
+	got := summarizeSegments(segments, summaryFrom)
+	if len(got.summary) == 0 {
+		t.Fatal("expected summaries")
+	}
+	for _, slice := range got.summary {
+		for _, dep := range slice.Deployments {
+			wire, err := json.Marshal(dep)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var fields map[string]any
+			if err := json.Unmarshal(wire, &fields); err != nil {
+				t.Fatal(err)
+			}
+			if dep.DeploymentID == 1 && fields["deployment_deleted"] != true {
+				t.Fatalf("deleted summary = %s", wire)
+			}
+			if dep.DeploymentID == 2 {
+				if _, ok := fields["deployment_deleted"]; ok {
+					t.Fatalf("live summary = %s", wire)
+				}
+			}
+		}
+	}
+	for _, segment := range got.segments {
+		if segment.DeploymentDeleted != (segment.DeploymentID == 1) {
+			t.Fatalf("raw tail lost deletion flag: %+v", segment)
 		}
 	}
 }

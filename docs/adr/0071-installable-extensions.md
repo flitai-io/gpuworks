@@ -111,7 +111,7 @@ ADR 0070 设想由另一个 Go 模块把带额外能力的代码编进 server，
 
 已实现：
 
-- ADR 0070 的模块契约（`app.Module`、`app.Host`、功能门、节点插入守卫、调度保持者及其重新应用、`NodeFleet` 与节点集合主题、横幅、控制台清单、扩展迁移命名空间）与 `internal/testenv/extmodule` 的契约测试，作为核心内部契约与插件宿主的基础。
+- ADR 0070 的模块契约（`app.Module`、`app.Host`、功能门、节点插入守卫、调度保持者与按卡的保持者及其重新应用、`NodeFleet`、`CardFleet` 与节点集合主题、横幅、控制台清单、扩展迁移命名空间）与 `internal/testenv/extmodule` 的契约测试，作为核心内部契约与插件宿主的基础。
 - 扩展路由前缀 `/api/v1/x/<名>/`（决策 12 中编译模块的部分）：核心不在 `/api/v1/x/` 下注册路由，扩展名不再需要避开核心路径段。
 - 线上格式（决策 4、5、7、8、16 的格式部分）：包清单、发布者证书、信任更新与吊销列表、签名信封、`gwx/1` 的握手、健康与错误、推送信封与首批五种推送表的行，以及持久化版本标记的比较，冻结在只用标准库的公开模块 `pkg/extapi` 里，以黄金文件语料为准，见[插件协议与线上格式](../reference/plugin-protocol.md)；发布者的包索引也在其中。
 - 插件包的读取与校验（决策 4、5）：`internal/server/extpkg` 按校验顺序逐项、失败即拒绝地校验 `.gwpkg`，在数据目录里暂存、原子切换与回滚，安装、启动前与列出时重新校验（启动前只重新哈希变过的文件）；信任链、主机信任的签发者与站点策略（`server.yaml` 的 `plugins`）、吊销、防回滚最低版本与离线导入的信任更新、吊销列表和包索引存在核心的带类型表里；`gpuworks plugin` 的 `install`、`list`、`remove`、`trust import`、`index import` 与只读的 `compat` 子命令在 server 停止时也能用（[CLI 参考](../reference/cli.md#gpuworks-plugin)）。本构建还没有编进项目根密钥。

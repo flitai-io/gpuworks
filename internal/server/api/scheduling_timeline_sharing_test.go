@@ -167,3 +167,43 @@ func TestSharingStatsShareIsOfTheTimeADeploymentExisted(t *testing.T) {
 		}
 	}
 }
+
+func TestTimelineMarksDeletedNonSharingDeployment(t *testing.T) {
+	r := newTimelineRig(t)
+	gone := r.addGoneDeployment("quiet-deleted", time.Hour, nil, 0)
+	status, body := r.get("?node=" + r.node.UUID + "&hours=6")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d: %s", status, body)
+	}
+	if _, ok := sharingRow(t, body, gone); ok {
+		t.Fatal("quiet deployment unexpectedly in sharing stats")
+	}
+	var got struct {
+		Nodes []struct {
+			GPUs []struct {
+				Segments []map[string]any `json:"segments"`
+			} `json:"gpus"`
+		} `json:"nodes"`
+	}
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, node := range got.Nodes {
+		for _, gpu := range node.GPUs {
+			for _, segment := range gpu.Segments {
+				if uint(segment["deployment_id"].(float64)) == gone {
+					count++
+					if segment["deployment_deleted"] != true || segment["deployment"] != "quiet-deleted" {
+						t.Errorf("deleted segment = %v", segment)
+					}
+				} else if _, ok := segment["deployment_deleted"]; ok {
+					t.Errorf("live segment carries deletion flag: %v", segment)
+				}
+			}
+		}
+	}
+	if count == 0 {
+		t.Fatal("no history for deleted deployment")
+	}
+}

@@ -49,12 +49,39 @@ func TestCheck(t *testing.T) {
 	}
 }
 
+func TestCheckEnglishPagesUseTheSitesAnchors(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "docs/reference/gateway.md", "# Gateway\n\n## 认证\n\n## 副本选择\n\n### 副本选择\n")
+	write(t, root, "docs-en/reference/gateway.md", "# Gateway\n\n## Authentication\n\n## Replica Selection\n\n### Replica Selection\n")
+	write(t, root, "docs/reference/only-zh.md", "# 只有中文\n\n## 第一节\n")
+	write(t, root, "docs-en/reference/only-en.md", "# English only\n\n## Own slug\n")
+	write(t, root, "docs/en-adopter.md", "# Adopter\n")
+	write(t, root, "docs-en/en-adopter.md", "# Adopter\n\n[good](reference/gateway.md#认证) [dup](reference/gateway.md#副本选择-1) "+
+		"[english slug](reference/gateway.md#authentication) [own](reference/only-en.md#own-slug) [self](../docs-en/en-adopter.md#adopter)\n")
+
+	got, err := check(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(got, "\n")
+	want := []string{"docs-en/en-adopter.md: missing anchor reference/gateway.md#authentication"}
+	for _, w := range want {
+		if !strings.Contains(joined, w) {
+			t.Errorf("missing problem %q in:\n%s", w, joined)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("got %d problems, want %d:\n%s", len(got), len(want), joined)
+	}
+}
+
 func TestSlug(t *testing.T) {
 	for in, want := range map[string]string{
-		"网络监控":                "网络监控",
-		"Real one":            "real-one",
-		"`gpuworks` 子命令 (v2)": "gpuworks-子命令-v2",
-		"操作指南（how-to）":        "操作指南how-to",
+		"网络监控":                        "网络监控",
+		"Real one":                    "real-one",
+		"`gpuworks` 子命令 (v2)":         "gpuworks-子命令-v2",
+		"操作指南（how-to）":                "操作指南how-to",
+		"Register {#register-a-host}": "register-a-host",
 	} {
 		if got := slug(in); got != want {
 			t.Errorf("slug(%q)=%q want %q", in, got, want)

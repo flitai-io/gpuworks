@@ -14,6 +14,7 @@ import (
 // prefix does not establish that this is a stable release. The fourth capture
 // is the prerelease identifier; numeric identifiers cannot have leading zeroes.
 var publishedSemver = regexp.MustCompile(`^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`)
+var releaseBranchBuildID = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 var fullBuildCommit = regexp.MustCompile(`^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$`)
 
 // agentUpgradeBuildInfo never probes a distribution source. A confirmation
@@ -61,7 +62,10 @@ func serverBuildInfo(target string, fetched *distribution.Fetched) dto.ServerBui
 	}
 	// This is immutable build metadata, not the user-selected update channel.
 	// It describes a development/test build, not proof of a published nightly.
-	if version.Channel == distribution.ChannelNightly {
+	// A release channel build named by a short commit is a release/YY.M
+	// branch build, which is never published (docs/dev/release.md).
+	if version.Channel == distribution.ChannelNightly ||
+		(version.Channel == distribution.ChannelRelease && releaseBranchBuildID.MatchString(target)) {
 		info.Kind = "development"
 	}
 	if fetched == nil || buildErr != nil || built.IsZero() || !fullBuildCommit.MatchString(version.Commit) {

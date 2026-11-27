@@ -266,6 +266,12 @@ func (s *Store) UpdateModelFileStatus(nodeID uint, st proto.ModelFileStatus) err
 	if (current.TransferErrorCode == "PEER_RELAY_BUSY" || current.TransferErrorCode == "PEER_TRANSFER_CANCELED") && !proto.ModelFileStateReady(st.State) {
 		return nil
 	}
+	// A node that looked for a ready copy on its own disk and did not find
+	// it takes the row back; while the row is not ready, the same report is
+	// a task's check that ran ahead of the transfer filling the directory.
+	if st.State == proto.MFAbsent && current.NodeID == nodeID && st.Acquisition != proto.ModelAcquireRegistered && current.Acquisition != proto.ModelAcquireRegistered {
+		return s.retractModelFile(current)
+	}
 	registeredMissing := current.Acquisition == proto.ModelAcquireRegistered &&
 		st.Acquisition == proto.ModelAcquireRegistered && st.State == proto.MFAbsent
 	if proto.ModelFileStateReady(current.State) &&

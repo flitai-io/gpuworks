@@ -112,7 +112,7 @@ func TestPickAwakePassesOverAnInstanceOrderedSinceTheRouteWasRead(t *testing.T) 
 	}
 	for _, policy := range []string{deploy.LeastRequest, deploy.Failover, deploy.PrefixAffinity} {
 		for i := 0; i < 16; i++ {
-			l := p.pickAwake(candidates, policy, fmt.Sprintf("key-%d", i), false)
+			l, _ := p.pickAwake(candidates, policy, fmt.Sprintf("key-%d", i), false, admission{})
 			if l == nil || l.c.instanceUUID != "awake-b" {
 				t.Fatalf("%s pick %d = %+v, want awake-b", policy, i, l)
 			}
@@ -122,7 +122,7 @@ func TestPickAwakePassesOverAnInstanceOrderedSinceTheRouteWasRead(t *testing.T) 
 	if err := st.OrderInstancesSleep(dep.ID, []string{"awake-b"}, 1, proto.SleepModeWait); err != nil {
 		t.Fatal(err)
 	}
-	if l := p.pickAwake(candidates, deploy.LeastRequest, "", false); l != nil {
+	if l, _ := p.pickAwake(candidates, deploy.LeastRequest, "", false, admission{}); l != nil {
 		t.Fatalf("every instance ordered to sleep, pick = %+v", l.c)
 	}
 }

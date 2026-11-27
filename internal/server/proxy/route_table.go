@@ -53,6 +53,19 @@ type routeDeployment struct {
 	reading replyReading
 	// injectUsage: the engine is asked for usage on streamed requests.
 	injectUsage bool
+	// replicas counts the deployment's running replicas (an instance that
+	// serves; a multi-node follower is part of its leader's),
+	// prioritizedReplicas those of them in prioritized, and slottedReplicas
+	// those of a single-node deployment whose launch states run slots.
+	replicas, prioritizedReplicas, slottedReplicas int
+}
+
+// rejectsBusy reports whether a request that asked not to wait is refused
+// when every replica is busy (busy_reject.go): the deployment is neither
+// PD-disaggregated nor multi-node and each running replica states its run
+// slots. One that does not is never refused for being busy.
+func (rd *routeDeployment) rejectsBusy() bool {
+	return rd.pd == nil && rd.nnodes <= 1 && rd.slottedReplicas == rd.replicas
 }
 
 type routeTable struct {
@@ -316,10 +329,26 @@ func (r *routeTable) build() (*routeSnapshot, error) {
 		if rd == nil {
 			continue
 		}
+		// A single-node replica's launch is read once, for its run slots
+		// here and for its candidate below.
+		name, slots, launchRead := "", 0, false
 		if in.State == proto.InstRunning {
 			running[in.UUID] = true
-			if rd.dep.PriorityScheduling && deploy.SpecRunsPriority(in.DesiredStateJSON) {
+			if runsPriority(rd.dep, in) {
 				prioritized[in.UUID] = true
+			}
+			if !in.Headless {
+				rd.replicas++
+				if prioritized[in.UUID] {
+					rd.prioritizedReplicas++
+				}
+				if rd.nnodes <= 1 && rd.pd == nil {
+					name, slots = instanceLaunchFacts(rd.dep, in, planning.HostTranslatesModelPaths(drivers[in.NodeID]))
+					launchRead = true
+					if slots > 0 {
+						rd.slottedReplicas++
+					}
+				}
 			}
 		}
 		// A multi-node replica sleeps with its leader's engine: only the
@@ -349,7 +378,10 @@ func (r *routeTable) build() (*routeSnapshot, error) {
 		if nodeUUID == "" {
 			continue
 		}
-		c := candidate{instanceID: in.ID, instanceUUID: in.UUID, nodeUUID: nodeUUID, port: in.APIPort, modelName: instanceModelName(rd.dep, in, planning.HostTranslatesModelPaths(drivers[in.NodeID])), uuidHash: fnv64([]byte(in.UUID)), routedAt: routedAt}
+		if !launchRead {
+			name, slots = instanceLaunchFacts(rd.dep, in, planning.HostTranslatesModelPaths(drivers[in.NodeID]))
+		}
+		c := candidate{instanceID: in.ID, instanceUUID: in.UUID, nodeUUID: nodeUUID, port: in.APIPort, modelName: name, uuidHash: fnv64([]byte(in.UUID)), routedAt: routedAt, slots: slots, prioritized: prioritized[in.UUID]}
 		if rd.pd != nil {
 			var ok bool
 			if c, ok = rd.pd.admit(in, c); !ok {

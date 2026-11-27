@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { ArrowLeftOutlined, CopyOutlined, StopOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Col, Popconfirm, Progress, Row, Segmented, Space, Spin, Typography, message } from "antd";
+import { Alert, Button, Card, Col, Popconfirm, Progress, Row, Space, Spin, Typography, message } from "antd";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, useEventPayload, usePolling, type BenchmarkCurveResponse, type BenchmarkPoint, type BenchmarkRun } from "../../api";
@@ -24,7 +24,7 @@ import BenchmarkRequestTimeline from "./BenchmarkRequestTimeline";
 import useBenchmarkRequestTimeline from "./useBenchmarkRequestTimeline";
 import { useWizardTargets } from "./useWizardTargets";
 import { downloadChartReport } from "./downloadChartReport";
-import { benchmarkCurveSeries, type CurveMetric, type CurveField } from "./benchmarkCurveSeries";
+import { benchmarkCurveSeries, type CurveMetric } from "./benchmarkCurveSeries";
 import { paretoData } from "./paretoUtils";
 import { benchmarkReportURL } from "./BenchmarkReportMenu";
 import { renderBenchmarkReport, downloadBenchmarkReport, type BenchmarkVisualFormat } from "./benchmarkReportExport";
@@ -47,6 +47,7 @@ function EvaluationDetail({ id }: { id: number }) {
 		{ value: "latency_p99", label: t("detail.curveMetric.latency"), unit: "ms" },
 	], [t]);
 	const navigate = useNavigate();
+	const metricGroupName = useId();
 	const [chartMetric, setChartMetric] = useState(curveMetrics[0].value);
 	const [selectedSeq, setSelectedSeq] = useState<number>();
 	const [wizardPreset, setWizardPreset] = useState<WizardPreset>();
@@ -134,7 +135,25 @@ function EvaluationDetail({ id }: { id: number }) {
 				</Row>
 			</Card>
 			<Row gutter={[16, 16]}>
-					<Col xs={24} xl={12} data-report-curve><Card title={t("detail.curve")} extra={<Segmented<CurveField> size="small" value={chartMetric} onChange={setChartMetric} options={curveMetrics.map(({ value, label }) => ({ value, label }))} />}><BenchmarkCurveNotice warmup={run.progress?.current_point?.warmup} active={active} loading={curve.loading} hasResponse={curve.data != null} hasSamples={curveHasSamples} runState={run.state} completed={run.progress?.completed ?? 0} runError={run.error} runFailure={run.failure} error={curve.error} onRetry={() => { void curve.refetch(); }} />{!(curve.loading && curve.data == null) && <TimeSeriesChart series={chart} connectNulls={false} height={280} unit={curveMetrics.find((item) => item.value === chartMetric)?.unit} seriesName={curveSeriesName} resetKey={`${id}:${chartMetric}`} />}</Card></Col>
+				<Col xs={24} xl={12} data-report-curve>
+					<Card title={
+						<div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 py-1">
+							<span>{t("detail.curve")}</span>
+							<div role="radiogroup" aria-label={t("detail.curve")} className="flex max-w-full flex-wrap gap-0.5 rounded bg-surface-base p-0.5 font-normal">
+								{curveMetrics.map(({ value, label }) => (
+									<label key={value} className="cursor-pointer rounded-sm px-2 py-0.5 text-fg-muted hover:bg-hover has-checked:bg-brand has-checked:text-fg-on-brand has-focus-visible:outline-2 has-focus-visible:outline-focus-ring">
+										<input type="radio" className="sr-only" name={metricGroupName} value={value}
+											checked={chartMetric === value} onChange={() => setChartMetric(value)} />
+										{label}
+									</label>
+								))}
+							</div>
+						</div>
+					}>
+						<BenchmarkCurveNotice warmup={run.progress?.current_point?.warmup} active={active} loading={curve.loading} hasResponse={curve.data != null} hasSamples={curveHasSamples} runState={run.state} completed={run.progress?.completed ?? 0} runError={run.error} runFailure={run.failure} error={curve.error} onRetry={() => { void curve.refetch(); }} />
+						{!(curve.loading && curve.data == null) && <TimeSeriesChart series={chart} connectNulls={false} height={280} unit={curveMetrics.find((item) => item.value === chartMetric)?.unit} seriesName={curveSeriesName} resetKey={`${id}:${chartMetric}`} />}
+					</Card>
+				</Col>
 				<Col xs={24} xl={12} data-report-pareto><Card title={<MetricLabel label={t("detail.pareto")} help="pareto" />}><ParetoChart points={run.points || []} selectedSeq={selected?.seq} onSelect={(point) => setSelectedSeq(point.seq)} /></Card></Col>
 			</Row>
 			<div data-report-points><PointResultsTable run={run} selectedSeq={selected?.seq} onSelect={(point) => setSelectedSeq(point.seq)} /></div>

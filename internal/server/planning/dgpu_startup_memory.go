@@ -1,7 +1,6 @@
 package planning
 
 import (
-	"fmt"
 	"math"
 	"slices"
 	"strconv"
@@ -9,7 +8,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog/pullref"
-	"gpuworks.ai/gpuworks/internal/server/scheduler"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 const (
@@ -22,7 +21,7 @@ const (
 	qwen3DGPUStaticFractionMax = 0.88
 )
 
-func dgpuStartupMemoryRefusal(req LaunchRequest, plan LaunchPlan) *scheduler.Reason {
+func dgpuStartupMemoryWarning(req LaunchRequest, plan LaunchPlan) *messages.Warning {
 	p := plan.Params
 	if req.Engine != deploy.EngineSGLang || req.PD != nil || p.NNodes > 1 ||
 		p.PartitionBackend != accelerator.BackendAscendLogical || p.VRAMLimitBytes != qwen3DGPUQuotaGiB<<30 ||
@@ -50,10 +49,8 @@ func dgpuStartupMemoryRefusal(req LaunchRequest, plan LaunchPlan) *scheduler.Rea
 	if err != nil || math.IsInf(fraction, 1) || !(fraction > qwen3DGPUStaticFractionMax) {
 		return nil
 	}
-	return &scheduler.Reason{
-		Code: scheduler.ReasonDGPUStartupMemory,
-		Message: fmt.Sprintf("The %d GiB dGPU slice needs memory for Decode graph capture. Lower GPU memory utilization from %s to %.2f or less.",
-			qwen3DGPUQuotaGiB, raw, qwen3DGPUStaticFractionMax),
-		Params: map[string]any{"quota_gib": qwen3DGPUQuotaGiB, "utilization": fraction, "max_utilization": qwen3DGPUStaticFractionMax},
-	}
+	warning := messages.NewWarning(messages.WarningDGPUStartupMemory, map[string]any{
+		"quota_gib": qwen3DGPUQuotaGiB, "utilization": fraction, "max_utilization": qwen3DGPUStaticFractionMax,
+	})
+	return &warning
 }

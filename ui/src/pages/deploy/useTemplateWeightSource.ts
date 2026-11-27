@@ -10,7 +10,11 @@ import {
   type ModelPresenceSummary,
   type TemplateWeightModels,
   type WeightSource,
+  type WeightSourceProbe,
 } from "../../api";
+
+/** The server's test of the source chosen in the dialog: under way, answered, or failed to be asked. */
+export type SourceTest = { testing: true } | { testing: false; answer?: WeightSourceProbe; error?: string };
 
 /** A registered model as the lookup lists it; presence says where its files are. */
 export type WeightModel = ModelCore & { presence?: ModelPresenceSummary };
@@ -66,6 +70,10 @@ export default function useTemplateWeightSource({
   const [modalOpen, setModalOpen] = useState(false);
   const [choice, setChoice] = useState<WeightSource>();
   const [registering, setRegistering] = useState(false);
+  // The server's answer on the chosen source; a new choice starts a new test,
+  // and the previous answer never stands for it.
+  const [sourceTest, setSourceTest] = useState<SourceTest>();
+  const [sourceRetest, setSourceRetest] = useState(0);
   // The registered models serving the selected spec's sources, once the
   // lookup for that spec (key) has answered; a pending or failed lookup
   // leaves it on another key, and nothing is registered meanwhile.
@@ -104,6 +112,19 @@ export default function useTemplateWeightSource({
     setRegistering(false);
     stateRef.current.prompted = "";
   }, [key]);
+
+  const choiceKey = choice ? JSON.stringify(choice) : "";
+  useEffect(() => {
+    setSourceTest(undefined);
+    if (!choice || !template || !selection || !modalOpen) return;
+    const abort = new AbortController();
+    setSourceTest({ testing: true });
+    api.probeWeightSource(template.id, selection.spec.source, selection.spec.name, choice, abort.signal).then(
+      (answer) => { if (!abort.signal.aborted) setSourceTest({ testing: false, answer }); },
+      (reason: Error) => { if (!abort.signal.aborted) setSourceTest({ testing: false, error: reason.message }); },
+    );
+    return () => abort.abort();
+  }, [key, choiceKey, modalOpen, sourceRetest]);
 
   useEffect(() => {
     if (!key || key === adoptedKey) return;
@@ -269,7 +290,7 @@ export default function useTemplateWeightSource({
       setChoice(undefined);
       return;
     }
-    if (!choice) return;
+    if (!choice || !sourceTest || sourceTest.testing || !sourceTest.answer?.proceed) return;
     pickedRef.current = { key: confirmKey, source: choice };
     // The choice is matched against a fresh lookup, never a missing one: a
     // failed lookup registers nothing.
@@ -307,5 +328,7 @@ export default function useTemplateWeightSource({
     useModel,
     setUseModel,
     appliedModel,
+    sourceTest,
+    retestSource: () => setSourceRetest((n) => n + 1),
   };
 }

@@ -21,7 +21,9 @@ func TestKubeDefaultsDictionaryOnTheWire(t *testing.T) {
 	want := `{"namespace":"gpuworks-system","state_dir":"/opt/gpuworks","engine_ports":"40000-42767",` +
 		`"idle_return_seconds":60,"idle_return_keep":-1,"agent_image":"swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1","stalled_after_seconds":300,` +
 		`"agent_image_source":"swr","agent_image_sources":[{"id":"swr","image":"swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1"},` +
-		`{"id":"dockerhub","image":"gpuworks/gpuworks-agent:r1"},{"id":"quay","image":"quay.io/gpuworks/gpuworks-agent:r1"}],"priority":10000,"priority_max":1000000000,"allow_preemption":false}`
+		`{"id":"dockerhub","image":"gpuworks/gpuworks-agent:r1"},{"id":"quay","image":"quay.io/gpuworks/gpuworks-agent:r1"}],"priority":10000,"priority_max":1000000000,"allow_preemption":false,` +
+		`"check_codes":{"precheck":["OK","IMAGE_PULL_FAILED","SERVER_UNREACHABLE","PULL_SECRET_MISSING","NO_NODE_SELECTED","NOT_SCHEDULED","POD_CREATE_FAILED","CONTAINER_FAILED","STILL_STARTING","APPLY_FAILED","KUBECTL_MISSING","KUBECTL_FAILED"],` +
+		`"verify":["OK","IMAGE_PULL_FAILED","NO_NODE_SELECTED","NOT_SCHEDULED","POD_CREATE_FAILED","CONTAINER_FAILED","STILL_STARTING","DAEMONSET_MISSING","KUBECTL_MISSING","KUBECTL_FAILED"]}}`
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != want {
 		t.Fatalf("defaults = %d %s\nwant %s", rec.Code, rec.Body, want)
 	}
@@ -373,6 +375,27 @@ func TestKubePriorityAndPreemptionReachTheManifest(t *testing.T) {
 		rec := rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", `{"name":"bad-`+bad+`","server_url":"https://gw.example","priority":`+bad+`}`)
 		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"field":"priority"`) {
 			t.Fatalf("priority %s = %d %s", bad, rec.Code, rec.Body)
+		}
+	}
+}
+
+// The agent's Pod mounts the directory shared storages are mounted under by
+// default from its node, so a mount point the agent creates there exists on
+// the node, and what the node mounts on it reaches the agent.
+func TestKubeManifestSharesTheDefaultStorageMountRoot(t *testing.T) {
+	rig := newTokenRig(t)
+	entry := decodeKube[map[string]any](t, rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", `{"name":"nfs","server_url":"https://gw.example"}`))
+	m := rig.do(rig.session, http.MethodGet, "/api/v1/kube/clusters/"+entry["uuid"].(string)+"/manifest", "").Body.String()
+	root := store.DefaultStorageDirs().MountRoot
+	if !strings.HasPrefix(store.DefaultMountPoint("models-nfs"), root+"/") {
+		t.Fatalf("default mount point %s is outside %s", store.DefaultMountPoint("models-nfs"), root)
+	}
+	for _, want := range []string{
+		"- name: storage-mounts\n              mountPath: \"" + root + "\"\n              mountPropagation: Bidirectional",
+		"- name: storage-mounts\n          hostPath:\n            path: \"" + root + "\"\n            type: DirectoryOrCreate",
+	} {
+		if !strings.Contains(m, want) {
+			t.Fatalf("manifest lacks\n%s\nin\n%s", want, m)
 		}
 	}
 }

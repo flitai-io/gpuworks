@@ -89,8 +89,8 @@ type NodeSnapshot struct {
 	NodeID     uint
 	ReceivedAt time.Time
 	Online     bool
-	// Reports says the agent reports card checks at all; an older agent's
-	// cards carry none.
+	// Reports says this snapshot contains checks for host-owned cards. It
+	// does not describe the agent's capability when no such card exists.
 	Reports bool
 	Cards   []CardSnapshot
 }

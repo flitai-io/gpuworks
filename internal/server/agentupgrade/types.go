@@ -41,6 +41,12 @@ type Blocker struct {
 	NodeUUID string
 	Name     string
 	Reason   string
+	// Queued is how many nodes the batch still has to dispatch, set when a
+	// server upgrade waits for a queue (Reason "active_run").
+	Queued int
+	// WaitMinutes is how long at most the attempt still holds the slot,
+	// rounded up, set when a server upgrade waits for an attempt.
+	WaitMinutes int
 }
 
 type Preview struct {
@@ -103,6 +109,8 @@ type ItemPage struct {
 type Error struct {
 	Code   string
 	Detail string
+	// Blocker is what a refused server upgrade waits for, when that is why.
+	Blocker *Blocker
 }
 
 func (e *Error) Error() string { return e.Detail }
@@ -110,3 +118,18 @@ func (e *Error) Error() string { return e.Detail }
 // UpgradeErrorCode lets transport adapters preserve the stable reason without
 // depending on this package's concrete error type.
 func (e *Error) UpgradeErrorCode() string { return e.Code }
+
+// ServerUpgradeWait is what a refused server upgrade waits for. A batch with
+// nodes still to dispatch has queued > 0; otherwise it is one node's attempt,
+// which stops holding the slot by itself within minutes at most. ok is false
+// when the refusal has another cause.
+func (e *Error) ServerUpgradeWait() (node string, run uint, queued, minutes int, ok bool) {
+	if e.Blocker == nil {
+		return "", 0, 0, 0, false
+	}
+	node = e.Blocker.Name
+	if node == "" {
+		node = e.Blocker.NodeUUID
+	}
+	return node, e.Blocker.RunID, e.Blocker.Queued, e.Blocker.WaitMinutes, true
+}

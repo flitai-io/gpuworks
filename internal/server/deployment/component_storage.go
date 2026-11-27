@@ -11,28 +11,49 @@ import (
 )
 
 // templateComponent is one of a template's non-primary components with its
-// model row.
+// model row: for a rank-scoped component, one rank's artifact (rank).
 type templateComponent struct {
 	binding deploy.ComponentBinding
 	model   *store.Model
+	rank    int
 }
 
 // templateComponents are a template's non-primary components, in declaration
-// order. The primary is the deployment's own model and goes through the
-// create's model checks already.
+// order, a rank-scoped one as one entry per rank's artifact in rank order. The
+// primary is the deployment's own model and goes through the create's model
+// checks already.
 func (s *Service) templateComponents(components []deploy.ComponentBinding) ([]templateComponent, error) {
 	var out []templateComponent
 	for _, component := range components {
 		if component.Role == "primary" || component.StoreModelID == 0 {
 			continue
 		}
-		model, err := s.d.Store.GetModel(component.StoreModelID)
-		if err != nil {
-			return nil, err
+		bound := []deploy.RankWeight{{StoreModelID: component.StoreModelID}}
+		if component.RankScoped() {
+			bound = component.RankWeights
 		}
-		out = append(out, templateComponent{binding: component, model: model})
+		for _, weight := range bound {
+			if weight.StoreModelID == 0 {
+				continue // an evaluation's rank artifact not registered yet
+			}
+			model, err := s.d.Store.GetModel(weight.StoreModelID)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, templateComponent{binding: component, model: model, rank: weight.Rank})
+		}
 	}
 	return out, nil
+}
+
+// nodesOf are the nodes that read the component's artifact: its own rank's
+// node for a rank-scoped component (rankNodes are the group's nodes in rank
+// order), every target otherwise.
+func (c templateComponent) nodesOf(targets, rankNodes []*store.Node) []*store.Node {
+	if c.binding.RankScoped() && c.rank < len(rankNodes) && rankNodes[c.rank] != nil {
+		return []*store.Node{rankNodes[c.rank]}
+	}
+	return targets
 }
 
 // Component acquisition plans, as dto.AcquisitionComponent.Plan carries them.
@@ -72,7 +93,10 @@ type componentPlan struct {
 //   - else node_download: each target without it fetches it itself.
 //
 // The deployment still keeps only the storage the request named.
-func (s *Service) planComponents(source *dto.ModelSource, primary *store.Model, components []templateComponent, saveTo *store.Storage, pinned []uint, targets []*store.Node) ([]componentPlan, error) {
+//
+// A rank-scoped component is planned per rank's artifact, on its rank's node
+// (rankNodes, templateComponent.nodesOf).
+func (s *Service) planComponents(source *dto.ModelSource, primary *store.Model, components []templateComponent, saveTo *store.Storage, pinned []uint, targets, rankNodes []*store.Node) ([]componentPlan, error) {
 	nodes := uniqueNodes(targets)
 	if len(components) == 0 || len(nodes) == 0 {
 		return nil, nil
@@ -82,8 +106,9 @@ func (s *Service) planComponents(source *dto.ModelSource, primary *store.Model, 
 	besideKnown := false
 	out := make([]componentPlan, 0, len(components))
 	for _, component := range components {
-		plan := componentPlan{templateComponent: component, nodes: len(nodes)}
-		for _, node := range nodes {
+		readers := uniqueNodes(component.nodesOf(nodes, rankNodes))
+		plan := componentPlan{templateComponent: component, nodes: len(readers)}
+		for _, node := range readers {
 			src, err := s.d.Store.ModelSourceOn(component.model.ID, node, store.SourceRules{Pinned: pinned})
 			if err != nil {
 				return nil, err
@@ -189,8 +214,14 @@ func acquisitionComponents(plans []componentPlan) []dto.AcquisitionComponent {
 		if size == 0 {
 			size = plan.model.WeightBytes
 		}
+		model := plan.model.DisplayName()
+		if plan.binding.RankScoped() {
+			// Every rank's artifact is the same repository; its subfolder
+			// tells them apart.
+			model += "/" + plan.model.ArtifactSubfolder
+		}
 		item := dto.AcquisitionComponent{
-			Name: plan.binding.Name, Role: plan.binding.Role, Model: plan.model.DisplayName(), SizeBytes: size,
+			Name: plan.binding.Name, Role: plan.binding.Role, Model: model, SizeBytes: size,
 			Plan: plan.plan, Nodes: plan.nodes, ReadyNodes: plan.readyNodes, FollowsPrimary: plan.followsPrimary,
 		}
 		if plan.storage != nil {
@@ -242,7 +273,7 @@ func (s *Service) evaluateComponentAcquisition(source *dto.ModelSource, primary 
 	if err != nil {
 		return nil
 	}
-	plans, err := s.planComponents(source, primary, components, saveTo, pinned, targets)
+	plans, err := s.planComponents(source, primary, components, saveTo, pinned, targets, targets)
 	if err != nil {
 		return nil
 	}

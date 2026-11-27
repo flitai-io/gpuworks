@@ -102,6 +102,11 @@ export interface ImageOption {
   image: string;
   reason: string;
   compatible: boolean;
+  /** What the image catalog says the image runs; absent outside the catalog. */
+  engine?: string;
+  engine_version?: string;
+  /** The engine choosing this image selects, when not the draft's own. */
+  selects_engine?: string;
 }
 
 /** A node selector: for each label key the values a node may carry (alternatives); keys all hold. Empty = every node. */

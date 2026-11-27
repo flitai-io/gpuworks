@@ -102,7 +102,7 @@ sudo "$HOME/gpuworks/gpuworks-agent" install-service \
 
 ![选择 vLLM 下的 Apple 芯片 · MXFP4 档位，核对 mxfp4 权重与 Metal 环境包](../assets/screenshots/tutorial-mac-template.png)
 
-3. 模型来源选择 **ModelScope**，确认仓库为 `mlx-community/gpt-oss-20b-MXFP4-Q8`，点击 **登记模型并部署**，进入部署配置。
+3. 模型来源选择 **ModelScope**，确认仓库为 `mlx-community/gpt-oss-20b-MXFP4-Q8`。选中后管理节点会测试该来源，显示可以获取后 **登记模型并部署** 才可点击；点击它进入部署配置。测试没通过时按提示更换来源，或检查仓库与管理节点的出站访问后 **重新测试**。
 
 权重大小不是运行时的全部内存占用，还要为上下文缓存、引擎和系统保留空间。下一步先检查配置评估，再提交部署。
 

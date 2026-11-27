@@ -7,9 +7,10 @@ import {
   type Model,
   type URLModelPreview,
 } from "../../api";
+import { Button as ForceButton } from "../../components/ui/button";
 import { Notice } from "../../ui-kit/Notice";
 import { message as feedback } from "../../ui-kit/feedback";
-import { productMessageText } from "../../apiError";
+import { APIError, apiErrorText, productMessageText } from "../../apiError";
 import MarkdownContent from "../../components/MarkdownContent";
 import { fetchHuggingFaceMetadata } from "../../modelmeta";
 import { Modalities } from "../ModelsPageParts";
@@ -24,6 +25,8 @@ import { OutboundHostAccess, useOutboundHostAccess } from "../../components/Outb
 // second, so the operator sees what will be registered before anything is
 // written.
 const previewSources = new Set(["local", "url"]);
+// The refusals POST /models lifts with force: true.
+const sourceLacksIt = new Set(["MODEL_REPO_NOT_FOUND", "MODEL_REVISION_NOT_FOUND"]);
 
 type RegisterModalProps = {
   open: boolean;
@@ -38,6 +41,8 @@ export function RegisterModal({ open, onClose, onDone, manualSeed }: RegisterMod
   const [submitting, setSubmitting] = useState(false);
   const fromCatalog = manualSeed?.revision !== undefined;
   const [registrationError, setRegistrationError] = useState("");
+  // The site said it has no such repository or revision: the server registers it only when asked to.
+  const [refusal, setRefusal] = useState<APIError | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState<LocalModelPreview | null>(null);
   const [urlPreview, setURLPreview] = useState<URLModelPreview | null>(null);
@@ -50,7 +55,7 @@ export function RegisterModal({ open, onClose, onDone, manualSeed }: RegisterMod
   const [storageId, setStorageId] = useState<number>();
   const effectiveStorageId = localStorages.choose ? storageId ?? localStorages.defaultId : undefined;
   const parsed = source === "url" ? urlPreview : preview;
-  const reset = () => { form.resetFields(); setPreview(null); setURLPreview(null); setStorageId(undefined); };
+  const reset = () => { form.resetFields(); setRefusal(null); setPreview(null); setURLPreview(null); setStorageId(undefined); };
   const previewLocal = async () => {
     const values = await form.validateFields(["node_uuid", "path"]);
     setPreviewing(true);
@@ -85,7 +90,7 @@ export function RegisterModal({ open, onClose, onDone, manualSeed }: RegisterMod
       setPreviewing(false);
     }
   };
-  const submit = async () => {
+  const submit = async (force = false) => {
     // A rejected validation leaves the dialog open on the fields it marked; it is not a failed
     // registration, so it returns without a message and without a request.
     if (submitting || previewing) return;
@@ -94,6 +99,7 @@ export function RegisterModal({ open, onClose, onDone, manualSeed }: RegisterMod
     if (v.source === "local" && !preview) { await previewLocal(); return; }
     if (v.source === "url" && !urlPreview) { await previewURL(); return; }
     setRegistrationError("");
+    setRefusal(null);
     setSubmitting(true);
     try {
       let registered: Model | undefined;
@@ -124,6 +130,7 @@ export function RegisterModal({ open, onClose, onDone, manualSeed }: RegisterMod
           weight_bytes: metadata?.weight_bytes,
           logo_data: metadata?.logo_data,
           ...(metadata ? { browser_metadata: true } : {}),
+          ...(force ? { force: true } : {}),
         });
       }
       if (fromCatalog) feedback.success(t("catalog.success", {id:v.source_id}));
@@ -134,15 +141,17 @@ export function RegisterModal({ open, onClose, onDone, manualSeed }: RegisterMod
       reset();
       onDone();
     } catch (e) {
-      if (fromCatalog) setRegistrationError((e as Error).message || t("catalog.tryLater"));
+      if (e instanceof APIError && sourceLacksIt.has(e.code)) setRefusal(e);
+      else if (fromCatalog) setRegistrationError((e as Error).message || t("catalog.tryLater"));
       else message.error(t("register.failed", { detail: v.source === "local" ? localRegistrationErrorText(t, e) : (e as Error).message }));
     } finally {
       setSubmitting(false);
     }
   };
   const okText = t(previewSources.has(source ?? "") && !parsed ? "register.parsePreview" : "register.confirm");
-  return <Modal centered title={t("action.register")} open={open} onCancel={() => { if (!submitting) { reset(); onClose(); } }} onOk={submit} confirmLoading={submitting || previewing} okText={okText} cancelText={t("action.cancel")} destroyOnHidden width={previewSources.has(source ?? "") ? 720 : 520}>
+  return <Modal centered title={t("action.register")} open={open} onCancel={() => { if (!submitting) { reset(); onClose(); } }} onOk={() => submit()} confirmLoading={submitting || previewing} okText={okText} cancelText={t("action.cancel")} destroyOnHidden width={previewSources.has(source ?? "") ? 720 : 520}>
     <Form form={form} layout="vertical" initialValues={{ revision: manualSeed?.revision || "", name: fromCatalog ? manualSeed?.id : undefined, source: manualSeed?.source || undefined, source_id: manualSeed?.id }} onValuesChange={(changed) => {
+      setRefusal(null);
       if ("node_uuid" in changed || "path" in changed) setPreview(null);
       if ("source_url" in changed) setURLPreview(null);
       if ("source" in changed) {
@@ -182,6 +191,8 @@ export function RegisterModal({ open, onClose, onDone, manualSeed }: RegisterMod
         {source === "local" && preview?.readme && <Card size="small" title={t("register.readmePreview", { truncated: preview.readme_truncated ? t("register.truncatedSuffix") : "" })} style={{ maxHeight: 220, overflow: "auto", marginBottom: 16 }}><MarkdownContent content={preview.readme} allowHtml /></Card>}
       </>}
       <Form.Item label={t("column.name")} name="name"><Input placeholder={t("register.displayNamePlaceholder")} /></Form.Item>
+      {refusal && <Notice tone="danger" title={apiErrorText((key, options) => i18n.t(key, { ns: "common", ...options }), refusal)}
+        action={<ForceButton variant="secondary" size="sm" disabled={submitting} onClick={() => void submit(true)}>{t("register.force")}</ForceButton>} />}
       {registrationError && <Notice tone="danger" title={t("catalog.registerFailed")}>{registrationError} {t("catalog.savedName")}</Notice>}
       {submitting && !fromCatalog && !manualSeed?.offline && (source === "huggingface" || source === "modelscope") && (
         <Alert type="info" showIcon message={t("register.fetchingMetadata", { source: source === "huggingface" ? "Hugging Face" : "ModelScope" })} />

@@ -48,6 +48,7 @@ type Image struct {
 	OfflineBlobBytes  int64
 	DeprecatedSince   string `gorm:"size:32"`
 	RegistrySources   string `gorm:"type:text"` // JSON []string of registry references and archive URLs
+	AutoSelect        string // Empty uses Arch. Otherwise "manual" or the sole CPU architecture eligible for automatic selection.
 	// RollingTag records that the tag's content moves upstream (latest,
 	// nightly, ...). A system row takes it from the manifest; a community or
 	// custom row has it when the operator declares it or the tag is one of the

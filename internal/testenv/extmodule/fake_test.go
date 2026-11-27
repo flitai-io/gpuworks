@@ -1,6 +1,7 @@
 // Package extmodule holds the contract tests of the server's extension points
 // (docs/dev/extensions.md): a fake module, a fake feature source, a fake node
-// insert guard and a fake scheduling holder, each driven through a real
+// insert guard, a fake scheduling holder and a fake card holder, each driven
+// through a real
 // server the way a separately built one composes them.
 package extmodule
 
@@ -57,6 +58,32 @@ func (h *fakeHolder) Hold(f store.NodeHoldFacts) store.NodeHold {
 	return store.NodeHold{Code: "FAKE_HOLD", Fallback: "the fake module holds this node", Params: map[string]any{"cards": f.OwnedCards}}
 }
 
+// fakeCardHolder holds the one card whose identity it is given, from an
+// atomic snapshot the way a real card holder answers, and counts how often
+// it was asked.
+type fakeCardHolder struct {
+	ident atomic.Pointer[string]
+	asked atomic.Int64
+}
+
+func (h *fakeCardHolder) Source() store.SchedulingSource { return "fakecard" }
+
+func (h *fakeCardHolder) hold(ident string) { h.ident.Store(&ident) }
+
+func (h *fakeCardHolder) release() { h.ident.Store(nil) }
+
+// cardHold is the hold it answers with, built once: refusing allocates
+// nothing either.
+var cardHold = store.CardHold{Code: "FAKE_CARD_HOLD", Fallback: "the fake module holds this card", Params: map[string]any{"reason": "fake"}}
+
+func (h *fakeCardHolder) HoldCard(f store.CardHoldFacts) store.CardHold {
+	h.asked.Add(1)
+	if p := h.ident.Load(); p != nil && *p == f.Ident {
+		return cardHold
+	}
+	return store.CardHold{}
+}
+
 // fakeRoutes are the fake module's API: a community GET, and a GET and a
 // POST behind the feature.
 type fakeRoutes struct{}
@@ -95,6 +122,7 @@ type fakeModule struct {
 	name    string
 	source  *fakeSource
 	holder  *fakeHolder
+	cards   *fakeCardHolder
 	guard   store.NodeEnrollmentGuard
 	limiter api.PlatformLimiter
 	initErr error
@@ -183,6 +211,11 @@ func (m *fakeModule) Init(_ context.Context, h *app.Host) error {
 	}
 	if m.holder != nil {
 		if err := h.HoldScheduling(m.holder); err != nil {
+			return err
+		}
+	}
+	if m.cards != nil {
+		if err := h.HoldCardScheduling(m.cards); err != nil {
 			return err
 		}
 	}

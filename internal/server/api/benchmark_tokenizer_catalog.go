@@ -23,7 +23,7 @@ func (a *apiHandlers) declaredBenchmarkTokenizer(dep *store.Deployment, model *s
 		selected.SpecSource != dep.TemplateSpecSource || selected.SpecName != dep.TemplateSpecName ||
 		selected.Engine != dep.Engine || selected.Image != dep.Image ||
 		selected.WeightProvider != model.Source || selected.WeightRepoID != model.SourceID ||
-		selected.WeightRevision != model.Revision || selected.WeightSubfolder != model.ArtifactSubfolder {
+		selected.WeightRevision != model.Revision || !subfolderNamesModel(selected.WeightSubfolder, model) {
 		return ""
 	}
 	var frozen inferenceapi.Contract
@@ -45,7 +45,7 @@ func (a *apiHandlers) declaredBenchmarkTokenizer(dep *store.Deployment, model *s
 			continue
 		}
 		for _, weight := range deployment.SpecWeightSources(&spec) {
-			if weight.Provider != model.Source || weight.RepoID != model.SourceID || weight.Revision != model.Revision || weight.Subfolder != model.ArtifactSubfolder {
+			if weight.Provider != model.Source || weight.RepoID != model.SourceID || weight.Revision != model.Revision || !subfolderNamesModel(weight.Subfolder, model) {
 				continue
 			}
 			var declared inferenceapi.Contract
@@ -57,4 +57,12 @@ func (a *apiHandlers) declaredBenchmarkTokenizer(dep *store.Deployment, model *s
 		}
 	}
 	return ""
+}
+
+// subfolderNamesModel reports whether a template subfolder is the deployment
+// model's artifact. A rank-scoped subfolder stays the template's in the
+// snapshot and the catalog, while the deployment's model is rank 0's
+// artifact (ADR 0076), so it is compared as rank 0 reads it.
+func subfolderNamesModel(subfolder string, model *store.Model) bool {
+	return deploy.ExpandRankSubfolder(subfolder, 0) == model.ArtifactSubfolder
 }

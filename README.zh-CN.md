@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <b>40+MB 的超轻量 MaaS 平台，公有云与私有云混合调度，支持各类异构加速器。</b>
+  <b>40MB 的超轻量 MaaS 平台，公有云与私有云混合调度，支持各类异构加速器。</b>
 </p>
 
 <p align="center">
@@ -27,16 +27,16 @@ GPUWorks 是一个超轻量的 GPU 管理和模型即服务（MaaS）平台，�
 租来的云主机或容器或一台 Mac，选一个模型，GPUWorks 会估算它需要多少显存、选好卡、启动 vLLM 或 SGLang 或推理模板定义好的 Strata、ninfer、……，并通过统一的 OpenAI 兼容入口对外提供服务。
 NVIDIA、AMD Instinct 与 Ryzen AI Max、华为昇腾、平头哥 PPU、海光 DCU 和 Apple Silicon 可以在同一个集群里并存。
 
-平台的核心是统一的算力池：今天接入裸机、公有云主机、私有云虚拟机和已有的 Kubernetes 集群，接下来还会接入 Slurm 分区；
+平台的核心是统一的算力池：今天接入裸机、公有云主机、私有云虚拟机，以及已有的 Kubernetes 和 Slurm 集群；
 在这个算力池之上，GPUWorks 现在提供模型服务，之后也会在同一批加速器上运行微调与训练任务。
 
 ## 亮点
 
-- **验证过的模型 × 芯片组合，一键部署。** 内置目录为 392 个模型提供 1,235 份启动规格：每种卡型对应的镜像、引擎、启动参数和固定的权重版本。
+- **验证过的模型 × 芯片组合，一键部署。** 内置目录为 404 个模型提供 1,295 份启动规格：每种卡型对应的镜像、引擎、启动参数和固定的权重版本。
   我们在 NVIDIA、AMD、昇腾、PPU 和 Apple 真机上跑通过的组合都带着已知可用的启动配置，选好模型点部署即可，不用自己摸索参数。
   覆盖 Qwen、DeepSeek、GLM、Kimi、MiniMax、Llama、Gemma、gpt-oss，以及 embedding、rerank、语音、图像和视频模型。
 - **异构加速器，统一调度。** NVIDIA、AMD、昇腾、PPU、海光、昆仑芯和 Apple Silicon 节点接入同一个集群，调度器把每个部署放到其启动规格支持的硬件上。
-- **公有云与私有云混合调度。** 从 RunPod、优云智算（CompShare）、AutoDL、Vast.ai、阿里云同步云主机，或从 ZStack Cloud 同步虚拟机，
+- **公有云与私有云混合调度。** 从 RunPod、优云智算（CompShare）、AutoDL、Vast.ai、DigitalOcean、阿里云同步云主机，或从 ZStack Cloud 同步虚拟机，
   一键安装 agent，和自有服务器放在同一个资源池里调度。
 - **接入已有的 Kubernetes 集群，与集群里的其他业务共存。** 应用一份 manifest 即可接入，各节点的加速卡自动识别，一个集群条目可以同时包含多个厂商的节点；不替换集群已装的 device plugin，
   也兼容 HAMi 与 ACK 共享 GPU。GPUWorks 只借用要用的卡，用完归还，两边的调度互相感知：GPUWorks 占用的卡 Kubernetes
@@ -73,7 +73,7 @@ bash <(curl -fsSL https://dl.gpuworks.ai/get.sh)
 curl -fsSL http://<server>:8800/install.sh | sh -s -- --server http://<server>:8800 --token <node-token>
 ```
 
-**3. 部署模型。** 打开**部署**，选择 `Qwen/Qwen3-1.7B` 之类的模型和推荐的推理模板，看一眼配置评估（显存估算和放置），
+**3. 部署模型。** 打开**推理服务 → 创建部署**，选择 `Qwen/Qwen3-1.7B` 之类的模型和推荐的推理模板，看一眼配置评估（显存估算和放置），
 然后部署。再到 **API 令牌**里创建推理令牌，用部署时填的对外模型名调用：
 
 ```bash
@@ -104,15 +104,16 @@ curl http://<server>:8800/v1/chat/completions \
 | 加速器 | 整卡部署 | dGPU（共享一张卡） | sleep/wake | 多机 | PD 分离 |
 |---|---|---|---|---|---|
 | **NVIDIA**（CUDA） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | ✅ 显存 MiB 级限额 | ✅ vLLM | ✅ | ✅ vLLM + NIXL |
-| **AMD**（ROCm：Instinct MI300 系列、Ryzen AI Max） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | 🧪 libvrocm 显存配额；MI300X 的 Docker/runveil 已验证 | ✅ vLLM | ✅ vLLM | ✅ vLLM + NIXL |
+| **AMD**（ROCm：Instinct MI300 系列、Ryzen AI Max） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | 🧪 rocm-slicing-shim 显存配额；MI300X 的 Docker/runveil 已验证 | ✅ vLLM | ✅ vLLM | ✅ vLLM + NIXL |
 | **华为昇腾**（CANN） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | 🧪 vcann-rt 显存配额；需 device-share 权限和逐卡探针 | ✅ vLLM-Ascend | ✅ | ✅ vLLM-Ascend + Mooncake |
-| **平头哥 PPU**（HGGC） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | 🧪 ppu-slicing-shim 显存配额及加权 QoS；仅 Docker | ✅ vLLM | ✅ | ✅ SGLang + Mooncake（同机或经 RDMA）、vLLM + Mooncake（RDMA） |
+| **平头哥 PPU**（HGGC） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | 🧪 ppu-slicing-shim 显存配额及加权 QoS；Docker 或 Kubernetes | ✅ vLLM | ✅ | ✅ SGLang + Mooncake（同机或经 RDMA）、vLLM + Mooncake（RDMA） |
 | **海光 DCU**（DTK） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | 🧪 Z100 / K100_AI / BW 原生 vdev；Docker 或 runveil | ✅ vLLM | ✅ | ✅ vLLM 0.21 + Mooncake |
+| **昆仑芯**（XRE：P800 PCIe） | ✅ Docker 或 Containerd | — | — | — | — |
 | **Apple Silicon**（M1–M5，macOS 15+） | ✅ vllm-metal、MLX、llama.cpp 以本机进程运行 | — | — | — | — |
 
 ✅ 真机验证 · 🧪 实验性 · — 不支持或未验证。NVIDIA 以外的 sleep/wake 已在昇腾 910C、PPU ZW810E、海光 K100、AMD MI300X 上真机验证，
 所测版本与限制见[如何选择功能](docs/explanation/choosing-features.md#sleepwake多个模型轮流用一张卡)。
-GPU 通过厂商命令行工具（`nvidia-smi`、`npu-smi`、`ppu-smi`、`hy-smi`）或 AMD 的 amdgpu sysfs 与 KFD 探测，不依赖 NVML，也不需要 cgo。
+GPU 通过厂商命令行工具（`nvidia-smi`、`npu-smi`、`ppu-smi`、`hy-smi`、`xpu-smi`）或 AMD 的 amdgpu sysfs 与 KFD 探测，不依赖 NVML，也不需要 cgo。
 各组合的详细状态见[厂商支持矩阵](docs/reference/support-matrix.md)和[昇腾 CANN 矩阵](docs/reference/ascend-support-matrix.md)。
 
 **推理引擎：** vLLM（含 vLLM-Ascend、vLLM-Omni）、SGLang；Mac 上是 vllm-metal、MLX-VLM、MLX-Audio 和 llama.cpp。
@@ -131,14 +132,14 @@ GPU 通过厂商命令行工具（`nvidia-smi`、`npu-smi`、`ppu-smi`、`hy-smi
 | 语音 | Qwen3-ASR、Whisper large-v3、Qwen3-TTS、GLM-TTS、Voxtral、FishAudio S2-Pro |
 | 图像 / 视频 | Qwen-Image、GLM-Image、Stable Diffusion 3.5、Wan 2.1 / 2.2、LTX-2.5、Cosmos3 |
 
-目录共 392 个模型、来自 77 个组织，1,235 份启动规格（NVIDIA 745、PPU 216、昇腾 209、海光 41、AMD 15、Apple 9）。
+目录共 404 个模型、来自 80 个组织，1,295 份启动规格（NVIDIA 780、昇腾 218、PPU 217、海光 42、AMD 18、Apple 18、昆仑芯 2）。
 目录之外的模型可以从 Hugging Face、ModelScope、本地目录、NFS 或 HTTP 文件服务器注册，用自定义参数部署。
 
 ## 截图
 
 | | |
 |---|---|
-| ![概览](docs/assets/screenshots/readme/overview.zh.webp) **概览**：NVIDIA、PPU、昇腾、海光混合的生产集群 | ![调度分析](docs/assets/screenshots/readme/scheduling.zh.webp) **调度分析**：多个模型轮流共用 GPU，逐卡可查 |
+| ![概览](docs/assets/screenshots/readme/overview.zh.webp) **概览**：NVIDIA、PPU、昇腾、海光混合的集群 | ![调度分析](docs/assets/screenshots/readme/scheduling.zh.webp) **调度分析**：多个模型轮流共用 GPU，逐卡可查 |
 | ![监控](docs/assets/screenshots/readme/monitor.zh.webp) **监控**（生产环境 7 天）：延迟、请求分布、并发与 KV Cache | ![用量分析](docs/assets/screenshots/readme/usage.zh.webp) **用量分析**：按小时、API 令牌与模型统计 token |
 | ![PD 分离](docs/assets/screenshots/readme/pd.zh.webp) **PD 分离**（昇腾 910C）：KV 交接、延迟拆解、在途请求 | ![健康检查](docs/assets/screenshots/readme/health-ai.zh.webp) **GPU 健康检查**，AI 助手给出诊断 |
 | ![网络测试](docs/assets/screenshots/readme/network.zh.webp) **网络测试**：HCCS 全卡互通矩阵 | ![压测](docs/assets/screenshots/readme/benchmark.zh.webp) **压测报告**：吞吐、TTFT、延迟 |

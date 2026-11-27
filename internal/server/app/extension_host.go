@@ -238,12 +238,32 @@ func (h *Host) HoldScheduling(holder store.SchedulingHolder) error {
 	return nil
 }
 
+// HoldCardScheduling registers a card holder that keeps single cards out of
+// scheduling (store.CardSchedulingHolder): it is asked once per card on
+// every status report that writes the node's cards, inside the writer's
+// transaction, so it must be pure and O(1). Card holders are keyed by their
+// source; a second card holder with a source already registered is refused,
+// but a module may hold nodes and cards under one source. The server
+// applies every card holder's answers once Init has run, and again whenever
+// a module calls ReapplySchedulingHolds or ReapplySchedulingHoldsFor, which
+// apply node and card holds in one pass.
+func (h *Host) HoldCardScheduling(holder store.CardSchedulingHolder) error {
+	if h.reg.closed {
+		return ErrHostClosed
+	}
+	if err := h.st.AddCardSchedulingHolder(holder); err != nil {
+		return fmt.Errorf("extension %s: %w", h.name, err)
+	}
+	h.reg.holders++
+	return nil
+}
+
 // ReapplySchedulingHolds asks the server to apply every holder's answers to
-// the whole fleet (store.ApplySchedulingHolds) instead of waiting for each
-// node's next status report, up to a minute away. A module calls it when its
-// answers change. It never blocks and may be called from any goroutine, at
-// any time, except from inside a hook (SchedulingHolder.Hold, a
-// NodeEnrollmentGuard): a pass asks every holder again, so a holder that
+// the whole fleet (store.ApplySchedulingHolds), node and card holders alike,
+// instead of waiting for each node's next status report, up to a minute
+// away. A module calls it when its answers change. It never blocks and may be called from any goroutine, at
+// any time, except from inside a hook (SchedulingHolder.Hold,
+// CardSchedulingHolder.HoldCard, a NodeEnrollmentGuard): a pass asks every holder again, so a holder that
 // asked for one from Hold would keep the fleet in passes. Calls are
 // coalesced: any number made while a pass is pending or running make at
 // most one more pass, at least two seconds after the last one. The pass
@@ -254,7 +274,8 @@ func (h *Host) ReapplySchedulingHolds() { h.reg.holds.Request() }
 
 // ReapplySchedulingHoldsFor is ReapplySchedulingHolds for a module that
 // knows which nodes its answers changed for: the pass reads and writes
-// those nodes (store.ApplySchedulingHoldsFor) rather than the fleet, so a
+// those nodes and their cards (store.ApplySchedulingHoldsFor) rather than
+// the fleet, so a
 // module whose answers change often for a few nodes does not cost a fleet
 // pass each time. It coalesces with every other request; requests naming
 // more than holdpass.MaxScoped nodes between two passes make a fleet pass.
@@ -270,6 +291,18 @@ func (h *Host) ReapplySchedulingHoldsFor(nodes []uint) { h.reg.holds.RequestNode
 // so no change between them is missed.
 func (h *Host) NodeFleet(ctx context.Context) ([]store.NodeHoldFacts, error) {
 	return h.st.NodeFleet(ctx)
+}
+
+// CardFleet is every card's hold facts (store.CardHoldFacts), ordered by
+// node id and then card identity, read in one query on the read pool
+// (store.CardFleet). It is NodeFleet for a card holder that derives its
+// answers from the whole fleet's cards: a report that adds, removes or
+// changes a card's hold facts publishes store.NodeFactsChanged on
+// store.NodeFleetTopic, so the same subscription tells it when to read
+// again, coalesced; never per status report or per event, and never from
+// inside a hook.
+func (h *Host) CardFleet(ctx context.Context) ([]store.CardHoldFacts, error) {
+	return h.st.CardFleet(ctx)
 }
 
 // NodeIdentity is the salted hardware identity of each named node that

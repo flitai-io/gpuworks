@@ -50,6 +50,10 @@ type KubeCluster struct {
 	// first; every agent finds out its own node's.
 	Vendors      []KubeVendorNodes `json:"vendors"`
 	ApplyCommand string            `json:"apply_command,omitempty"`
+	// VerifyCommand fetches and runs the check that says, node by node, how
+	// the agents of the applied manifest stand (GET /kube/check.sh, by the
+	// enrollment token); for administrators, while the token is not revoked.
+	VerifyCommand string `json:"verify_command,omitempty"`
 	// RemoveCommands take the entry's agents, and the pods they started, out
 	// of the cluster with kubectl, in order; for administrators. The server
 	// does the same itself for an entry it can reach (POST …/remove).
@@ -116,6 +120,40 @@ type KubeDefaults struct {
 	Priority        int  `json:"priority"`
 	PriorityMax     int  `json:"priority_max"`
 	AllowPreemption bool `json:"allow_preemption"`
+	// CheckCodes are the codes the check scripts print, in the order a
+	// client explains them.
+	CheckCodes KubeCheckCodes `json:"check_codes"`
+}
+
+// KubeCheckCodes are the codes each check script prints: the pre-check
+// (POST /kube/precheck) and the check after an apply (verify_command).
+type KubeCheckCodes struct {
+	Precheck []string `json:"precheck"`
+	Verify   []string `json:"verify"`
+}
+
+// KubePrecheckRequest is what a pre-check is rendered for: the fields of a
+// cluster form that decide where the agents run, what they pull and what
+// they connect to. Empty optional fields take the defaults a new entry
+// takes. Nothing is stored.
+type KubePrecheckRequest struct {
+	ServerURL        string `json:"server_url"`
+	Namespace        string `json:"namespace,omitempty"`
+	AgentImage       string `json:"agent_image,omitempty"`
+	AgentImageSource string `json:"agent_image_source,omitempty"`
+	NodeSelector     string `json:"node_selector,omitempty"`
+	ImagePullSecret  string `json:"image_pull_secret,omitempty"`
+}
+
+// KubePrecheck is the pre-check script, to run with bash where kubectl
+// reaches the cluster, and the file name to save it as.
+type KubePrecheck struct {
+	Script   string `json:"script"`
+	FileName string `json:"file_name"`
+	// Image and Server are what the script checks: the agent image every
+	// selected node pulls and the host:port each of them dials.
+	Image  string `json:"image"`
+	Server string `json:"server"`
 }
 
 // KubeAgentImageSource is a registry the agent image is published to.
@@ -138,8 +176,9 @@ type KubeClusterRequest struct {
 	Namespace  string `json:"namespace,omitempty"`
 	AgentImage string `json:"agent_image,omitempty"`
 	// AgentImageSource is the registry of the published agent image when
-	// AgentImage is empty; empty is Docker Hub for an entry made by hand, and
-	// for one made from a cloud cluster the registry its region reaches.
+	// AgentImage is empty; empty is GET /kube/defaults' agent_image_source
+	// for an entry made by hand, and for one made from a cloud cluster the
+	// registry its region reaches.
 	AgentImageSource  string `json:"agent_image_source,omitempty"`
 	NodeSelector      string `json:"node_selector,omitempty"`
 	RuntimeClass      string `json:"runtime_class,omitempty"`
@@ -351,4 +390,27 @@ type KubeClusterEdit struct {
 	// such as engine_ports leaving the ports running instances hold outside
 	// the new range (KUBE_ENGINE_PORTS_OUTSIDE); empty when none.
 	Warnings []messages.Warning `json:"warnings"`
+}
+
+// KubeRollout says how the agents of an entry made from a cloud cluster
+// stand, node by node, with the codes of the check after an apply
+// (check_codes.verify of GET /kube/defaults). Done is false while waiting
+// may still change the answer; the client asks again after
+// PollAfterSeconds.
+type KubeRollout struct {
+	Done             bool `json:"done"`
+	PollAfterSeconds int  `json:"poll_after_seconds,omitempty"`
+	// Desired is how many agent pods the DaemonSet wants, null until its
+	// controller has counted the nodes or when there is no DaemonSet.
+	Desired *int           `json:"desired"`
+	Rows    []KubeCheckRow `json:"rows"`
+}
+
+// KubeCheckRow is one line of a check: a node and its pod, or neither for
+// the DaemonSet as a whole, a code and the detail Kubernetes gave.
+type KubeCheckRow struct {
+	Node   string `json:"node,omitempty"`
+	Pod    string `json:"pod,omitempty"`
+	Code   string `json:"code"`
+	Detail string `json:"detail,omitempty"`
 }

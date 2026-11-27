@@ -103,5 +103,5 @@
     "saved": "已更新",
     "saveFailed": "保存失败：{{detail}}"
   },
-  "priority": {"title": "{{name}} 的请求优先级", "class": "优先级", "useDefault": "使用默认优先级（当前为 {{name}}）", "policy": "客户端可否指定", "policyHelp": "客户端用请求头 X-GPUWorks-Priority-Class 指定优先级名称。上限内自选：可以选择不高于上限的任意优先级，超过时按上限处理；固定：忽略客户端指定；只降不升：只能选择不高于令牌自身优先级的。", "policies": {"within_ceiling": "上限内自选", "fixed": "固定", "down_only": "只降不升"}, "ceiling": "上限", "ownClass": "与令牌优先级相同", "save": "保存", "edit": "修改", "editAria": "修改 {{name}} 的请求优先级", "defaultClass": "默认"}
+  "priority": {"title": "{{name}} 的请求优先级", "class": "优先级", "useDefault": "使用默认优先级（当前为 {{name}}）", "policy": "客户端可否指定", "policyHelp": "客户端用请求头 X-GPUWorks-Priority-Class 指定优先级名称。上限内自选：可以选择不高于上限的任意优先级，超过时按上限处理；固定：始终按令牌自身优先级运行，客户端指定的不起作用（名称不存在时仍会被拒绝）；只降不升：只能选择不高于令牌自身优先级的。", "policies": {"within_ceiling": "上限内自选", "fixed": "固定", "down_only": "只降不升"}, "ceiling": "上限", "ownClass": "与令牌优先级相同", "save": "保存", "edit": "修改", "editAria": "修改 {{name}} 的请求优先级", "defaultClass": "默认"}
 }

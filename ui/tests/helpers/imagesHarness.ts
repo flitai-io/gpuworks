@@ -19,6 +19,8 @@ export const zhCommon = read("zh", "common");
 const { default: i18n } = await import("../../src/i18n/index.ts");
 i18n.addResourceBundle("zh", "common", zhCommon, true, true);
 i18n.addResourceBundle("zh", "images", zhImages, true, true);
+// The confirmation before the channel's catalog replaces an uploaded one is the settings page's.
+i18n.addResourceBundle("zh", "settings", read("zh", "settings"), true, true);
 await i18n.changeLanguage("zh");
 export { i18n };
 

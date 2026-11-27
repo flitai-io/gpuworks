@@ -66,7 +66,7 @@ type Session struct {
 	sid   int
 	grace time.Duration
 	info  proto.TermSessionInfo
-	tty   string
+	tty   ttyRef
 
 	waited   chan struct{} // closed once wait() has stored exitCode
 	exitCode int32
@@ -109,7 +109,7 @@ func Open(spec Spec) (*Session, error) {
 		p.close()
 		return nil, fmt.Errorf("set window size: %w", err)
 	}
-	ttyPath := p.slave.Name()
+	tty := ttyRefOf(p.slave)
 
 	cwd := resolveCwd(id.Home)
 	if spec.Dir != "" {
@@ -136,7 +136,7 @@ func Open(spec Spec) (*Session, error) {
 		cmd:   cmd,
 		sid:   cmd.Process.Pid, // Setsid makes the session id equal the pid
 		grace: grace,
-		tty:   ttyPath,
+		tty:   tty,
 		info: proto.TermSessionInfo{
 			User: id.Name, UID: id.UID, Shell: argv[0], Cwd: cwd,
 		},
@@ -234,6 +234,11 @@ func (s *Session) Close() error {
 		if s.sid > 0 {
 			_ = signalSession(s.sid, syscall.SIGTERM)
 		}
+		// Keep the pts number ours until the last lookup by slave below. Once
+		// the master is closed and the session's processes let go of the slave,
+		// the number is free, and a terminal opened meanwhile would carry the
+		// same device identity as ours and be killed with the leftovers.
+		pin := pinTTY(s.tty)
 		s.pty.close() // SIGHUP to the foreground group
 		select {
 		case <-s.waited:
@@ -241,8 +246,13 @@ func (s *Session) Close() error {
 		}
 		// Unconditional: the shell may already be gone while its children linger.
 		tree = append(tree, processTree(s.sid)...)
-		tree = append(tree, processesUsingTTY(s.tty)...)
+		if pin != nil {
+			tree = append(tree, processesUsingTTY(s.tty)...)
+		}
 		signalProcessIdentities(tree, syscall.SIGKILL)
+		if pin != nil {
+			_ = pin.Close()
+		}
 		if s.sid > 0 {
 			err = signalSession(s.sid, syscall.SIGKILL)
 		}

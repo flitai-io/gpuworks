@@ -231,22 +231,23 @@ func (g *GPU) BeforeSave(*gorm.DB) error {
 // Why not is told by Ownership, HealthStatus and HealthCode, each of which
 // names something an operator can act on; a boolean could not.
 func (g GPU) CanTakeWork() bool {
-	return cardTakesWork(g.Ownership, g.HealthStatus, g.HeldOutsidePlatform(), g.SchedulingStopped, g.SchedulingAllowedAt != nil)
+	return cardTakesWork(g.Ownership, g.HealthStatus, g.HeldOutsidePlatform(), g.SchedulingStopped, g.SchedulingAllowedAt != nil, g.HeldByHolder())
 }
 
 // cardTakesWork is CanTakeWork from the columns, for readers that aggregate
 // cards in SQL rather than load them. The operator's decision comes first
-// (card_scheduling.go): a card they stopped takes nothing, a card they
-// allowed takes work whatever the platform judged — but never one that is
-// not this node's, which no decision changes.
-func cardTakesWork(ownership, health string, held, stopped, allowed bool) bool {
+// (card_scheduling.go): a card they stopped takes nothing; then a card
+// holder's (card_hold.go): a card it holds takes nothing; a card the
+// operator allowed takes work whatever the platform judged — but never one
+// that is not this node's, which no decision changes.
+func cardTakesWork(ownership, health string, foreign, stopped, allowed, holderHeld bool) bool {
 	switch {
-	case stopped:
+	case stopped, holderHeld:
 		return false
 	case allowed:
 		return accelerator.CardUsable(ownership)
 	}
-	return accelerator.CardSchedulable(ownership, health, held)
+	return accelerator.CardSchedulable(ownership, health, foreign)
 }
 
 // HeldOutsidePlatform is whether a process outside the platform is using
@@ -414,6 +415,12 @@ type GPU struct {
 	// persists until the operator disables scheduling; the timestamp is not
 	// an expiry. Reports never change this decision or hide health facts.
 	SchedulingAllowedAt *time.Time
+	// SchedulingHeldBy is the source of the card holder that keeps the
+	// card out of scheduling (card_hold.go), "" when none does. It is the
+	// stored effect of a hold, not a decision: every report that writes
+	// the node's cards and every ApplySchedulingHolds sets it from the
+	// holders' current answers, and it outranks SchedulingAllowedAt.
+	SchedulingHeldBy SchedulingSource `gorm:"size:16;not null;default:''"`
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

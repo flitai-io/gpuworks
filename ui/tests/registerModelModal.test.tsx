@@ -282,3 +282,37 @@ test("a catalog pick is written only after confirmation and keeps its revision a
   await waitFor(() => assert.equal(done,true));
   assert.deepEqual(sent.map(m => [m.source,m.source_id,m.revision,m.name]), Array(2).fill(["modelscope","org/demo","abc123","My model"]));
 });
+
+// The server refuses a repository its site says it does not have. The dialog shows the refusal
+// where the form is, sends nothing more by itself, and registers with force only when asked to.
+test("a registration the source refuses stays in the dialog and is forced only on request", async () => {
+  const { APIError } = await import("../src/apiError");
+  const sent: Array<Record<string, unknown>> = [];
+  const refusal = "modelscope.cn answered 404 for zai-org/glm-5";
+  api.createModel = (async (body: Record<string, unknown>) => {
+    sent.push(body);
+    if (!body.force) throw new APIError("MODEL_REPO_NOT_FOUND", { source: "modelscope", repo: "zai-org/glm-5", host: "modelscope.cn", status: 404 }, refusal, 422);
+    return { id: 6 } as never;
+  }) as typeof api.createModel;
+  let done = 0;
+  render(<I18nextProvider i18n={i18n}><RegisterModal open onClose={() => {}} onDone={() => { done++; }} /></I18nextProvider>);
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: models.column.source }));
+  fireEvent.click(screen.getByText("ModelScope", { selector: ".ant-select-item-option-content" }));
+  fireEvent.change(await screen.findByRole("textbox", { name: models.column.sourceID }), { target: { value: "zai-org/glm-5" } });
+  fireEvent.click(screen.getByRole("button", { name: models.register.confirm }));
+
+  const force = await screen.findByRole("button", { name: models.register.force });
+  assert.ok(screen.getByText(refusal));
+  assert.equal(sent.length, 1);
+  assert.equal(done, 0, "a refused registration is not reported as done");
+
+  // Editing the repository withdraws the refusal of the previous one.
+  fireEvent.change(screen.getByRole("textbox", { name: models.column.sourceID }), { target: { value: "zai-org/glm-5x" } });
+  await waitFor(() => assert.equal(screen.queryByRole("button", { name: models.register.force }), null));
+  assert.equal(force.isConnected, false);
+
+  fireEvent.click(screen.getByRole("button", { name: models.register.confirm }));
+  fireEvent.click(await screen.findByRole("button", { name: models.register.force }));
+  await waitFor(() => assert.equal(done, 1));
+  assert.deepEqual(sent.map((body) => [body.source_id, body.force]), [["zai-org/glm-5", undefined], ["zai-org/glm-5x", undefined], ["zai-org/glm-5x", true]]);
+});

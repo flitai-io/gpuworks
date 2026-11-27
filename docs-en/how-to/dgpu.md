@@ -22,7 +22,7 @@ For each vendor's supported scope, see the [Support Matrix](../reference/support
 2. When [deploying a model](deploy-models.md), enter the **dGPU Memory (GiB)** limit, check the candidate nodes and GPU memory estimate, and submit. The platform selects a ready backend based on the node hardware: HAMi-core for NVIDIA, vcann-rt for Ascend, HGGC for PPU, libvrocm for AMD, and native vdev for Hygon Z100 / K100_AI / BW. You do not need to specify one manually.
 3. After the instance starts, return to **GPU Devices → dGPU** and confirm the slice's deployment, node, and GPU memory limit. To verify that two models share one card, follow the request checks in [Run Two Models on One GPU](../tutorials/one-gpu-two-models.md).
 
-The `status` and the reason code `reason_code` returned on the page determine capability (see [Troubleshooting](troubleshooting.md#dgpu-capability-unavailable) for the codes and parameters):
+The `status` and the reason code `reason_code` returned on the page determine capability (see [Troubleshooting](troubleshooting.md#dgpu-能力-unavailable) for the codes and parameters):
 
 - `ready`: All runtime, dGPU asset, and per-GPU probe requirements for that backend are met, so instances with quotas can be created; NVIDIA and AMD are exempt from behavioral probes.
 - `unavailable`: At least one requirement is not met. `reason_code` explains why, such as an agent version too old to report a probe,
@@ -43,7 +43,7 @@ Switching to a whole-card deployment when the status is `unavailable` is not evi
 When a card also runs compute processes outside the platform, a memory-limited deployment can share it with them by the memory left, but by default only when you pick that card yourself;
 to let automatic placement use such a card too, expand it in the node detail's GPU table and choose "Enable scheduling" under "Scheduling". Even then,
 scheduling uses cards without such processes first. Sharing a card isolates memory only; compute and bandwidth are shared, and the instance panel shows a shared-card note. See
-[Card Is in Use by Processes Outside the Platform](troubleshooting.md#card-is-in-use-by-processes-outside-the-platform).
+[Card Is in Use by Processes Outside the Platform](troubleshooting.md#卡被平台外进程占用).
 
 ## Adjust dGPU Quotas
 

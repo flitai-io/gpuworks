@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -69,6 +70,23 @@ func writeAgentUpgradeError(w http.ResponseWriter, err error) {
 			status = http.StatusNotFound
 		case "AGENT_UPGRADE_UNAVAILABLE":
 			status = http.StatusServiceUnavailable
+		}
+	}
+	var waits interface {
+		ServerUpgradeWait() (node string, run uint, queued, minutes int, ok bool)
+	}
+	if errors.As(err, &waits) {
+		if node, run, queued, minutes, ok := waits.ServerUpgradeWait(); ok {
+			if queued > 0 {
+				writeProductError(w, status, ErrorServerUpgradeWaitsForAgentBatch,
+					fmt.Sprintf("Agent upgrade batch %d still has %d node(s) queued; wait for it to finish or stop its remaining nodes, then upgrade the server", run, queued),
+					map[string]any{"reason": reason, "run_id": run, "queued": queued})
+				return
+			}
+			writeProductError(w, status, ErrorServerUpgradeWaitsForAgent,
+				fmt.Sprintf("the Agent upgrade on node %s has not ended; the server can be upgraded in at most %d minute(s)", node, minutes),
+				map[string]any{"reason": reason, "node": node, "run_id": run, "minutes": minutes})
+			return
 		}
 	}
 	writeProductError(w, status, ErrorAgentUpgradeRefused, err.Error(), map[string]any{"reason": reason, "detail": err.Error()})

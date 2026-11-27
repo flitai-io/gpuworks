@@ -80,7 +80,7 @@ import type { TemplateWeightModels, WeightSource } from "../src/api";
 import { fakeModels, type FixtureModel } from "./helpers/fakeModels.ts";
 
 const apiAny = api as unknown as Record<string, unknown>;
-const originals = { models: api.models, modelsPage: api.modelsPage, model: api.model, quickRegisterModel: api.quickRegisterModel, templateWeightModels: api.templateWeightModels };
+const originals = { models: api.models, modelsPage: api.modelsPage, model: api.model, quickRegisterModel: api.quickRegisterModel, templateWeightModels: api.templateWeightModels, probeWeightSource: api.probeWeightSource };
 afterEach(() => {
   cleanup();
   Object.assign(api, originals);
@@ -92,8 +92,9 @@ let declared: { source: string; name: string; weight_sources: WeightSource[] } |
 
 // The page answers lookups from a registry the test controls; `hold` makes
 // each lookup wait until the test releases (or fails) it.
-function serve(registry: FixtureModel[], { hold = false } = {}) {
+function serve(registry: FixtureModel[], { hold = false, probe = sourceServed }: { hold?: boolean; probe?: typeof api.probeWeightSource } = {}) {
   const fake = fakeModels(registry);
+  apiAny.probeWeightSource = probe;
   const held: Array<{ release: () => void; fail: (error: Error) => void }> = [];
   const registered: unknown[] = [];
   apiAny.models = fake.models_all;
@@ -122,6 +123,10 @@ function serve(registry: FixtureModel[], { hold = false } = {}) {
   };
   return { fake, held, registered };
 }
+
+// The server's test of a chosen source; by default every source serves its repository.
+const sourceServed: typeof api.probeWeightSource = async (_template, _specSource, _specName, source) =>
+  ({ proceed: true, host: source.provider === "modelscope" ? "modelscope.cn" : "huggingface.co" });
 
 const spec = (weight_sources: unknown[], engine = "vllm") =>
   ({ spec: { name: "balanced", source: "upstream", engine, image: "img/vllm", weight_sources } }) as never;
@@ -160,6 +165,8 @@ function Host({ selection, engine = "vllm", initialSource, initialEnv }: { selec
         useModel={state.useModel}
         onUseModel={state.setUseModel}
         onChoice={state.setChoice}
+        sourceTest={state.sourceTest}
+        onRetest={state.retestSource}
         onCancel={() => state.setModalOpen(false)}
         onConfirm={state.confirm}
       />
@@ -179,6 +186,11 @@ const okButton = (name: string) => screen.getByRole("button", { name }) as HTMLB
 const chooseSource = (label: string) => {
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "Choose a model source" }));
   fireEvent.click(screen.getByText(label, { selector: ".ant-select-item-option-content" }));
+};
+// Registering waits for the server's test of the chosen source to say proceed.
+const confirmSource = async () => {
+  await waitFor(() => assert.equal(okButton(deployLocale.action.registerAndDeploy).disabled, false));
+  fireEvent.click(okButton(deployLocale.action.registerAndDeploy));
 };
 const useModelLabel = deployLocale.weightSourceModal.useModel;
 const fromTemplateLabel = deployLocale.weightSourceModal.registerFromTemplate;
@@ -202,7 +214,7 @@ test("a template with local and public weights offers only downloadable sources 
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "Choose a model source" }));
   assert.equal(screen.queryByText("Hugging Face · org/private-model") === null, true, "local weights must not be disguised as Hugging Face");
   fireEvent.click(screen.getByText("Hugging Face · org/public-model", { selector: ".ant-select-item-option-content" }));
-  fireEvent.click(okButton(deployLocale.action.registerAndDeploy));
+  await confirmSource();
   await waitFor(() => assert.equal(text("model-id"), "101"));
   assert.deepEqual(registered.map((value) => (value as { source: string; source_id: string }).source_id), ["org/public-model"]);
   assert.equal(text("applied-source"), "huggingface:org/public-model");
@@ -232,7 +244,7 @@ test("a previous source confirmation cannot register or replace weights after se
   await act(async () => held[0].release());
   await waitFor(() => assert.equal(text("modal-state"), "open"));
   chooseSource("Hugging Face · org/model");
-  fireEvent.click(okButton(deployLocale.action.registerAndDeploy));
+  await confirmSource();
   await waitFor(() => assert.equal(held.length, 2));
   const localSelection = { spec: { name: "local-spec", source: "user", engine: "vllm", image: "local-image", weight_sources: [{ provider: "local", repo_id: "org/private-model" }] } };
   view.rerender(<I18nextProvider i18n={i18n}><Host selection={localSelection} /></I18nextProvider>);
@@ -306,7 +318,7 @@ test("no registered model matches and several sources are declared: the user cho
   assert.equal(registered.length, 0);
   chooseSource("ModelScope · org/model");
   await waitFor(() => assert.equal(okButton(deployLocale.action.registerAndDeploy).disabled, false));
-  fireEvent.click(okButton(deployLocale.action.registerAndDeploy));
+  await confirmSource();
   await waitFor(() => assert.equal(text("model-id"), "101"));
   assert.deepEqual(registered.map((r) => (r as { source: string }).source), ["modelscope"]);
   await waitFor(() => assert.equal(text("template-id"), "3"));
@@ -355,7 +367,7 @@ test("declining the registered model lists the template's sources and registers 
   fireEvent.click(screen.getByRole("radio", { name: fromTemplateLabel }));
   assert.equal(okButton(deployLocale.action.registerAndDeploy).disabled, true);
   chooseSource("ModelScope · org/model");
-  fireEvent.click(okButton(deployLocale.action.registerAndDeploy));
+  await confirmSource();
   await waitFor(() => assert.equal(text("model-id"), "101"));
   assert.deepEqual(registered.map((r) => (r as { source: string }).source), ["modelscope"]);
 });
@@ -411,7 +423,7 @@ test("a failed lookup on confirming a source registers nothing and keeps the dia
   await act(async () => held[0].release());
   await waitFor(() => assert.equal(text("modal-state"), "open"));
   chooseSource("Hugging Face · org/model");
-  fireEvent.click(okButton(deployLocale.action.registerAndDeploy));
+  await confirmSource();
   await waitFor(() => assert.equal(held.length, 2));
   await act(async () => held[1].fail(new Error("server down")));
   await settle();
@@ -514,3 +526,67 @@ for (const initialEnv of [undefined, [{ key: "MODEL_ROOT", value: "/operator/mod
       "the server expands template values; only the operator owns user overrides");
   });
 }
+
+// GWKS-511: a chosen source is tested on the server before anything is registered from it. The
+// dialog shows the server's reason in place, keeps the action disabled until the server says
+// proceed, and never carries one source's answer over to another.
+test("a chosen source is registered only after the server's test of it says proceed", async () => {
+  const asked: string[] = [];
+  let huggingFaceUp = false;
+  const { registered } = serve([], {
+    probe: async (templateID, specSource, specName, source) => {
+      asked.push(`${templateID}:${specSource}:${specName}:${source.provider}:${source.repo_id}`);
+      if (source.provider === "modelscope") return { proceed: true, host: "modelscope.cn" };
+      return huggingFaceUp ? { proceed: true, host: "huggingface.co" } : { proceed: false, reason: {
+        code: "MODEL_METADATA_UNREACHABLE", message: "the management node reached none of huggingface.co",
+        params: { source: "huggingface", hosts: "huggingface.co", route: "/api/v1/pull/source-rules" },
+      } };
+    },
+  });
+  mount(twoSources);
+  await waitFor(() => assert.equal(text("modal-state"), "open"));
+  assert.deepEqual(asked, [], "nothing is tested before a source is chosen");
+
+  chooseSource("Hugging Face · org/model");
+  await screen.findByText("the management node reached none of huggingface.co");
+  assert.equal(okButton(deployLocale.action.registerAndDeploy).disabled, true);
+  fireEvent.click(okButton(deployLocale.action.registerAndDeploy));
+  await settle();
+  assert.deepEqual(registered, [], "a source the server did not pass registers nothing");
+
+  // Another source is tested on its own; the refusal of the first does not stand for it.
+  chooseSource("ModelScope · org/model");
+  await screen.findByText("modelscope.cn serves this model.");
+  assert.equal(screen.queryByText("the management node reached none of huggingface.co"), null);
+  assert.equal(okButton(deployLocale.action.registerAndDeploy).disabled, false);
+
+  // Back on the refused source the action is disabled again until a new test passes.
+  chooseSource("Hugging Face · org/model");
+  await screen.findByText("the management node reached none of huggingface.co");
+  assert.equal(okButton(deployLocale.action.registerAndDeploy).disabled, true);
+  huggingFaceUp = true;
+  fireEvent.click(screen.getByRole("button", { name: deployLocale.sourceTest.again }));
+  await screen.findByText("huggingface.co serves this model.");
+  await confirmSource();
+  await waitFor(() => assert.equal(text("model-id"), "101"));
+  assert.deepEqual(registered.map((value) => (value as { source: string }).source), ["huggingface"]);
+  assert.deepEqual(asked, ["3:upstream:balanced:huggingface:org/model", "3:upstream:balanced:modelscope:org/model", "3:upstream:balanced:huggingface:org/model", "3:upstream:balanced:huggingface:org/model"]);
+});
+
+test("the action stays disabled while a source is being tested and when the test itself fails", async () => {
+  let settleProbe: ((fail: boolean) => void) | undefined;
+  serve([], { probe: () => new Promise((resolve, reject) => { settleProbe = (fail) => fail ? reject(new Error("503 from the server")) : resolve({ proceed: true, present: true }); }) });
+  mount(twoSources);
+  await waitFor(() => assert.equal(text("modal-state"), "open"));
+  chooseSource("ModelScope · org/model");
+  await screen.findByText(deployLocale.sourceTest.testing);
+  assert.equal(okButton(deployLocale.action.registerAndDeploy).disabled, true);
+  await act(async () => settleProbe?.(true));
+  await screen.findByText("The source could not be tested: 503 from the server");
+  assert.equal(okButton(deployLocale.action.registerAndDeploy).disabled, true);
+  fireEvent.click(screen.getByRole("button", { name: deployLocale.sourceTest.again }));
+  await screen.findByText(deployLocale.sourceTest.testing);
+  await act(async () => settleProbe?.(false));
+  await screen.findByText(deployLocale.sourceTest.present);
+  assert.equal(okButton(deployLocale.action.registerAndDeploy).disabled, false);
+});

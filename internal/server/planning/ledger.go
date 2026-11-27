@@ -403,7 +403,7 @@ func nodeSnapshot(st *store.Store, node *store.Node, dtypeOK bool, dtypeReason s
 			ForeignShareable:     foreignShareable,
 
 			Index: g.Index, MemoryTotal: g.MemoryTotal, AllocatedBytes: a.AllocatedBytes, SleepingBytes: a.SleepingBytes,
-			NUMANode: g.NUMANode, Schedulable: g.CanTakeWork(), HeldOutsidePlatform: g.HeldOutsidePlatform(),
+			NUMANode: g.NUMANode, Schedulable: g.CanTakeWork(), HeldOutsidePlatform: g.HeldOutsidePlatform(), HeldByHolder: g.HeldByHolder(),
 			Degraded:          accelerator.HealthDegraded(g.HealthStatus),
 			PartitionBackends: readyBackends,
 			SharedByMemory:    accelerator.SharedByMemory(node.VendorOf(g)),

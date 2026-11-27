@@ -18,9 +18,6 @@ const (
 	// absent) says the refusal is the weight-derived memory estimate alone,
 	// which a template's placement contract could replace.
 	ErrorDeploymentNeverFits = "DEPLOYMENT_NEVER_FITS"
-	// ErrorDGPUStartupMemory: the {quota_gib} GiB quota needs startup
-	// headroom. Lower {utilization} to {max_utilization} or less.
-	ErrorDGPUStartupMemory = "DGPU_STARTUP_MEMORY"
 	// ErrorNodeRequirementsNotEditable: the deployment's replicas are not
 	// placed from a pool ({shape}: multi_node or pd), so it has no node
 	// requirements to edit.
@@ -33,4 +30,7 @@ const (
 	// ErrorAutoPlacementPDMultiNode: an automatic PD request has a role whose
 	// units span nodes ({role}); those name their nodes.
 	ErrorAutoPlacementPDMultiNode = "AUTO_PLACEMENT_PD_MULTI_NODE"
+	// ErrorPlacementGPUNotOnNode: the request names GPU index {gpu_index},
+	// which node {node} ({node_gpus} usable GPUs) does not have.
+	ErrorPlacementGPUNotOnNode = "PLACEMENT_GPU_NOT_ON_NODE"
 )

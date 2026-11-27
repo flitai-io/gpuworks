@@ -429,9 +429,13 @@ func openServerForward(ctx context.Context, instance *cloudprovider.Instance, lo
 	return sshutil.ForwardServer(ctx, instance.PublicIP, instance.SSHPort, instance.Username, instance.PrivateKey, localAddr)
 }
 
-func installCloudAgent(ctx context.Context, instance *cloudprovider.Instance, serverAddr, token string) error {
+func installCloudAgent(ctx context.Context, dataDir string, instance *cloudprovider.Instance, serverAddr, token string) error {
+	agents, err := agentbin.Prepare(dataDir)
+	if err != nil {
+		return err
+	}
 	installer := provision.NewSSHInstaller(func(name string) ([]byte, error) {
-		return agentbin.Read("", name)
+		return agents.Read("", name)
 	})
 	req := provision.SSHInstallRequest{
 		Target: instance.PublicIP, User: instance.Username, Port: instance.SSHPort,
@@ -440,7 +444,7 @@ func installCloudAgent(ctx context.Context, instance *cloudprovider.Instance, se
 		InstallDir:       instance.DataDiskPath,
 		SSHAuth:          provision.SSHAuth{Password: instance.Password, PrivateKeyPEM: string(instance.PrivateKey)},
 	}
-	_, err := installer.InstallSSH(ctx, req)
+	_, err = installer.InstallSSH(ctx, req)
 	if err != nil {
 		return err
 	}

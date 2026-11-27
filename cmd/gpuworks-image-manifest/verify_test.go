@@ -362,3 +362,40 @@ func TestVerifyRejectsAnInvalidManifest(t *testing.T) {
 		t.Fatal("an unparseable manifest is an error, not an empty report")
 	}
 }
+
+func TestVerifyRejectsChangedPinnedManifest(t *testing.T) {
+	f := newVerifyFixture(t)
+	const tag = "cuda13.0-vllm0.30.0-r2"
+	for _, sources := range []string{"", "    registry_sources: []\n"} {
+		matrix := "items:\n  - id: cuda13.0-vllm0.30.0\n    revision: r2\n    builder: prebuilt\n    backend: cuda\n" + sources + "    artifact: quay.io/gpuworks/gpuworks-runner@sha256:" + strings.Repeat("0", 64) + "\n    platforms: [linux/amd64,linux/arm64]\n"
+		body, err := generate([]byte(matrix), options{Date: "2026-11-26"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		pins, err := publicationPins([]byte(matrix), body)
+		if err != nil || pins[tag] != "quay.io/gpuworks/gpuworks-runner:"+tag {
+			t.Fatalf("pins=%v err=%v", pins, err)
+		}
+		changed := strings.Replace(matrix, strings.Repeat("0", 64), strings.Repeat("1", 64), 1)
+		if _, err := publicationPins([]byte(changed), body); err == nil {
+			t.Fatal("publication accepted a stale digest")
+		}
+		f.manifest = body
+		f.verifier.pinnedSources = pins
+		if _, err := verifyPublicationPins(context.Background(), body, f.verifier); err == nil || !strings.Contains(err.Error(), "matrix pins") {
+			t.Fatalf("publication accepted invalid digest: %v", err)
+		}
+		good := strings.Replace(matrix, "sha256:"+strings.Repeat("0", 64), f.registries["quay.io"].tags["gpuworks/gpuworks-runner:"+tag], 1)
+		goodBody, err := generate([]byte(good), options{Date: "2026-11-26"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n, err := verifyPublicationPins(context.Background(), goodBody, f.verifier); err != nil || n != 1 {
+			t.Fatalf("valid publication n=%d err=%v", n, err)
+		}
+		report := f.run(t)
+		if len(report.Problems) != 1 || !strings.Contains(report.Problems[0], "quay.io/gpuworks/gpuworks-runner:"+tag+": registry digest") {
+			t.Fatalf("wrong digest check: %+v", report)
+		}
+	}
+}

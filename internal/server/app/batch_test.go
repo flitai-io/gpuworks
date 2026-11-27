@@ -272,13 +272,13 @@ func TestBatchConsoleCreateGetAndDownload(t *testing.T) {
 	}
 }
 
-func TestDataPlaneRoutesBatchPathsAndModels(t *testing.T) {
+func TestDataPlaneRoutesEachV1Path(t *testing.T) {
 	mark := func(name string) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Header().Set("X-Handler", name) })
 	}
-	h := dataPlane(mark("models"), mark("batches"), mark("gateway"))
+	h := dataPlane(mark("models"), mark("key"), mark("batches"), mark("gateway"))
 	for path, want := range map[string]string{
-		"/v1/models": "models", "/v1/files": "batches", "/v1/files/file-1": "batches", "/v1/files/file-1/content": "batches",
+		"/v1/models": "models", "/v1/key": "key", "/v1/key/x": "gateway", "/v1/keys": "gateway", "/v1/files": "batches", "/v1/files/file-1": "batches", "/v1/files/file-1/content": "batches",
 		"/v1/batches": "batches", "/v1/batches/batch_1/cancel": "batches",
 		"/v1/chat/completions": "gateway", "/v1/filesystem": "gateway", "/v1/batchesx": "gateway", "/v1/models/x": "gateway",
 	} {

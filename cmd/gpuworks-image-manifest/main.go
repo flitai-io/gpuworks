@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -13,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -62,10 +64,14 @@ func main() {
 	registry := flag.String("registry", DefaultRegistry, "canonical image repository")
 	date := flag.String("date", "", "catalog date (YYYY-MM-DD); defaults to today")
 	verifyPath := flag.String("verify", "", "instead of generating, check that every reference in this manifest pulls whole from every registry it lists")
+	pinsOnly := flag.Bool("pins-only", false, "with -verify and -in, check the matrix and pinned source tags before publishing")
 	grammarPath := flag.String("grammar-out", "", "also write the release tag grammar the publishing scripts read")
 	flag.Parse()
+	if *pinsOnly && (*inPath == "" || *verifyPath == "") {
+		fatal(fmt.Errorf("-pins-only requires -verify and -in"))
+	}
 	if strings.TrimSpace(*verifyPath) != "" {
-		os.Exit(runVerify(*verifyPath))
+		os.Exit(runVerify(*verifyPath, *inPath, *pinsOnly))
 	}
 	if strings.TrimSpace(*inPath) == "" {
 		fatal(fmt.Errorf("-in is required"))
@@ -110,19 +116,26 @@ type matrixFile struct {
 	Defaults struct {
 		Platforms []string `yaml:"platforms"`
 	} `yaml:"defaults"`
-	Items     []matrixItem    `yaml:"items"`
-	Published []publishedItem `yaml:"published"`
+	Items      []matrixItem `yaml:"items"`
+	LegacyTags []struct {
+		Tag    string `yaml:"tag"`
+		Reason string `yaml:"legacy_reason"`
+	} `yaml:"legacy_tags"`
 }
 
 type matrixItem struct {
-	ID        string            `yaml:"id"`
-	Revision  string            `yaml:"revision"`
-	Backend   string            `yaml:"backend"`
-	Base      string            `yaml:"base"`
-	Platforms []string          `yaml:"platforms"`
-	Args      map[string]string `yaml:"args"`
-	Requires  []string          `yaml:"requires"`
-	Note      string            `yaml:"note"`
+	RegistrySources []string          `yaml:"registry_sources"`
+	Builder         string            `yaml:"builder"`
+	Artifact        string            `yaml:"artifact"`
+	ManualOnly      bool              `yaml:"manual_only"`
+	ID              string            `yaml:"id"`
+	Revision        string            `yaml:"revision"`
+	Backend         string            `yaml:"backend"`
+	Base            string            `yaml:"base"`
+	Platforms       []string          `yaml:"platforms"`
+	Args            map[string]string `yaml:"args"`
+	Requires        []string          `yaml:"requires"`
+	Note            string            `yaml:"note"`
 	// Catalog false keeps a built image out of the system image catalog: the
 	// recipe is built, verified and published like any other, but the product
 	// does not offer it (and the automatic image pick never sees it) until it
@@ -152,17 +165,40 @@ func parseTag(id string) (parsedTag, error) {
 }
 
 func generate(data []byte, opt options) ([]byte, error) {
+	if _, err := time.Parse("2006-01-02", opt.Date); err != nil {
+		// The catalog version is <date>.<hash>: publication reads the date
+		// back by cutting at the first dot, and only that shape gets the
+		// -schema3 marker on its compatibility projection.
+		return nil, fmt.Errorf("catalog date %q must be YYYY-MM-DD", opt.Date)
+	}
 	var matrix matrixFile
 	if err := yaml.Unmarshal(data, &matrix); err != nil {
 		return nil, fmt.Errorf("parse matrix: %w", err)
+	}
+	for _, entry := range matrix.LegacyTags {
+		if entry.Tag == "" || strings.TrimSpace(entry.Reason) == "" || releaseTagPattern.MatchString(entry.Tag) {
+			return nil, fmt.Errorf("invalid legacy tag declaration for %q", entry.Tag)
+		}
+	}
+	if len(matrix.Items) == 0 {
+		return nil, fmt.Errorf("matrix has no items")
 	}
 	registry := strings.TrimSuffix(strings.TrimSpace(opt.Registry), "/")
 	if registry == "" {
 		registry = DefaultRegistry
 	}
 	seriesByName := map[string]*manifest.ManifestSeries{}
-	listedTags := map[string]bool{}
-	addVersion := func(version manifest.ManifestVersion, tag parsedTag) {
+	for _, item := range matrix.Items {
+		version, tag, err := versionFromItem(item, matrix.Defaults.Platforms, registry)
+		if err != nil {
+			return nil, err
+		}
+		if item.Catalog != nil && !*item.Catalog {
+			continue
+		}
+		if item.ManualOnly {
+			version.AutoSelect = "manual"
+		}
 		name := seriesName(tag.Engine, tag.Backend)
 		series := seriesByName[name]
 		if series == nil {
@@ -171,33 +207,17 @@ func generate(data []byte, opt options) ([]byte, error) {
 		}
 		series.Versions = append(series.Versions, version)
 	}
-	for _, item := range matrix.Items {
-		version, tag, err := versionFromItem(item, matrix.Defaults.Platforms, registry)
-		if err != nil {
-			return nil, err
-		}
-		if item.Catalog == nil || *item.Catalog {
-			addVersion(version, tag)
-			listedTags[version.Name] = true
-		}
-	}
-	// The inventory supplements a complete build catalog. Import reconciles missing rows.
-	if len(listedTags) == 0 {
-		return nil, fmt.Errorf("matrix has no catalogued build items")
-	}
-	for _, item := range matrix.Published {
-		if listedTags[item.Tag] {
-			return nil, fmt.Errorf("published tag %q is already listed", item.Tag)
-		}
-		listedTags[item.Tag] = true
-		version, tag, err := item.version()
-		if err != nil {
-			return nil, err
-		}
-		addVersion(version, tag)
+	pins, err := templateRunnerTags()
+	if err != nil {
+		return nil, err
 	}
 	series := make([]manifest.ManifestSeries, 0, len(seriesByName))
 	for _, value := range seriesByName {
+		versions, err := latestPlatformVersions(value.Versions, pins)
+		if err != nil {
+			return nil, err
+		}
+		value.Versions = versions
 		sort.Slice(value.Versions, func(i, j int) bool { return value.Versions[i].ImageRef < value.Versions[j].ImageRef })
 		series = append(series, *value)
 	}
@@ -207,7 +227,7 @@ func generate(data []byte, opt options) ([]byte, error) {
 		return nil, err
 	}
 	sum := sha256.Sum256(seriesJSON)
-	m := manifest.Manifest{SchemaVersion: 3, CatalogVersion: opt.Date + "." + hex.EncodeToString(sum[:])[:8], Series: series}
+	m := manifest.Manifest{SchemaVersion: manifest.RunnerSchema, CatalogVersion: opt.Date + "." + hex.EncodeToString(sum[:])[:8], Series: series}
 	if err := m.Validate(); err != nil {
 		return nil, err
 	}
@@ -261,6 +281,24 @@ func versionFromItem(item matrixItem, defaultPlatforms []string, registry string
 	}
 	ref := registry + ":" + immutable
 	sources, err := mirrorSources(ref)
+	var digest string
+	if item.Builder == "prebuilt" {
+		repo, pin, ok := strings.Cut(item.Artifact, "@")
+		if !ok || !registryDigest.MatchString(pin) || !slices.Contains(publishedRegistries, repo) {
+			return manifest.ManifestVersion{}, tag, fmt.Errorf("%s: expected a digest-pinned published runner repository, got %q", id, item.Artifact)
+		}
+		digest = pin
+		if item.RegistrySources != nil {
+			ref = repo + ":" + immutable
+			sources = item.RegistrySources
+			for _, source := range sources {
+				mirror, ok := strings.CutSuffix(source, ":"+immutable)
+				if !ok || !slices.Contains(publishedRegistries, mirror) || source == ref {
+					return manifest.ManifestVersion{}, tag, fmt.Errorf("%s: invalid mirror %q", immutable, source)
+				}
+			}
+		}
+	}
 	if err != nil {
 		return manifest.ManifestVersion{}, tag, fmt.Errorf("matrix id %q: %w", id, err)
 	}
@@ -271,6 +309,7 @@ func versionFromItem(item matrixItem, defaultPlatforms []string, registry string
 		FrameworkVersion: tag.FrameworkVersion,
 		Arch:             arch,
 		RegistrySources:  sources,
+		RegistryDigest:   digest,
 		Notes:            versionNotes(item, tag),
 	}, tag, nil
 }
@@ -284,7 +323,7 @@ func versionFromItem(item matrixItem, defaultPlatforms []string, registry string
 // that can reach it says so with a rule of its own.
 var publishedRegistries = []string{
 	"quay.io/gpuworks/gpuworks-runner",
-	swrRunner,
+	"swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner",
 }
 
 // mirrorSources lists the public copies of a runner tag.
@@ -368,16 +407,66 @@ func writePath(path string, b []byte) error {
 	return os.WriteFile(path, b, 0o644)
 }
 
+// Bind the exact catalog that will be published to the matrix. A mirror may
+// wrap the same platform manifests in a different index, so check the pin
+// at the source registry that supplied the artifact.
+func publicationPins(matrix, body []byte) (map[string]string, error) {
+	catalog, err := manifest.Parse(body)
+	if err != nil {
+		return nil, err
+	}
+	date, _, _ := strings.Cut(catalog.CatalogVersion, ".")
+	generated, err := generate(matrix, options{Date: date})
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(generated, body) {
+		return nil, fmt.Errorf("image catalog differs from the runner matrix; run make image-manifest")
+	}
+	var m matrixFile
+	if err := yaml.Unmarshal(matrix, &m); err != nil {
+		return nil, err
+	}
+	pins := map[string]string{}
+	for _, item := range m.Items {
+		if item.Builder == "prebuilt" {
+			repo, _, _ := strings.Cut(item.Artifact, "@")
+			tag := item.ID + "-" + item.Revision
+			pins[tag] = repo + ":" + tag
+		}
+	}
+	return pins, nil
+}
+
 // runVerify prints every problem the pre-publish check finds and returns the
 // process exit code.
-func runVerify(path string) int {
+func runVerify(path, matrixPath string, pinsOnly bool) int {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
-	report, err := verifyManifest(ctx, data, newVerifier(nil, nil))
+	v := newVerifier(nil, nil)
+	if matrixPath != "" {
+		matrix, err := os.ReadFile(matrixPath)
+		if err != nil {
+			fatal(err)
+		}
+		v.pinnedSources, err = publicationPins(matrix, data)
+		if err != nil {
+			fatal(err)
+		}
+	}
+	if pinsOnly {
+		checked, err := verifyPublicationPins(ctx, data, v)
+		if err != nil {
+			fatal(err)
+		}
+		fmt.Printf("verified %d published runner pins\n", checked)
+		return 0
+	}
+	report, err := verifyManifest(ctx, data, v)
 	if err != nil {
 		fatal(err)
 	}

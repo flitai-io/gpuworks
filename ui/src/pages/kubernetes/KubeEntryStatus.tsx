@@ -6,6 +6,8 @@ import { Button } from "../../components/ui/button";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "../../components/ui/popover";
 import { Tooltip } from "../../components/ui/tooltip";
 import { kubeTroubleshootCommands } from "../../kubeClusters";
+import KubeRolloutStatus from "./KubeRolloutStatus";
+import KubeVerifyCommand from "./KubeVerifyCommand";
 
 /** Why a cluster's agents may not have joined, and the commands that tell which. */
 function StalledHelp({ cluster }: { cluster: KubeCluster }) {
@@ -13,7 +15,9 @@ function StalledHelp({ cluster }: { cluster: KubeCluster }) {
   const commands = kubeTroubleshootCommands(cluster.namespace);
   return (
     <div className="flex max-w-[520px] flex-col gap-2">
-      <p>{t("stalled.intro")}</p>
+      {/* The server reads a cloud cluster itself; otherwise the command reads it. */}
+      {cluster.can_apply ? <KubeRolloutStatus uuid={cluster.uuid} /> : cluster.verify_command && <KubeVerifyCommand command={cluster.verify_command} />}
+      <p>{cluster.can_apply || cluster.verify_command ? t("stalled.introMore") : t("stalled.intro")}</p>
       <div className="flex items-start gap-1">
         <pre aria-label={t("stalled.copy")} className="code-block min-w-0 flex-1 overflow-x-auto text-label">{commands}</pre>
         <CopyButton size="small" label={t("stalled.copy")} text={commands} />

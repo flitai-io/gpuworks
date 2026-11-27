@@ -59,7 +59,15 @@ type ModelFile struct {
 	NodeID    uint `gorm:"index:idx_mf,unique,priority:3"`
 	// WriterNodeID is the node that writes a shared row (download or copy).
 	WriterNodeID uint `gorm:"index"`
-	// DownloadDeploymentID records who initiated the current download; zero is an independent user request.
+	// DownloadDeploymentID depends on the state, and every reader of a
+	// canceled row must go through WithdrawnWithService:
+	//   - not canceled: the service whose deployment initiated the current
+	//     download; zero is an independent request (an operator's download
+	//     from the models page).
+	//   - canceled: non-zero means the download was withdrawn with that
+	//     service (it was deleted or stopped) and a deployment that needs the
+	//     model there may start it again; zero means an operator canceled it,
+	//     which no deployment undoes.
 	DownloadDeploymentID uint `gorm:"index;not null;default:0"`
 	// LastUsedAt is when an instance last started or stopped on these files;
 	// the node cache evicts the least recently used first.

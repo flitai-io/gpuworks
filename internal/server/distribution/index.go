@@ -57,6 +57,7 @@ type Index struct {
 	PreviousServers []ServerRelease `json:"previous_servers,omitempty"`
 	// ImageCatalog and TemplateCatalog are absent when a channel publishes no
 	// catalog of that kind.
+	ImageCatalogV4  *CatalogFile     `json:"image_catalog_v4,omitempty"`
 	ImageCatalog    *CatalogFile     `json:"image_catalog,omitempty"`
 	TemplateCatalog *TemplateCatalog `json:"template_catalog,omitempty"`
 }
@@ -137,6 +138,14 @@ func ParseIndexFor(payload []byte, channel, edition string) (Index, error) {
 	return index, nil
 }
 
+// CurrentImageCatalog prefers the catalog with runner selection metadata.
+func (x Index) CurrentImageCatalog() *CatalogFile {
+	if x.ImageCatalogV4 != nil {
+		return x.ImageCatalogV4
+	}
+	return x.ImageCatalog
+}
+
 // Servers returns the signed choices in publication order, newest first.
 func (x Index) Servers() []ServerRelease {
 	return append([]ServerRelease{x.Server}, x.PreviousServers...)
@@ -173,6 +182,11 @@ func (x Index) Validate() error {
 		}
 		seen[release.ReleaseID] = true
 		if err := release.validate(); err != nil {
+			return err
+		}
+	}
+	if x.ImageCatalogV4 != nil {
+		if err := x.ImageCatalogV4.validate("image catalog v4"); err != nil {
 			return err
 		}
 	}
@@ -265,6 +279,24 @@ func (r ServerRelease) NewerThan(releaseID, builtAt string) bool {
 func (r ServerRelease) OlderThan(releaseID, builtAt string) bool {
 	order, ok := compareBuilds(r.ReleaseID, r.BuiltAt, releaseID, builtAt)
 	return ok && order < 0
+}
+
+// Unpublished reports whether a server built for this channel (its build
+// channel, release id and build time) is later than the channel's newest
+// release without being one of the releases the channel lists: a build from
+// a branch or a working tree. Build time does not place such a build against
+// the channel's releases, since it can lack what an earlier-built release
+// has, so it is neither up to date nor ahead. A build of another channel and
+// two version tags keep the order compareBuilds gives them.
+func (x Index) Unpublished(buildChannel, releaseID, builtAt string) bool {
+	if buildChannel != x.Channel || !x.Server.OlderThan(releaseID, builtAt) {
+		return false
+	}
+	if IsReleaseVersion(releaseID) && IsReleaseVersion(x.Server.ReleaseID) {
+		return false
+	}
+	_, listed := x.FindServer(releaseID)
+	return !listed
 }
 
 // VersionChange classifies a replacement using only the two reported IDs.
