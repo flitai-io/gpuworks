@@ -2,6 +2,7 @@ package inferencecatalog
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -61,12 +62,17 @@ func TestSeedDescriptorIsNotADistributionManifest(t *testing.T) {
 	if _, _, err := LoadPackageTolerant(source); err == nil {
 		t.Fatal("official reader accepted a source descriptor as a published manifest")
 	}
-	for _, text := range []string{
-		"schema_version: 999\n", "schema_version: 3\nspecs: 1\n", "schema_version: 3\n---\n{}\n",
+	for _, tc := range []struct {
+		text string
+		want string
+	}{
+		{"schema_version: 999\n", "unsupported seed catalog descriptor schema_version 999"},
+		{"schema_version: 3\nspecs: 1\n", "parse seed catalog descriptor"},
+		{"schema_version: 3\n---\n{}\n", "seed catalog descriptor must contain one document"},
 	} {
-		source["manifest.yaml"].Data = []byte(text)
-		if _, err := BuildSeedManifest(source, time.Unix(0, 0)); err == nil {
-			t.Fatalf("invalid seed descriptor accepted: %q", text)
+		source["manifest.yaml"].Data = []byte(tc.text)
+		if _, err := BuildSeedManifest(source, time.Unix(0, 0)); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("descriptor %q: got %v, want %q", tc.text, err, tc.want)
 		}
 	}
 	source["manifest.yaml"].Data = []byte("schema_version: 3\n")

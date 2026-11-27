@@ -22,6 +22,8 @@ models/<model-id>/assets/<small-file>
 | `models/<model-id>/model.yaml` | 保存该模型的元数据和 spec 列表 |
 | 模型目录下的 `assets/` | 携带该模型需要的轻量辅助文件 |
 
+新增或修改内置推理模板时，只需改动对应的模型目录。源码描述文件 `internal/server/inferencecatalog/seed/catalog/manifest.yaml` 只保存 `schema_version`。打包时，构建工具从 Go 实际嵌入的文件统计模型数和 spec 数。`published_at` 默认取最近一次修改内置目录的 Git 提交的作者时间，统一写为 UTC。发布流水线生成一次完整清单，服务端和渠道包共用这份清单。
+
 **assets 只用于轻量文件。** 镜像、权重、框架库、venv 和共享运行时不能放入 assets，必须通过镜像、权重源或节点资产交付。
 
 目录包按内容摘要（digest）标识。server 校验包内路径安全、schema（文件结构和字段约束），并计算内容摘要；同一 digest 的包可以复用。缓存损坏后，不能继续以旧 digest 提供服务。

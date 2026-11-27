@@ -11,7 +11,7 @@ import (
 
 func writeSeedManifest(args []string, out io.Writer) error {
 	flags := flag.NewFlagSet("seed-manifest", flag.ContinueOnError)
-	date := flags.String("published-at", "", "catalog commit timestamp (RFC3339); omit for an unpublished build")
+	date := flags.String("published-at", "", "catalog publication time (RFC3339); omit for an unpublished build")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}

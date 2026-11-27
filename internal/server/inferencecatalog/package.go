@@ -352,7 +352,7 @@ func (writer *countingWriter) Write(data []byte) (int, error) {
 
 func parsePackageManifest(data []byte, knownFields bool) (PackageManifest, error) {
 	var manifest PackageManifest
-	if err := decodeManifest(data, &manifest, knownFields); err != nil {
+	if err := decodeManifest(data, &manifest, knownFields, "inference catalog package manifest"); err != nil {
 		return PackageManifest{}, err
 	}
 	if err := validatePackageManifest(manifest); err != nil {
@@ -361,8 +361,12 @@ func parsePackageManifest(data []byte, knownFields bool) (PackageManifest, error
 	return manifest, nil
 }
 
+func supportedPackageSchema(version int) bool {
+	return oldestPackageSchemaVersion <= version && version <= PackageSchemaVersion
+}
+
 func validatePackageManifest(manifest PackageManifest) error {
-	if manifest.SchemaVersion < oldestPackageSchemaVersion || manifest.SchemaVersion > PackageSchemaVersion {
+	if !supportedPackageSchema(manifest.SchemaVersion) {
 		return fmt.Errorf("unsupported inference catalog package schema_version %d", manifest.SchemaVersion)
 	}
 	if _, err := time.Parse(time.RFC3339, strings.TrimSpace(manifest.PublishedAt)); err != nil {
@@ -374,18 +378,18 @@ func validatePackageManifest(manifest PackageManifest) error {
 	return nil
 }
 
-func decodeManifest(data []byte, target any, knownFields bool) error {
+func decodeManifest(data []byte, target any, knownFields bool, name string) error {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(knownFields)
 	if err := decoder.Decode(target); err != nil {
-		return fmt.Errorf("parse inference catalog package manifest: %w", err)
+		return fmt.Errorf("parse %s: %w", name, err)
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		if err == nil {
-			return errors.New("inference catalog package manifest must contain one document")
+			return fmt.Errorf("%s must contain one document", name)
 		}
-		return fmt.Errorf("parse inference catalog package manifest: %w", err)
+		return fmt.Errorf("parse %s: %w", name, err)
 	}
 	return nil
 }

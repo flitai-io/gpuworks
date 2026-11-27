@@ -29,7 +29,8 @@ catalog_date() {
     echo "catalog history ends at a shallow boundary; deepen the checkout or set SEED_CATALOG_PUBLISHED_AT" >&2
     return 1
   fi
-  git show -s --format=%cI "$revision"
+  # Rebases and backports can change the committer date of the same model edit.
+  git show -s --format=%aI "$revision"
 }
 
 generate() {
@@ -46,12 +47,18 @@ mkdir -p bin
 stage=$(mktemp -d bin/seed-catalog.XXXXXX)
 trap 'rm -rf "$stage"' EXIT
 if [ -n "${SEED_CATALOG_MANIFEST:-}" ]; then
+  manifest_source="SEED_CATALOG_MANIFEST=$SEED_CATALOG_MANIFEST"
+  if [ ! -f "$SEED_CATALOG_MANIFEST" ] || [ ! -r "$SEED_CATALOG_MANIFEST" ]; then
+    echo "$manifest_source must name a readable file" >&2
+    exit 1
+  fi
   cp "$SEED_CATALOG_MANIFEST" "$stage/manifest.yaml"
 else
+  manifest_source="the seed manifest generator"
   generate > "$stage/manifest.yaml"
 fi
 if [ ! -s "$stage/manifest.yaml" ]; then
-  echo "empty seed manifest" >&2
+  echo "empty seed manifest from $manifest_source" >&2
   exit 1
 fi
 # The child may change directories. The compiler overlay itself uses paths

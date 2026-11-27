@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -52,6 +53,25 @@ func TestSeedManifestCommandUsesPublicationTime(t *testing.T) {
 			}
 			if got.PublishedAt != tc.want || got.Models != len(catalog.Models) || got.Specs != specs {
 				t.Fatalf("manifest for %d embedded models / %d specs at %s: %+v", len(catalog.Models), specs, tc.want, got)
+			}
+		})
+	}
+}
+
+func TestSeedManifestCommandRejectsInvalidArguments(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"invalid date", []string{"--published-at", "yesterday"}, "seed publication time"},
+		{"unexpected argument", []string{"extra"}, "usage:"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			err := writeSeedManifest(tc.args, &output)
+			if err == nil || !strings.Contains(err.Error(), tc.want) || output.Len() != 0 {
+				t.Fatalf("invalid arguments produced %q, error %v", output.String(), err)
 			}
 		})
 	}

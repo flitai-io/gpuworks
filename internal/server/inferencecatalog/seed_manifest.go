@@ -20,8 +20,11 @@ func BuildSeedManifest(source fs.FS, publishedAt time.Time) ([]byte, error) {
 	var descriptor struct {
 		SchemaVersion int `yaml:"schema_version"`
 	}
-	if err := decodeManifest(data, &descriptor, true); err != nil {
+	if err := decodeManifest(data, &descriptor, true, "seed catalog descriptor"); err != nil {
 		return nil, err
+	}
+	if !supportedPackageSchema(descriptor.SchemaVersion) {
+		return nil, fmt.Errorf("unsupported seed catalog descriptor schema_version %d", descriptor.SchemaVersion)
 	}
 	if publishedAt.IsZero() {
 		publishedAt = time.Unix(0, 0)

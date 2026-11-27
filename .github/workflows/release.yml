@@ -23,7 +23,6 @@ permissions:
 env:
   GOTOOLCHAIN: local
   GPUWORKS_USAGE_REPORT: "off"
-  SEED_CATALOG_MANIFEST: bin/seed-catalog/manifest.yaml
 
 jobs:
   # One release id, channel and build time for every job of the run, as
@@ -66,6 +65,8 @@ jobs:
 
   build:
     needs: [meta, gates]
+    env:
+      SEED_CATALOG_MANIFEST: bin/seed-catalog/manifest.yaml
     strategy:
       fail-fast: false
       matrix:
@@ -170,6 +171,7 @@ jobs:
       cancel-in-progress: false
     env:
       GPUWORKS_RCLONE_VERSION: v1.75.2
+      SEED_CATALOG_MANIFEST: bin/seed-catalog/manifest.yaml
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6

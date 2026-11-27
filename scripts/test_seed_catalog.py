@@ -92,6 +92,40 @@ class SeedCatalogBuildTest(unittest.TestCase):
         self.git(self.root, "clone", "--depth=2", repo.as_uri(), str(shallow))
         self.assert_manifest_date(shallow, SECOND)
 
+    def test_replaying_a_catalog_change_keeps_its_publication_time(self):
+        repo = self.root / "repo"
+        (repo / CATALOG).mkdir(parents=True)
+        self.git(repo, "init", "-q")
+        self.git(repo, "commit", "--allow-empty", "-qm", "initial")
+        self.git(repo, "branch", "-M", "release")
+        self.git(repo, "checkout", "-qb", "templates")
+        (repo / CATALOG / "manifest.yaml").write_text("schema_version: 3\n")
+        self.git(repo, "add", ".")
+        self.git(repo, "commit", "-qm", "catalog", date=FIRST)
+        self.assert_manifest_date(repo, FIRST)
+
+        self.git(repo, "checkout", "-q", "release")
+        self.git(repo, "commit", "--allow-empty", "-qm", "unrelated release change", date=SECOND)
+        self.git(repo, "checkout", "-qb", "backport")
+        self.git(repo, "cherry-pick", "templates", date=SECOND)
+        with self.subTest("cherry-pick"):
+            self.assert_manifest_date(repo, FIRST)
+        self.git(repo, "checkout", "-q", "templates")
+        self.git(repo, "rebase", "release", date=SECOND)
+        with self.subTest("rebase"):
+            self.assert_manifest_date(repo, FIRST)
+
+    def test_build_rejects_an_invalid_supplied_manifest(self):
+        empty = self.root / "provided.yaml"
+        empty.touch()
+        for path, reason in [(empty, "empty seed manifest"), (self.root / "missing.yaml", "readable file")]:
+            with self.subTest(path=path):
+                result = self.invoke(self.root, "build", SEED_CATALOG_MANIFEST=str(path))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("SEED_CATALOG_MANIFEST", result.stderr)
+                self.assertIn(str(path), result.stderr)
+                self.assertIn(reason, result.stderr)
+
     def test_concurrent_builds_keep_their_own_manifest_until_compile_finishes(self):
         with subprocess.Popen([SCRIPT, "build"], cwd=self.root, text=True, stdin=subprocess.PIPE,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,

@@ -22,6 +22,8 @@ models/<model-id>/assets/<small-file>
 | `models/<model-id>/model.yaml` | Stores the model's metadata and spec list |
 | `assets/` under the model directory | Carries lightweight auxiliary files required by the model |
 
+To add or change a built-in inference template, edit only its model directory. The source descriptor at `internal/server/inferencecatalog/seed/catalog/manifest.yaml` stores only `schema_version`. At build time, the tool counts models and specs from the files Go embeds. By default, `published_at` is the author timestamp of the last commit that changed the catalog directory, expressed in UTC. The release pipeline generates the complete manifest once for both the server and the channel package.
+
 **Assets are only for lightweight files.** Images, weights, framework libraries, venvs, and shared runtimes must not be placed in assets; they must be delivered through images, weight sources, or node assets.
 
 Catalog packages are identified by a content digest. The server validates path safety and the schema (file structure and field constraints) within the package and computes its content digest. Packages with the same digest can be reused. If the cache is corrupted, it must no longer be served under the old digest.
@@ -201,7 +203,7 @@ When checking weight indexes, also account for these differences:
 - The `dots-studio/dots3-note-prev` checkpoint has one more layer than its config. The serving engine constructs the model from the config, so the config takes precedence.
 
 <!-- translation-source-sha256: 696f53ab854aebf61e5e493fce4a323c54bbf0a3eec7804ba0c67bd8b4b0a20b # Executable Inference Catalog Packages -->
-<!-- translation-source-sha256: 65be247da5a7f8803fa37f3b4615c3ac95f3ab4fef2c2fb4bab5ae71dabd4c95 ## Package Contents -->
+<!-- translation-source-sha256: dd93e2671b941fcd03c83df536d596d85644af21fb59b28eb5f686d332fadfe2 ## Package Contents -->
 <!-- translation-source-sha256: fc8d2eea70c402aa03dfa2ce7f0d73d656bf27e7f0e338b95d3fd51dda907396 ### Relationship Between model.yaml and Specs -->
 <!-- translation-source-sha256: 428a9cbf8c223a2aff4f3eb05c69ab4f8f40736bccd9b5342cdeaada1e9ff3d7 ## Importing and Overwriting -->
 <!-- translation-source-sha256: d4641889857f897ea8de5886e4bdc53b19fb9fd1cca17948dcaf01efc74ed3ab ### Import Entry Points and File Formats -->
