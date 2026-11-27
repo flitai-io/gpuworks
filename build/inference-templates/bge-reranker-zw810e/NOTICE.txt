@@ -1,0 +1,4 @@
+The grouped-enqueue patch modifies vLLM modules from the GPUWorks HGGC runner.
+vLLM source files are licensed under the Apache License, Version 2.0.
+Copyright contributors to the vLLM project.
+The patch preserves the original file-level notices.

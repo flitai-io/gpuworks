@@ -1,0 +1,26 @@
+{
+  "image": "gpuworks/gpuworks-runner:hggc13.0-vllm0.23.0-r2",
+  "image_id": "sha256:50452109e67a5d12439d52fab90083d9d9c0c867f6239d8d4601070ac84fd7c7",
+  "files": {
+    "vllm/v1/engine/__init__.py": {
+      "base_sha256": "6eb1175dd76d5099dd4b6297d12c682f13ca42e297968983bc433894c1b82245",
+      "patched_sha256": "bc364e6cf7c4e87ea2b8b55b13b06da40bb93ae49b43b482b34902e303623747"
+    },
+    "vllm/v1/engine/core_client.py": {
+      "base_sha256": "e41fe15caa59dfd289ae212b3eaefc20c34be87a72e779df03d970f9714b793d",
+      "patched_sha256": "1647353aae45d6507354a0f90f19c876f10771b73a2e09862ff114e6b51c28f4"
+    },
+    "vllm/v1/engine/core.py": {
+      "base_sha256": "8052cb158e1db1e75f9fbc3cd35bd1c82cf1cb196fb6e969300bd35e866c2011",
+      "patched_sha256": "a5da0a8d83a28a3af97befedd3270504e20aa17099e9722737bc7f74203a3605"
+    },
+    "vllm/v1/engine/async_llm.py": {
+      "base_sha256": "2128cf018fe136b698c5e89dc7325bc6dced9d516cc9d772695f044716970b64",
+      "patched_sha256": "956fc86766371cf69640dd8a658d1b4d73b5fc718a3d13de8ef09d2af0f8ac42"
+    },
+    "vllm/entrypoints/pooling/base/serving.py": {
+      "base_sha256": "3d030517cd70bac435568b313dabc4657c6806cc65d91c5ceec1bc71dee3a853",
+      "patched_sha256": "35ab9e394e920854bd9773eab1e796c1642492d5b13e202bc06fd07dd27653d2"
+    }
+  }
+}
