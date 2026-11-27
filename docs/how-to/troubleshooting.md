@@ -1166,7 +1166,7 @@ agent 会等待超时的 `run` 返回并删除它创建的容器；最多等待 
 预算从实例启动后等待健康检查时使用；值在实例创建时确定，修改只影响之后启动的实例。
 超过预算就判本次启动失败，按下方规则重建。
 
-引擎日志显示已在服务，实例消息却一直是 `waiting for engine health: … result=connection_refused`：多半是手工命令没写 `--port`，引擎监听的是自己的默认端口，而健康检查访问的是平台分配的端口，调大预算没有用。在命令里加上 `--port ${GPUWORKS_API_PORT}` 后重新部署，见[手工命令的端口与平台变量](../explanation/launch-config.md#手工命令的端口与平台变量)。
+引擎日志显示已在服务，实例消息却一直是 `waiting for engine health: … result=connection_refused`：多半是手工命令没写 `--port`，引擎监听的是自己的默认端口，而健康检查访问的是平台分配的端口，调大预算没有用。平台判断出手工命令没写 API 端口时，实例消息会直接说明这一点，这次启动也以 `ENGINE_PORT_UNSTATED` 失败，而不是超时或卡死。在命令里加上 `--port ${GPUWORKS_API_PORT}` 后重新部署，见[手工命令的端口与平台变量](../explanation/launch-config.md#手工命令的端口与平台变量)。
 
 **启动卡死：`engine start stalled`**
 

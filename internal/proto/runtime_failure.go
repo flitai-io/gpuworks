@@ -212,6 +212,13 @@ const (
 	// ErrorEngineHealthTimeout: the engine did not become healthy within its
 	// start timeout (Detail is the last health result, if any).
 	ErrorEngineHealthTimeout = "ENGINE_HEALTH_TIMEOUT"
+	// ErrorEnginePortUnstated: the start of a launch whose manual command
+	// states no API port (ResolvedLaunch.APIPortUnstated) ended while
+	// nothing listened on its API port (Port): the engine serves on its own
+	// default port, so waiting longer would not have helped. It takes the
+	// place of the timeout or stall the start ended in, and keeps that one's
+	// Detail and Evidence.
+	ErrorEnginePortUnstated = "ENGINE_PORT_UNSTATED"
 	// ErrorEngineStartStalled: the start of a newly created container made
 	// no progress for a long time while the container kept running: nothing
 	// new in its output, nothing moving on its cards, its processes idle
