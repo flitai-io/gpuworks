@@ -313,7 +313,8 @@ For the CLI, run `gpuworks-agent doctor` on the node; its exit code is always `0
 
 | Observed Result | Next Step |
 |---|---|
-| GPU count is 0, no vendor tool | On the node, check whether the driver and tool are installed and check the agent user's `PATH`; use `nvidia-smi`, `npu-smi info`, `ppu-smi`, or `hy-smi` according to the hardware |
+| GPU count is 0, no vendor tool | On the node, check whether the driver and tool are installed and check the agent user's `PATH`; use `nvidia-smi`, `npu-smi info`, `ppu-smi`, `hy-smi`, or `amd-smi list` as appropriate. On Kunlun P800, try `/usr/local/xpu/bin/xpu-smi -L`. SSH may omit the SDK directory from `PATH` |
+| Add Node GPU precheck shows `skip / CHECK_COMMAND_NOT_RUN` | On Linux, the GPU probe has a 10-second budget across all vendors. A busy driver can time out. The other checks continue. Run the vendor command as the same SSH user, check the elapsed time and card list, then retry |
 | **Vendor tool did not answer**, `gpu probe failed` | Run the corresponding tool on the node and check its duration and errors; if it remains stuck, check driver logs. Do not treat stale GPU memory readings as current capacity |
 | **Runtime cannot use it**, **Driver init failed** | Check the diagnostic evidence for that card and the results for other cards; restore the driver first, then run diagnosis again |
 | **Not readable** | Check whether the vendor tool is executable and returns a result; do not conclude from this alone that the hardware is faulty |
@@ -328,14 +329,9 @@ After taking action, run diagnosis again and confirm that card health and alloca
 
 If the driver or `nvidia-smi` is not installed or is not in `PATH`, the prober returns 0 GPUs without an error; the node is online but has no GPUs.
 
-**How the platform identifies the vendor**: the agent tries `hy-smi`, `npu-smi`, `ppu-smi`, and `nvidia-smi` in that order, selecting the first one that actually responds.
-For NVIDIA, `nvidia-smi --query-gpu=index` must succeed. NVIDIA is last because the PPU SDK includes
-a CUDA-compatible `nvidia-smi` (`/usr/local/PPU_SDK/CUDA_SDK/bin`) that responds normally with PPU cards presented as GPUs.
+**The Add Node SSH precheck** tries `nvidia-smi`, `npu-smi`, `ppu-smi`, `hy-smi`, and `amd-smi` in order, then checks Kunlun. Both Intel and Kunlun ship `xpu-smi`. The precheck requires the `/dev/xpuctrl` character device and runs `/usr/local/xpu/bin/xpu-smi -L` if executable. Otherwise it looks up `xpu-smi` in the SSH session's `PATH`. The command must succeed and list at least one card on an `XPU <number>:` line. A completed probe returns `CHECK_GPU_TOOL_MISSING` if all vendor checks fail.
 
-If none responds, the agent checks **vendor device files** (`/dev/davinci_manager`, `/dev/alixpu_ctl`, `/dev/nvidiactl`), then **which vendor's CLI is installed**
-(in the order `npu-smi`, `hy-smi`, `ppu-smi`, `nvidia-smi`, with NVIDIA last because hosts from other vendors often retain an outdated `nvidia-smi`);
-only if none is found is the node classified as having “no accelerator”, with an empty vendor. While the driver is still loading (after an Ascend host boots, the agent starts first, `npu-smi` has not yet responded,
-and the device files have not been created), the node therefore remains an Ascend node, and later probes can add its cards.
+**After registration, the agent's automatic detection** checks Hygon, Ascend, PPU, Kunlun, NVIDIA, Apple, and AMD in order. The Kunlun probe reads the card brand from `xpu-smi -q -x`. PPU precedes NVIDIA because the PPU SDK ships a CUDA-compatible tool that also answers `nvidia-smi`. If no probe is ready, the agent checks vendor control devices (including Kunlun's `/dev/xpuctrl`), then installed tools that identify a vendor, then PCI devices.
 
 **Temporarily 0 during Ascend startup**
 
@@ -1590,8 +1586,8 @@ When filing an issue or asking for help, attach a [diagnostics archive](#无法�
 <!-- translation-source-sha256: eff0f8cdc1fc6886c10dc53cd6c1f66d5c3447d6318015a3a7fa450ff2a50ed1 ### Reconnect Manually -->
 <!-- translation-source-sha256: 64e3842de1709fe48ffaf23670317d1da0b979ce090588bb8acef71a5e0de5b2 ### Resolve the Last Error -->
 <!-- translation-source-sha256: 108381a2d432f34b03b95ee5b8f83943512a95ae31ab0880187e387eee3f2e4e ### The Cloud Platform Changed the Connection Address -->
-<!-- translation-source-sha256: 4cb2a31ae8190359d18ee9d2c1bc63060937865e41802aa7e28d3140166e74cc ## GPU Not Detected or Vendor Tool Did Not Answer -->
-<!-- translation-source-sha256: 01d3dc422ad78b78fae551b18c06a077ef09938261b3e75bac1bc11c05e22052 ### GPU Count Is 0: Check Tools and Drivers First -->
+<!-- translation-source-sha256: 4f206b6067f403eb46d96dc113a00ebc2d489aef79cd5ba6ed1abbe891445e73 ## GPU Not Detected or Vendor Tool Did Not Answer -->
+<!-- translation-source-sha256: 7c0cbae4bad413115d729d80091059b5efd0bbc0e0312f0dc914d6dcfc084bc2 ### GPU Count Is 0: Check Tools and Drivers First -->
 <!-- translation-source-sha256: a53303c45629885919cc151f74fd4bb036c0e159c65ca4ef4d3aadff3c10def4 ### Vendor Tool Did Not Answer or Readings Are Stale -->
 <!-- translation-source-sha256: c40739d95375b5423c001d772cdeb5770f2f8c11f507b388a3810a77b6d18f98 ### A Card Is Unusable by the Runtime or Fails Driver Initialization -->
 <!-- translation-source-sha256: 7ebf5c9174ef8583f382fdc9479446b523c3851af93fa26195569e89ad2a8a6c ### Host Sees the Card but Container Does Not -->

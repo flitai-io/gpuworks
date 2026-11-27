@@ -173,6 +173,7 @@ exit "$CLI_STATUS"`)
 
 	const cards = "XPU 0: P800 PCIe (UUID: GPU-test-0)\nXPU 1: P800 PCIe (UUID: GPU-test-1)"
 	const missing = "no supported GPU CLI found"
+	probe := strings.ReplaceAll(gpuProbeCommand(), "/usr/local/xpu/bin", shellQuote(t.TempDir()))
 	for _, tc := range []struct {
 		name, control, output, want string
 		status, wantExit            int
@@ -184,7 +185,7 @@ exit "$CLI_STATUS"`)
 		{"CLI reports no cards", "/dev/null", "No devices found", missing, 0, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			probe := strings.ReplaceAll(gpuProbeCommand(), "/dev/xpuctrl", shellQuote(tc.control))
+			probe := strings.ReplaceAll(probe, "/dev/xpuctrl", shellQuote(tc.control))
 			cmd := exec.Command("/bin/sh", "-c", probe)
 			cmd.Env = []string{"PATH=" + bin, "CARDS=" + tc.output, fmt.Sprintf("CLI_STATUS=%d", tc.status)}
 			out, err := cmd.CombinedOutput()
@@ -195,7 +196,7 @@ exit "$CLI_STATUS"`)
 	}
 	t.Run("NVIDIA still takes precedence", func(t *testing.T) {
 		writeExecutable(t, filepath.Join(bin, "nvidia-smi"), `[ "$*" = "-L" ] && echo 'GPU 0: NVIDIA'`)
-		cmd := exec.Command("/bin/sh", "-c", strings.ReplaceAll(gpuProbeCommand(), "/dev/xpuctrl", "/dev/null"))
+		cmd := exec.Command("/bin/sh", "-c", strings.ReplaceAll(probe, "/dev/xpuctrl", "/dev/null"))
 		cmd.Env = []string{"PATH=" + bin, "CARDS=" + cards, "CLI_STATUS=0"}
 		if out, err := cmd.CombinedOutput(); err != nil || string(out) != "GPU 0: NVIDIA\n" {
 			t.Fatalf("mixed host probe = %q, %v", out, err)

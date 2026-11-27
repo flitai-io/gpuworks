@@ -314,7 +314,8 @@ CLI 可在节点执行 `gpuworks-agent doctor`；退出码恒为 `0`，应读取
 
 | 观察到的结果 | 下一步 |
 |---|---|
-| GPU 为 0、没有厂商工具 | 在节点核对驱动、工具是否安装，以及 agent 用户的 `PATH`；按硬件选择 `nvidia-smi`、`npu-smi info`、`ppu-smi` 或 `hy-smi` |
+| GPU 为 0、没有厂商工具 | 在节点核对驱动、工具是否安装，以及 agent 用户的 `PATH`；按硬件选择 `nvidia-smi`、`npu-smi info`、`ppu-smi`、`hy-smi`、`amd-smi list`；昆仑 P800 可用 `/usr/local/xpu/bin/xpu-smi -L` 列卡，SDK 目录可能未加入 SSH 的 `PATH` |
+| 添加节点时 GPU 预检为 `skip / CHECK_COMMAND_NOT_RUN` | Linux 上所有厂商共用 10 秒 GPU 探测时限。驱动繁忙也可能超时，其他检查会继续。在同一 SSH 用户下单独运行对应命令，确认耗时与卡片清单后重试 |
 | **厂商工具未响应**、`gpu probe failed` | 在节点运行对应工具，查看耗时与报错；持续卡住时检查驱动日志，旧显存读数不能作为当前容量 |
 | **运行时无法使用**、**驱动初始化失败** | 查看该卡的诊断依据与其他卡的结果；先恢复驱动，再重做诊断 |
 | **读不到信息** | 检查厂商工具是否可执行、能否返回；不据此直接判定硬件损坏 |
@@ -329,14 +330,9 @@ CLI 可在节点执行 `gpuworks-agent doctor`；退出码恒为 `0`，应读取
 
 驱动或 `nvidia-smi` 没装 / 不在 `PATH`：prober 返回 0 张 GPU 且不报错，节点在线但没有 GPU。
 
-**平台如何识别厂商**：agent 按 `hy-smi`、`npu-smi`、`ppu-smi`、`nvidia-smi` 顺序选第一个真正应答的，
-NVIDIA 的判据是 `nvidia-smi --query-gpu=index` 能成功。NVIDIA 排最后，因为 PPU SDK 自带一个
-CUDA 兼容的 `nvidia-smi`（`/usr/local/PPU_SDK/CUDA_SDK/bin`），它会把 PPU 卡当作 GPU 正常应答。
+**添加节点时的 SSH 预检**依次尝试 `nvidia-smi`、`npu-smi`、`ppu-smi`、`hy-smi`、`amd-smi`，最后检查昆仑。昆仑与 Intel 都提供 `xpu-smi`。预检先确认 `/dev/xpuctrl` 是字符设备，再运行可执行的 `/usr/local/xpu/bin/xpu-smi -L`；该路径不可执行时从 SSH 的 `PATH` 查找同名工具。命令成功并列出至少一行 `XPU <编号>:` 卡片信息时通过。探测执行完毕且所有厂商检查均失败时，返回 `CHECK_GPU_TOOL_MISSING`。
 
-都不应答时按**厂商设备文件**（`/dev/davinci_manager`、`/dev/alixpu_ctl`、`/dev/nvidiactl`）判，再按**装了哪家 CLI**判
-（`npu-smi`、`hy-smi`、`ppu-smi`、`nvidia-smi` 顺序，NVIDIA 最后：别家主机上常留着一个过期的 `nvidia-smi`）；
-都没有才是「没有加速卡」，厂商为空。驱动还在加载时（昇腾主机开机后 agent 先起、`npu-smi` 尚未应答、
-设备文件也还没建）节点因此仍是昇腾节点，随后的探测能补上卡。
+**节点上线后的 agent 自动探测**依次检查海光、昇腾、PPU、昆仑、NVIDIA、Apple 和 AMD。昆仑探针读取 `xpu-smi -q -x` 返回的卡片品牌；PPU 排在 NVIDIA 前面，因为 PPU SDK 自带的 CUDA 兼容工具也能响应 `nvidia-smi`。如果探针均未就绪，agent 依次检查厂商控制设备（昆仑为 `/dev/xpuctrl`）、能标识厂商的已安装工具，以及 PCI 设备。
 
 **昇腾启动期间暂时为 0**
 

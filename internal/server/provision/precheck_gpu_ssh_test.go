@@ -15,11 +15,26 @@ func TestPrecheckSSHWithKunlunSDKOutsidePath(t *testing.T) {
 	sdk := t.TempDir()
 	writeExecutable(t, filepath.Join(sdk, "xpu-smi"), `[ "$*" = "-L" ] || exit 2
 printf '%s\n' 'XPU 0: P800 PCIe' 'XPU 1: P800 PCIe'`)
-	report := precheckGPUOnLinux(t, func(cmd string, next fakeSSHHandler, stdin io.Reader) (string, string, uint32) {
-		cmd = strings.NewReplacer("/dev/xpuctrl", "/dev/null", "/usr/local/xpu/bin", sdk).Replace(cmd)
-		return next(cmd, stdin)
-	})
-	wantCheck(t, report.Checks, CheckIDGPU, "pass", "XPU 0: P800 PCIe", "XPU 1: P800 PCIe")
+	for _, tc := range []struct {
+		name        string
+		intelOnPath bool
+	}{
+		{"SDK only", false},
+		{"Intel xpu-smi on PATH", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bin := t.TempDir()
+			if tc.intelOnPath {
+				writeExecutable(t, filepath.Join(bin, "xpu-smi"), `echo 'unsupported Intel XPU Manager option: -L' >&2
+exit 1`)
+			}
+			report := precheckGPUOnLinux(t, func(cmd string, next fakeSSHHandler, stdin io.Reader) (string, string, uint32) {
+				cmd = strings.NewReplacer("/dev/xpuctrl", "/dev/null", "/usr/local/xpu/bin", sdk).Replace(cmd)
+				return next("PATH="+shellQuote(bin)+":$PATH\n"+cmd, stdin)
+			})
+			wantCheck(t, report.Checks, CheckIDGPU, "pass", "XPU 0: P800 PCIe", "XPU 1: P800 PCIe")
+		})
+	}
 }
 
 func TestPrecheckSSHReturnsOtherChecksWhenGPUStalls(t *testing.T) {
