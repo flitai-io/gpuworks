@@ -153,7 +153,8 @@ func basePrecheckCommands() []precheckCommand {
 		// Advisory only: the default runveil launcher needs no Python; only the
 		// udocker CLI launcher (GPUWORKS_UDOCKER_LAUNCHER=udocker) does.
 		{id: CheckIDPython, command: pythonProbeCommand(), failCode: messages.CheckPythonMissing, failMessage: "python3 not found (needed only for GPUWORKS_UDOCKER_LAUNCHER=udocker)"},
-		{id: CheckIDGPU, command: gpuProbeCommand(), required: true, failCode: messages.CheckGPUToolMissing, failMessage: "no supported GPU CLI found"},
+		// A stalled driver must not hold the other command results or later SSH probes.
+		{id: CheckIDGPU, command: gpuProbeCommand(), timeout: 10 * time.Second, required: true, failCode: messages.CheckGPUToolMissing, failMessage: "no supported GPU CLI found"},
 		{id: CheckIDFUSE, command: `if test -e /dev/fuse; then echo "/dev/fuse present"; else echo "/dev/fuse not present (optional unless udocker is selected)"; fi`, required: true,
 			failCode: messages.CheckCommandFailed, failMessage: "the FUSE device could not be checked"},
 		// Advisory only: Docker opens the devices as root whatever the SSH
@@ -294,6 +295,7 @@ func parseListenAddress(listen string) (string, int, error) {
 // command exits 0, and otherwise fails (required) or warns with failCode.
 // Its output is the check's evidence either way.
 type precheckCommand struct {
+	timeout     time.Duration // zero uses the caller's context
 	id          string
 	command     string
 	required    bool
@@ -330,6 +332,11 @@ func shouldCheckServerReachability(connectMode string) bool {
 // answered the check; one that never finished (the session failed, the
 // precheck timed out) did not, and is skipped rather than blamed on the node.
 func checkCommandContext(ctx context.Context, client *ssh.Client, command precheckCommand) CheckResult {
+	if command.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, command.timeout)
+		defer cancel()
+	}
 	out, err := runContext(ctx, client, command.command)
 	if err == nil {
 		return PassCheck(command.id, "", "", nil).WithEvidence(out)

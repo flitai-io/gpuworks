@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 func TestPrecheckSSHWithKunlunSDKOutsidePath(t *testing.T) {
@@ -18,6 +20,22 @@ printf '%s\n' 'XPU 0: P800 PCIe' 'XPU 1: P800 PCIe'`)
 		return next(cmd, stdin)
 	})
 	wantCheck(t, report.Checks, CheckIDGPU, "pass", "XPU 0: P800 PCIe", "XPU 1: P800 PCIe")
+}
+
+func TestPrecheckSSHReturnsOtherChecksWhenGPUStalls(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	report := precheckGPUOnLinux(t, func(string, fakeSSHHandler, io.Reader) (string, string, uint32) {
+		<-release
+		return "late answer", "", 0
+	})
+	gpu := checkByName(t, report.Checks, CheckIDGPU)
+	if gpu.Status != "skip" || gpu.Code != messages.CheckCommandNotRun || !strings.Contains(gpu.Evidence, "deadline") {
+		t.Fatalf("stalled GPU check = %+v", gpu)
+	}
+	wantCheck(t, report.Checks, CheckIDOSArch, "pass")
+	// Install directory probing runs on the same SSH connection after the batch.
+	wantCheck(t, report.Checks, CheckIDInstallDir, "pass")
 }
 
 func precheckGPUOnLinux(t *testing.T, gpu func(string, fakeSSHHandler, io.Reader) (string, string, uint32)) SSHPrecheckReport {
