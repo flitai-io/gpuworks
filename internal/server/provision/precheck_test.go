@@ -156,6 +156,45 @@ func TestGPUProbeCommandValidatesCLIAndSupportsPPU(t *testing.T) {
 	}
 }
 
+func TestGPUProbeKunlun(t *testing.T) {
+	bin := t.TempDir()
+	for _, name := range []string{"grep", "head"} {
+		path, err := exec.LookPath(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(path, filepath.Join(bin, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeExecutable(t, filepath.Join(bin, "xpu-smi"), `[ "$*" = "-L" ] || exit 2
+printf '%s\n' "$CARDS"
+exit "$CLI_STATUS"`)
+
+	const cards = "XPU 0: P800 PCIe (UUID: GPU-test-0)\nXPU 1: P800 PCIe (UUID: GPU-test-1)"
+	const missing = "no supported GPU CLI found"
+	for _, tc := range []struct {
+		name, control, output, want string
+		status, wantExit            int
+	}{
+		{"P800 lists both cards", "/dev/null", cards, cards, 0, 0},
+		{"same CLI without Kunlun driver", filepath.Join(bin, "absent"), cards, missing, 0, 1},
+		{"regular file as control", filepath.Join(bin, "xpu-smi"), cards, missing, 0, 1},
+		{"CLI fails after partial output", "/dev/null", cards, missing, 1, 1},
+		{"CLI reports no cards", "/dev/null", "No devices found", missing, 0, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			probe := strings.ReplaceAll(gpuProbeCommand(), "/dev/xpuctrl", shellQuote(tc.control))
+			cmd := exec.Command("/bin/sh", "-c", probe)
+			cmd.Env = []string{"PATH=" + bin, "CARDS=" + tc.output, fmt.Sprintf("CLI_STATUS=%d", tc.status)}
+			out, err := cmd.CombinedOutput()
+			if cmd.ProcessState == nil || cmd.ProcessState.ExitCode() != tc.wantExit || strings.TrimSpace(string(out)) != tc.want {
+				t.Fatalf("probe returned %v, %q; want exit %d, %q", err, out, tc.wantExit, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseTargetRequiresUserAndHost(t *testing.T) {
 	if _, _, _, err := ParseTarget("", "", 0); err == nil {
 		t.Fatal("empty target should fail")

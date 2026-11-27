@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/commandlog"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 )
@@ -486,6 +487,8 @@ elif command -v ppu-smi >/dev/null 2>&1 && out="$(ppu-smi -L 2>&1)"; then
 elif command -v hy-smi >/dev/null 2>&1 && out="$(hy-smi -L 2>&1 || hy-smi 2>&1)"; then
   printf '%s\n' "$out" | head -20
 elif command -v amd-smi >/dev/null 2>&1 && out="$(amd-smi list 2>&1 || amd-smi 2>&1)"; then
+  printf '%s\n' "$out" | head -20
+elif out="$(` + accelerator.KunlunPrecheckCommand + `)"; then
   printf '%s\n' "$out" | head -20
 else
   echo "no supported GPU CLI found"
