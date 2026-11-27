@@ -389,7 +389,7 @@ func (h *Hub) OpenTunnel(ctx context.Context, nodeUUID, dst string) (net.Conn, e
 	if s == nil {
 		return nil, errors.New("node not connected: " + nodeUUID)
 	}
-	return s.openStream(ctx, proto.StreamHeader{Kind: proto.StreamTunnel, Dst: dst})
+	return s.openStream(ctx, proto.StreamHeader{Kind: proto.StreamTunnel, Dst: dst, Trace: proto.TunnelTraceFrom(ctx)})
 }
 
 // OpenLogtail opens a log stream for an instance (ref = instance uuid). The

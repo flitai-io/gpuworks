@@ -47,13 +47,13 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	a, _ := req.Context().Value(attemptKey).(*routeAttempt)
 	if a == nil || a.current == nil {
 		tgt, _ := req.Context().Value(targetKey).(target)
-		return t.guard.roundTrip(t.base, req, candidate{instanceUUID: tgt.instanceUUID, port: tgt.port})
+		return t.roundTripAttempt(req, candidate{nodeUUID: tgt.nodeUUID, instanceUUID: tgt.instanceUUID, port: tgt.port}, 1)
 	}
 	if a.started.IsZero() {
 		a.started = time.Now()
 	}
 	for {
-		resp, err := t.guard.roundTrip(t.base, req, a.current.c)
+		resp, err := t.roundTripAttempt(req, a.current.c, a.attempts)
 		if err == nil {
 			return resp, nil
 		}

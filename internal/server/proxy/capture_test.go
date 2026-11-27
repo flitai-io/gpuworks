@@ -54,22 +54,39 @@ func TestDebugSessionRecordsTheRawExchange(t *testing.T) {
 		}
 		lines = append(lines, m)
 	}
+	if err := sc.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) == 0 {
+		t.Fatal("empty exchange capture")
+	}
 	first, last := lines[0], lines[len(lines)-1]
 	if first["t"] != "request" || !strings.HasPrefix(first["body"].(string), `{"stream_options":{"include_usage":true},`) ||
 		strings.Contains(f.String(), "secret") || strings.Contains(f.String(), key) {
 		t.Fatalf("request line = %v", first)
 	}
-	if lines[1]["t"] != "response" || lines[1]["status"] != float64(200) {
-		t.Fatalf("response line = %v", lines[1])
-	}
 	var up, down strings.Builder
+	var sawResponse bool
 	for _, l := range lines {
 		switch l["t"] {
-		case "upstream":
-			up.WriteString(l["data"].(string))
-		case "client":
-			down.WriteString(l["data"].(string))
+		case "response":
+			if sawResponse || l["status"] != float64(200) {
+				t.Fatalf("unexpected response line: %v", l)
+			}
+			sawResponse = true
+		case "upstream", "client":
+			if !sawResponse {
+				t.Fatalf("%s bytes recorded before response headers", l["t"])
+			}
+			if l["t"] == "upstream" {
+				up.WriteString(l["data"].(string))
+			} else {
+				down.WriteString(l["data"].(string))
+			}
 		}
+	}
+	if !sawResponse {
+		t.Fatal("missing response headers")
 	}
 	if !strings.Contains(up.String(), `"choices":[],"usage"`) || strings.Contains(down.String(), `"choices":[],"usage"`) || down.String() != out.Body.String() {
 		t.Fatal("upstream must hold the usage event the client never saw, and client bytes must be what the client got")

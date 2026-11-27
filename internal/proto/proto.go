@@ -159,6 +159,8 @@ type StreamHeader struct {
 	Kind string `json:"kind"`
 	// Tunnel-only: destination address on the agent host, e.g. 127.0.0.1:38000.
 	Dst string `json:"dst,omitempty"`
+	// Trace identifies a deployment request selected for debug capture.
+	Trace *TunnelTrace `json:"trace,omitempty"`
 	// Logtail: instance/container identifier.
 	// Terminal: container id when Target is TermTargetContainer.
 	// Peer relay receive: active transfer ID.

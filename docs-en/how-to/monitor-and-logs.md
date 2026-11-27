@@ -216,6 +216,11 @@ While a session is active and below its size limit, debug files retain repeated 
 
 A request JSONL's `end` record describes the gateway's observations. An upstream EOF before response headers retains `read_error` (for example, `EOF`) and `outcome=upstream_error`; a normal response must not record body EOF as an error. For streamed responses actually returned within the capture limits, inspect `upstream` / `client` data for `finish_reason` and `data: [DONE]`. The gateway's prepared request snapshot does not prove the engine received it, and a missing `[DONE]` alone cannot locate the disconnection.
 
+To investigate a tunnel failure, use the same `request_id` and `attempt` to match the following gateway and agent records.
+
+- Each `attempt` entry in the gateway request file records whether that upstream attempt received a first response byte, whether the client context was canceled, and the returned status or error. A retry has its own entry.
+- On the agent, `tunnel dial failed` includes the engine address, elapsed dial time and error. `tunnel connected` confirms a local TCP connection. The `side / operation / err / bytes` in `tunnel copy ended` locate the end of a read or write. Upload EOF only half-closes the write side of the engine socket. The end of the reply direction triggers tunnel closure. A direct serving network bypasses this agent tunnel.
+
 ## Set the Engine Log Level
 
 SGLang logs do not include levels by default, so the platform's level filters and histogram cannot identify actual errors. In single-GPU SGLang deployments with engine-managed startup, the platform automatically injects a logging configuration with levels where applicable. Logs still go to container stderr.
@@ -242,5 +247,5 @@ For startup methods without automatic injection, reasons multi-GPU logs may stil
 <!-- translation-source-sha256: 20f57df85784d9abef676e890be3828bbb9ee6110699342e44023e5a6e88dcca ## 3. View Instance Events and Live Logs -->
 <!-- translation-source-sha256: d2ffb34ff581b92d76de436caf9b1a862e414904a40536cf5996749228dfaf92 ## 4. Search on the Logs Page -->
 <!-- translation-source-sha256: 0f7502c9232e1679e490c2d8f3e5937a9bfedb258bda5e794df677355392beb0 ### The server's and agent's own logs -->
-<!-- translation-source-sha256: aa0cdc123b41ddb80450484244a5565973f8a15732a2c95c0869c586e42c61d6 ### Temporarily Capture Debug Logs and Raw Requests -->
+<!-- translation-source-sha256: 22274f0cfdf92edebb9b0545c6ad8fd61481886e582e45e8c038c24d8878c05f ### Temporarily Capture Debug Logs and Raw Requests -->
 <!-- translation-source-sha256: df7a1348374cbacf29af3e4695ef25df770b7074163d166ea8a5c53d5cdc65db ## Set the Engine Log Level -->

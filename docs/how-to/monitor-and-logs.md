@@ -216,6 +216,11 @@ API 方式可使用 `GET /api/v1/monitor/deployments/{id}/requests`、`GET /api/
 
 请求 JSONL 的 `end` 记录表示网关观察到的结果：响应头之前的上游 EOF 会保留 `read_error`（例如 `EOF`），并标记 `outcome=upstream_error`；正常响应结束不应把 body EOF 记成错误。流式回复实际返回且未超出采集上限时，可在 `upstream` / `client` 数据中检查 `finish_reason` 与 `data: [DONE]`。网关准备的请求快照不证明引擎已收到；缺少 `[DONE]` 也不能单凭这一点确定断开位置。
 
+对照隧道故障时，用相同的 `request_id` 和 `attempt` 关联以下网关与 Agent 记录。
+
+- 网关请求文件的 `attempt` 行记录本次上游尝试是否读到第一个响应字节、客户端是否取消、最终状态或错误。一次重试另占一行。
+- Agent 的 `tunnel dial failed` 给出引擎地址、拨号耗时和错误；`tunnel connected` 表示本机 TCP 已连通。`tunnel copy ended` 的 `side / operation / err / bytes` 指向读写结束的位置；上传读到 EOF 只会半关闭引擎的写方向，响应方向结束才触发隧道关闭。直连服务网络绕过这段 Agent 隧道。
+
 ## 设置引擎日志级别
 
 SGLang 默认日志不带级别，平台的级别过滤和直方图就看不到真正的错误。SGLang 单卡、引擎接管模式下，平台会在适用时自动注入带级别的日志配置，日志仍写入容器 stderr。

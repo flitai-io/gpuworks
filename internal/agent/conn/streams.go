@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"strings"
 	"time"
 
@@ -47,7 +46,7 @@ func (c *Conn) handleStream(ctx context.Context, stream *yamux.Stream) {
 	case proto.StreamPeerRelayReceive:
 		c.handlePeerRelayReceive(ctx, hdr, stream)
 	case proto.StreamTunnel:
-		c.handleTunnel(hdr.Dst, stream)
+		c.handleTunnel(hdr, stream)
 	case proto.StreamLogtail:
 		c.handleLogtail(ctx, hdr.Ref, stream)
 	case proto.StreamTerminal:
@@ -73,33 +72,6 @@ func (c *Conn) handleStream(ctx context.Context, stream *yamux.Stream) {
 	default:
 		_ = stream.Close()
 	}
-}
-
-// handleTunnel bridges a data-plane stream to a local address (the inference
-// engine's 127.0.0.1:port).
-func (c *Conn) handleTunnel(dst string, stream *yamux.Stream) {
-	defer stream.Close()
-	local, err := net.DialTimeout("tcp", dst, 5*time.Second)
-	if err != nil {
-		c.log.Debug("tunnel dial failed", "dst", dst, "err", err)
-		return
-	}
-	defer local.Close()
-	done := make(chan struct{})
-	// The request body commonly reaches EOF long before a non-streaming
-	// inference response. Do not close the tunnel when that direction finishes;
-	// only the local response EOF terminates the stream.
-	go func() {
-		_, _ = io.Copy(local, stream)
-		if half, ok := local.(interface{ CloseWrite() error }); ok {
-			_ = half.CloseWrite()
-		}
-	}()
-	go func() {
-		_, _ = io.Copy(stream, local)
-		close(done)
-	}()
-	<-done
 }
 
 // handleLogtail streams a container's logs into the stream.
