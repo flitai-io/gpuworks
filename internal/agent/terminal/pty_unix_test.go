@@ -5,6 +5,7 @@ package terminal
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -415,6 +416,8 @@ type pipeRW struct {
 func TestServeBridgesFramesEndToEnd(t *testing.T) {
 	peerReader, agentWriter := io.Pipe() // agent -> peer
 	agentReader, peerWriter := io.Pipe() // peer -> agent
+	defer peerReader.Close()
+	defer peerWriter.Close()
 
 	served := make(chan error, 1)
 	go func() {
@@ -493,21 +496,23 @@ func TestServeBridgesFramesEndToEnd(t *testing.T) {
 		t.Errorf("info uid = %d, want %d", info.UID, os.Getuid())
 	}
 
-	// Markers are assembled in the shell so the pty's echo of the command line
-	// cannot satisfy the wait.
-	if err := proto.WriteTermFrame(peerWriter, proto.TermData, []byte("A=served; printf '%s_ok\\n' \"$A\"\n")); err != nil {
+	// Keep the shell in one command until stty has read the size. Readline
+	// can write back the old size while preparing the next prompt.
+	// Assemble the marker in the shell so the input echo cannot satisfy the wait.
+	if err := proto.WriteTermFrame(peerWriter, proto.TermData, []byte("A=served; printf '%s_ok\\n' \"$A\"; IFS= read -r reply && stty size\n")); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(func() bool { return strings.Contains(stdout.String(), "served_ok") }, "echo output")
 
-	// Resize must be applied, not merely accepted.
-	if err := proto.WriteTermFrame(peerWriter, proto.TermResize, proto.EncodeResize(45, 150)); err != nil {
+	const rows, cols = 45, 150
+	if err := proto.WriteTermFrame(peerWriter, proto.TermResize, proto.EncodeResize(rows, cols)); err != nil {
 		t.Fatal(err)
 	}
-	if err := proto.WriteTermFrame(peerWriter, proto.TermData, []byte("stty size\n")); err != nil {
+	if err := proto.WriteTermFrame(peerWriter, proto.TermData, []byte("\n")); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(func() bool { return strings.Contains(stdout.String(), "45 150") }, "resized stty output")
+	wantSize := fmt.Sprintf("%d %d", rows, cols)
+	waitFor(func() bool { return strings.Contains(stdout.String(), wantSize) }, "resized stty output")
 
 	// An unknown frame type must be ignored rather than ending the session.
 	if err := proto.WriteTermFrame(peerWriter, 0x7e, []byte("ignored")); err != nil {
