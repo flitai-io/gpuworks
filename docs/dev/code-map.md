@@ -92,6 +92,7 @@
 - `pluginexec`、`pluginhost`：`pluginexec` 是 `gpuworks plugin-exec` 跳板，在 `execve` 插件之前施加沙箱；`pluginhost` 监管插件进程并在两对 socketpair 上说 `gwx/1`（握手、健康、宿主接口）。
 - `pluginbridge`：把 `extpkg`、`pushstate` 与 `pluginhost` 接成插件宿主：启动时校验已安装的包并读入推送状态，运行时启动已启用的常驻插件，按启动时校验的包认定推送方，承担 `/api/v1/plugins` 的安装、启用、停用与卸载；`app` 的内置模块 `plugins` 只做装配。
 - `featuregate`：功能可用性的叶子包（只依赖 `messages`）：功能键、四种可用性（完整、只读、锁定、隐藏）与预先构造的拒绝；扩展路由与控制台清单经它询问扩展模块提供的功能来源，社区路径从不查询。
+- `accounts`：经外部身份到达的账号规则（[ADR 0085](../adr/0085-external-identity-connectors.md)）：身份源归哪个扩展（`Registry`）、经来源登录时找或建账号（按 `auth.external.provision`）、连接器能对本来源的账号做什么；管理员不受连接器管辖，由 store 在写入的事务里检查。只经本包声明的窄接口 `Store` 读写，`app` 把 `*store.Store` 适配给它并把 store 的错误转成码；编译模块经 `app.Host.Accounts()` 拿到它。
 - `holdpass`：扩展模块请求的调度保持重新应用（`Host.ReapplySchedulingHolds`）：合并请求，两次全表写事务之间有下限间隔，失败退避重试；只依赖标准库，由 app 接进 `services()` 循环。
 - `selfinstall` / `installcred`：`gpuworks install` / `upgrade` 的实现（复制二进制、写 service 定义、从发布通道或发布站拉发布件、带备份可回滚）、控制台升级的启动守卫、无 systemd 时的 `serve --supervise` 守护循环，与首启 bootstrap admin 凭据记录（叶子包，install 与 server 两端共用，不得反向依赖 server）。
 - `cluster`（+`cluster/identity`）：控制面集群的数据库成员。启动并监管 `gpuworks-dqlite` 子进程（父进程退出时子进程随之退出；辅助程序不在本仓库构建，就绪声明里的协议版本须等于 `HelperProtocolVersion`），经 go-dqlite 的纯 Go client/driver 提供应用与本地调度两个 SQL 池、写入者准入、法定人数证明与快照、成员探测；`identity` 是成员证书、传输策略（允许与吊销的成员密钥）及其 TLS 校验。集群文件在 `linux && dqlite` 下构建，其余平台是返回不可用的桩。

@@ -1135,7 +1135,13 @@
     "LAST_LOCAL_ADMIN": "这是最后一个启用的本地管理员。平台需要保留一个以免无法登录，所以不能停用它。",
     "EXTERNAL_IDENTITY_INVALID": "来源名须符合 [a-z][a-z0-9_]{1,31}，主体须为 1 到 256 字节。",
     "EXTERNAL_IDENTITY_TAKEN": "这个外部身份已经链接到一个账号。",
-    "EXTERNAL_IDENTITY_NOT_FOUND": "该账号没有这个 id 的外部身份。"
+    "EXTERNAL_IDENTITY_NOT_FOUND": "没有账号链接到这个外部身份，或这条链接不属于该账号。",
+    "IDENTITY_TICKET_INVALID": "这次登录未能完成，可能已过期，或是在另一个浏览器里开始的。请重新登录。",
+    "IDENTITY_PROTECTED_USER": "身份连接器不能停用、启用、改名或强制登出管理员，管理员账号由管理员管理。",
+    "IDENTITY_NOT_PROVISIONED": "没有账号链接到这个身份，而此服务器不自动创建账号。请联系管理员链接你的账号。",
+    "IDENTITY_USERNAME_TAKEN": "已有账号使用用户名 {{username}}。",
+    "IDENTITY_SOURCE_CONFLICT": "身份源 {{source}} 属于另一个扩展，或者不是本扩展声明的。",
+    "IDENTITY_SOURCE_UNAVAILABLE": "现在不能通过这个身份源登录。请换一种方式登录，或联系管理员。"
   },
   "apiErrorDetail": "{{category}}：{{detail}}",
   "checkStatus": {

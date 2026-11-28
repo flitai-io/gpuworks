@@ -2,11 +2,14 @@ package app
 
 import (
 	"context"
+	"crypto/hkdf"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"slices"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/accounts"
 	"gpuworks.ai/gpuworks/internal/server/api"
 	"gpuworks.ai/gpuworks/internal/server/featuregate"
 	"gpuworks.ai/gpuworks/internal/server/holdpass"
@@ -42,6 +45,10 @@ type extensionSet struct {
 	plugins api.PluginAdmin
 	// routes serves the installed plugin packages' routes.
 	routes *api.DynamicExtension
+	// accounts are the identity sources the modules declared, and signIns
+	// the sign-in entries they offer (extension_accounts.go).
+	accounts *accounts.Registry
+	signIns  []api.SignInOption
 }
 
 // holdPassFloor is the least time between two passes of the scheduling
@@ -74,7 +81,8 @@ func startExtensions(cfg Config, a *App, master string, deps *api.Deps) (err err
 			a.proxy.Close()
 		}
 	}()
-	set := &extensionSet{holds: holdpass.NewScoped(applySchedulingHolds(a.store), a.log.With("component", "scheduling_holds"), holdPassFloor)}
+	set := &extensionSet{holds: holdpass.NewScoped(applySchedulingHolds(a.store), a.log.With("component", "scheduling_holds"), holdPassFloor),
+		accounts: accounts.NewRegistry(accountStore{a.store}, cfg.AuthExternalProvision)}
 	section := serverconfig.File{Extensions: cfg.Sections}
 	plugins := &pluginsModule{cfg: cfg, st: a.store}
 	for _, m := range append(slices.Clip(cfg.Extensions.Modules), Module(plugins)) {
@@ -115,6 +123,14 @@ func startExtensions(cfg Config, a *App, master string, deps *api.Deps) (err err
 		return err
 	}
 	deps.Extensions.Dynamic = set.routes
+	if len(set.signIns) > 0 {
+		binding, err := hkdf.Key(sha256.New, []byte(master), nil, "gpuworks sign-in binding", 32)
+		if err != nil {
+			return err
+		}
+		deps.Extensions.SignIns = set.signIns
+		deps.Extensions.Accounts = signInRedeemer{st: a.store, key: binding}
+	}
 	a.ext = set
 	return nil
 }
@@ -141,3 +157,17 @@ func moduleService(a *App, name string, svc Service) func(context.Context) {
 		}
 	}
 }
+
+// signInRedeemer is the API's view of the sign-in tickets: the store's
+// redemption, and the key the browser-binding handles are derived with (from
+// the master key, so every member of a cluster derives the same).
+type signInRedeemer struct {
+	st  *store.Store
+	key []byte
+}
+
+func (r signInRedeemer) RedeemSignInTicket(ticket, source, handle string) (*store.User, error) {
+	return r.st.RedeemSignInTicket(ticket, source, handle)
+}
+
+func (r signInRedeemer) BindingKey() []byte { return r.key }

@@ -129,6 +129,9 @@ Changes to pull credentials, networks and their attachments, node labels, storag
 | GET | `/api/v1/auth/me` | Return the current user and live permissions; does not extend the idle timeout | Management session or platform API token |
 | POST | `/api/v1/auth/activity` | Report real activity and extend the idle timeout; no request body; returns 204 on success | Management session |
 | POST | `/api/v1/auth/password` | Change the signed-in user's own password; on success all of that user's management sessions end | Management session |
+| GET | `/api/v1/auth/sign-in-options` | The sign-in page's ways to sign in: `{local_password, entries:[{source,label,icon,url}]}` | None |
+| GET | `/api/v1/auth/sign-in/start?source=<source>` | Start of a sign-in through an identity connector: sets the browser-binding cookie and redirects (302) to the connector's start route | None |
+| GET | `/api/v1/auth/complete?ticket=<ticket>` | Redeems the sign-in ticket in the browser that started the sign-in, creates the session and redirects (302) to the console | None (browser-binding cookie) |
 
 ### Login Request and Response
 
@@ -162,6 +165,43 @@ An incorrect username or password returns `401 INVALID_CREDENTIALS`; overly freq
 Wait for the number of seconds specified by the `Retry-After` response header before retrying. A disabled account returns `403 USER_DISABLED`; when
 `auth.local_password` in `server.yaml` is `local_admin` and the user is not a local administrator, it returns `403 LOCAL_PASSWORD_DISABLED`
 (both are judged only after the password checks out, so neither tells anyone else about the account's state). For other errors, see [Common HTTP Statuses and Error Codes](api-conventions.md#常见-http-状态与错误码).
+
+### Signing In Through an Identity Connector
+
+An identity connector is an extension module that integrates the site's identity source (OIDC, SAML, an office platform's OAuth2 and so on); the server still creates accounts and sessions ([ADR 0085](../adr/0085-external-identity-connectors.md)). With no connector installed, `entries` is empty and the sign-in page has password sign-in only.
+
+`GET /api/v1/auth/sign-in-options` needs no sign-in and returns:
+
+```json
+{"local_password":"all","entries":[{"source":"acme","label":"Acme ID","url":"/api/v1/auth/sign-in/start?source=acme"}]}
+```
+
+| Field | Meaning |
+|---|---|
+| `local_password` | `auth.local_password` of `server.yaml`: `all`, or `local_admin` (only local administrators sign in with a password; see [Configuration](configuration.md)) |
+| `entries[].source` | The connector's source name |
+| `entries[].label` | The button text, given by the connector and shown as is |
+| `entries[].icon` | The icon name the connector gave, returned as is; the field is reserved, and the console does not show it today |
+| `entries[].url` | The button's link: the server's sign-in start |
+
+A connector whose feature is locked or hidden is not listed in `entries`. The sign-in page renders only this list; when `local_password` is `local_admin` and a connector is available, the password form is folded behind "Sign in with a password as a local administrator".
+
+How one sign-in goes:
+
+1. The browser opens `GET /api/v1/auth/sign-in/start?source=<source>`. The server makes a random browser binding, writes it with the source name into a one-time cookie (`HttpOnly`, `SameSite=Lax`, 10 minutes, path `/api/v1/auth`; `Secure` as for the session cookie) and redirects (302) to the connector's start route, with the query parameter `handle`: derived from the source and the binding, and impossible to turn back into the binding. An unknown or unavailable source returns `404 IDENTITY_SOURCE_UNAVAILABLE` (`params.source`) and never redirects anywhere else.
+2. The connector takes the browser to the identity source, checks the result when it comes back, then gets from the server a one-time ticket bound to `handle` (valid for 60 seconds, usable once, stored only as a hash).
+3. The connector redirects (302) the browser to `GET /api/v1/auth/complete?ticket=<ticket>`. The server only checks that the ticket matches the binding cookie the browser brings (the ticket must have been issued for the source the browser started with), and looks at neither `Origin` nor `Sec-Fetch-Site` (this request, returning through the identity source, is cross-site by nature). When they match and the account is enabled, it creates the session, writes the session cookie and redirects (302) to `/`; the binding cookie is cleared either way.
+
+A redemption that does not go through redirects (302) to `/login?code=<code>`, and the sign-in page shows the code's text:
+
+| Code | When |
+|---|---|
+| `IDENTITY_TICKET_INVALID` | The ticket does not exist, expired, was used, was not issued for the source this browser started with, or does not match this browser's binding (for example, the redemption link was opened in another browser); a ticket tried once is spent |
+| `IDENTITY_SOURCE_UNAVAILABLE` | Sign-in through the source became unavailable after the ticket was issued (its feature was locked or hidden) |
+| `USER_DISABLED` | The account is disabled |
+| `SERVICE_UNAVAILABLE` | The server failed to read or write the database and could not redeem the ticket or create the session; the error is in the server log, and starting the sign-in again is enough |
+
+While the whole server is limited, these three routes and the connectors' public routes keep working: they are signing in.
 
 ### Change Password
 
@@ -2466,7 +2506,7 @@ The following conventions maintain the endpoint inventory; they are not prerequi
 A separately built server can mount its own management routes under `/api/v1/x/<name>/` (`api.Deps.Extensions`). The community server mounts no extension routes, and its route inventory is exactly the same as with no extensions.
 
 - **Namespace and collisions**: an extension name must match `[a-z][a-z0-9_]{1,31}`; a route (relative to `/api/v1`) must be `/x/<name>` or start with `/x/<name>/`. The core registers no route under `/api/v1/x/`, so an extension name may equal a core path segment (such as `nodes`), and `/api/v1/nodes` stays the core route. `Router` panics at startup on a route outside its namespace or a method and path registered twice.
-- **Authentication**: extension routes use the same management authentication as core routes (including the session's origin check and renewal). Each declares one of three levels: `read` (any signed-in user and platform token; a read token only for GET/HEAD/OPTIONS), `admin` (also requires an administrator, otherwise `403 ADMINISTRATOR_REQUIRED`), or `admin-session` (an administrator with a login session only; a platform token gets `403 PLATFORM_TOKEN_NOT_ALLOWED`).
+- **Authentication**: extension routes use the same management authentication as core routes (including the session's origin check and renewal). Each declares one of four levels: `read` (any signed-in user and platform token; a read token only for GET/HEAD/OPTIONS), `admin` (also requires an administrator, otherwise `403 ADMINISTRATOR_REQUIRED`), `admin-session` (an administrator with a login session only; a platform token gets `403 PLATFORM_TOKEN_NOT_ALLOWED`), or `public` (no authentication and no session read, limited per client address: 60 a minute per route and address with bursts of 30, then `429 TOO_MANY_REQUESTS` with `Retry-After`; for an identity connector's start and callback routes, and served while the whole server is limited).
 - **Feature availability**: every extension route either belongs to one feature or is explicitly marked as a community route, never both. A feature's availability is `full`, `read_only`, `locked`, or `hidden`, enforced on the server: under `read_only` only reads pass (plus routes declared writable while read-only) and writes get `403 FEATURE_READ_ONLY`; under `locked` the route returns `403 FEATURE_UNAVAILABLE`; under `hidden` it returns `404 FEATURE_UNAVAILABLE`. When nothing answers for availability, the feature counts as unavailable and returns `FEATURE_PROVIDER_ABSENT`. The error's `params.feature` is the feature name.
 - **Availability of the whole server**: a separately built server can set the whole server to `read_only` or `locked`. While `read_only`, reads, `/v1/*` and `/api/v1/playground/v1/*` work as usual and changes get `403 PLATFORM_READ_ONLY`; while `locked`, reads work as usual, as do signing in, health checks, the console manifest, the connection of machines that already joined, plugin package management, the server's upgrade, diagnostics bundles, the account operations that only take access away (disabling an account and removing one of its external identity links; enabling an account and adding a link are still refused as changes) and the routes of the extension that set the limit, and changes and `/v1/*` get `403 PLATFORM_LOCKED`. A request under `/api/v1` is authenticated before it is refused, so one that is not signed in still gets 401; a refusal on `/v1/*` has the gateway's error shape with the same code. Installing or upgrading a plugin package is refused like a change. While limited, `GET /api/v1/console/manifest` carries `platform` (`access`, `message`, and `link` for an administrator only); the community server is never limited and its manifest has no such field.
 - **AI assistant and MCP**: extension GET routes are closed to the AI assistant and MCP by default; only explicitly marked routes appear in the readable route list and can be read.
@@ -2499,8 +2539,9 @@ An unknown `target_vendor` on `/api/v1/engines` returns 400. If custom-command f
 <!-- translation-source-sha256: bc212faa17263c00dd1605040cb5996ea0de5e568f58382b760188718e50c374 ### Nodes and Deployments: Pages, Filters, and Sorting -->
 <!-- translation-source-sha256: 07bbb1333fa351e29a815227a6849f59fad7ef2bedb4deeba1dfd62b5a75ac5d ### Real-Time Event Streams and Response Compression -->
 <!-- translation-source-sha256: e84017100ea5bd395dd6f4ddc000ef7b85d4ce62c29e008d613c0bf11ff9495b ### How Setting Changes Reach Nodes -->
-<!-- translation-source-sha256: dd05cb84569536c26f5469fce1e4dbc875e0c445cd676077ae3a32fc2320ee29 ## Auth -->
+<!-- translation-source-sha256: 4342e04bfce6eab4362717ba8850c530848c154203552f228a69f8b87c66f971 ## Auth -->
 <!-- translation-source-sha256: dfc4613cc2a88f811c4b1d0c1db326b19ef7263ba6659098e9fa8812b0b44a23 ### Login Request and Response -->
+<!-- translation-source-sha256: 84cc2a9bb303616379e78a84db018facd3a771a6fec6ffb1fcf0a820df6bd4d2 ### Signing In Through an Identity Connector -->
 <!-- translation-source-sha256: 0c5e5b2fbfc149bc9864e31a84b6c0bcf78d7b74a8bfeb0e3924ff0b27a78a43 ### Change Password -->
 <!-- translation-source-sha256: 0567ae0b4b828c1e3b362f672b58365c8847feb841dd46ff763a72b9cd395ffe ### When Sessions Expire -->
 <!-- translation-source-sha256: 60f52e5578eaeb214401ce94f2639e999f5f048d60dfef2ae192cdc06720c4af ### Login Endpoint Errors and Origin Checks -->
@@ -2587,5 +2628,5 @@ An unknown `target_vendor` on `/api/v1/engines` returns 400. If custom-command f
 <!-- translation-source-sha256: d90c2a891f76775aec3f7b48248481bd52e0751724b4a75648d8f62318cd8799 ### OpenAI-Compatible Files and Batches Endpoints -->
 <!-- translation-source-sha256: a896a5dab1c99b94dd8ffc62b82650f6309812d3ef0bf90b28daeb38d7cc2c25 ## Out of Scope -->
 <!-- translation-source-sha256: c4754e1c0339b7b8667346967d3065633f65a4f92b8e5c978e7d78101e64be0e ## Route and Contract Maintenance -->
-<!-- translation-source-sha256: 6ea5d24090ccfe30faedc8cfd5a1e94fecad4aa528cf75f0630c56261f3628db ### Console manifest and extension routes -->
+<!-- translation-source-sha256: 7d73523202b250f4e0408815d37af12d7d144d4bdc62218bda54ec7977cf2245 ### Console manifest and extension routes -->
 <!-- translation-source-sha256: 3b39ae121cdbd7a4964c45d1deacffa4a4772f5ddd32c4530ca202ffcd247aef ### Whether GPU capacity is known -->

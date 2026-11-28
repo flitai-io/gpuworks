@@ -189,7 +189,10 @@ recovery DELETE /api/v1/plugins/{id}
 recovery DELETE /api/v1/users/{id}/identities/{identityID}
 recovery GET /*
 recovery GET /api/v1/agent/connect
+recovery GET /api/v1/auth/complete
 recovery GET /api/v1/auth/me
+recovery GET /api/v1/auth/sign-in-options
+recovery GET /api/v1/auth/sign-in/start
 recovery GET /api/v1/branding
 recovery GET /api/v1/console/manifest
 recovery GET /api/v1/diagnostics/bundles

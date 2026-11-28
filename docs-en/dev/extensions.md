@@ -80,12 +80,37 @@ A module's name is its only identity: its `extensions.<name>` section in `server
 | `NodeNamesByID(ctx, ids)` | The display names of the named nodes, keyed by ID (`map[uint]string`), in one query on the read pool |
 | `ClusterObservation(ctx, timeout)` | One observation of the control-plane cluster this server belongs to (`app.ClusterObservation`): the members, their roles, which of them answer, and whether the cluster can lose another member; it has the same source as the `cluster-status` report. A single server, or a build without the cluster runtime, answers `Clustered: false`. Read-only, and may be called after `Init`, while serving; each probe is bounded by `timeout` and they run one after the other |
 | `HostIdentity(salt)` | The salted identity of the machine the management server runs on (`hostidentity.Salted`); see [The management server's host identity](#管理-server-的主机身份) |
+| `DeclareIdentitySources(names...)` | Claims identity source names (`user_identities.source`, `[a-z][a-z0-9_]{1,31}`). A name belongs to one module; one another module claimed returns `IDENTITY_SOURCE_CONFLICT`. See [Identity connectors](#身份连接器) |
+| `OfferSignIn(entry)` | Puts a sign-in entry on the sign-in page (`app.SignInEntry{Source, Label, Icon, Start}`; `Icon` is reserved, and the console does not show it today): the source must be one this module claimed, and `Start` one of this module's `AccessPublic` GET routes |
+| `Accounts()` | Account operations for this module's identity sources (`*accounts.Accounts`, package `internal/server/accounts`); see [Identity connectors](#身份连接器). May be called at any time |
 
-The `Host` hands out neither the `*store.Store` nor a database handle. A registration after `Init` returns is refused (`ReapplySchedulingHolds`, `ReapplySchedulingHoldsFor`, `NodeFleet`, `CardFleet`, `NodeIdentity`, `NodeInventory` `NodeNamesByID` and `HostIdentity` are not registrations and may be called at any time): methods with an error result return `app.ErrHostClosed`, the others panic. If `Init` fails, `New` fails and closes the database, so the same data directory starts again at once.
+The `Host` hands out neither the `*store.Store` nor a database handle. A registration after `Init` returns is refused (`ReapplySchedulingHolds`, `ReapplySchedulingHoldsFor`, `NodeFleet`, `CardFleet`, `NodeIdentity`, `NodeInventory` `NodeNamesByID`, `HostIdentity` and `Accounts` are not registrations and may be called at any time): methods with an error result return `app.ErrHostClosed`, the others panic. If `Init` fails, `New` fails and closes the database, so the same data directory starts again at once.
 
-Extension routes live under `/api/v1/x/<name>/`: `api.RouteSpec.Pattern` is relative to `/api/v1` and is `/x/<name>` or starts with `/x/<name>/`, and is a clean path (no `.`, `..`, `//` or trailing `/`). A route outside the module's own namespace, an unclean pattern, or two patterns of one method that differ only in parameter names (`{id}` and `{name}`) panic while the router is built. The core registers no route under `/api/v1/x/`, so a module name may equal a core path segment (such as `nodes`) and never collides with a path the core adds later.
+Extension routes live under `/api/v1/x/<name>/`: `api.RouteSpec.Pattern` is relative to `/api/v1` and is `/x/<name>` or starts with `/x/<name>/`, and is a clean path (no `.`, `..`, `//` or trailing `/`). A route outside the module's own namespace, an unclean pattern, or two patterns of one method that differ only in parameter names (`{id}` and `{name}`) panic while the router is built. A route's access level is `AccessRead`, `AccessAdmin`, `AccessAdminSession` or `AccessPublic`: `AccessPublic` needs no authentication and reads no session, is limited per client address (the rules of a plugin package's `public` route), cannot be readable by the AI assistant, and is served while the whole server is limited; it is for routes a browser reaches before it has signed in, such as an identity connector's start and callback routes. The core registers no route under `/api/v1/x/`, so a module name may equal a core path segment (such as `nodes`) and never collides with a path the core adds later.
 
 After every `Init` has run, the server releases extension-held cordons and card holds that no module of this build owns (so they do not outlive a changed build or a removed module), applies the holders' answers to every node and its cards once if any holder (of nodes or cards) is registered, then builds the feature gate (`featuregate.New`) and hands it to the API.
+
+## Identity connectors
+
+An identity connector talks to the site's identity source (OIDC, SAML, an office platform's OAuth2 and so on); accounts, sessions and disabling stay in the core, and the connector never reads the user table nor sets the session cookie ([ADR 0085](../adr/0085-external-identity-connectors.md)). A compiled module makes a redirect connector like this:
+
+1. In `Init`, claim the source name with `DeclareIdentitySources("acme")`, mount an `AccessPublic` GET start route and the routes the identity source calls back, then put the start route on the sign-in page with `OfferSignIn`.
+2. When the user clicks the sign-in page's button, the browser first goes to the core's `GET /api/v1/auth/sign-in/start?source=acme`: the core sets a one-time browser-binding cookie, then sends the browser to the start route with the query parameter `handle`, derived from the binding. The start route carries `handle` to the identity source in its own state.
+3. The callback route checks the identity source's result itself, then calls `Accounts().SignIn("acme", subject, accounts.Profile{Username: …}, handle)` for a ticket and redirects (302) the browser to `/api/v1/auth/complete?ticket=<ticket>`. The core redeems it only in the browser that holds the matching binding ([API reference](../reference/api.md#通过身份连接器登录)).
+
+Every operation of `*accounts.Accounts` is scoped to a source name; a source this module did not claim returns `IDENTITY_SOURCE_CONFLICT`:
+
+| Method | What it does |
+|---|---|
+| `SignIn(source, subject, profile, handle)` | Finds the account linked to `(source, subject)`; without one, follows `auth.external.provision` of `server.yaml`: `auto` (the default) creates an account with role `user` and no local password, `existing` refuses (`IDENTITY_NOT_PROVISIONED`). Returns a one-time ticket (60 seconds) bound to `handle`. Never finds an account by username or email, and never renames a linked account |
+| `Upsert(source, subject, profile)` | Directory sync of one member: creates the account when there is no link (regardless of `provision`: the directory is the site's own), renames the linked account to `profile.Username` otherwise |
+| `Disable` / `Enable(source, subject)` | Disables or restores the linked account (what disabling does: [API reference](../reference/api.md#会话什么时候失效)) |
+| `RevokeSessions(source, subject)` | Ends all management sessions of the linked account and returns how many; platform tokens and API keys are unaffected |
+| `List(source, cursor, limit)` | Pages through this source's accounts in link order (`accounts.Account{Subject, UserID, Username, Protected, Disabled}`), `limit` at most 500; `next` is 0 after the last page |
+
+`profile` (`accounts.Profile`) has only the username, display name and email, and no role: an external identity can never make anyone an administrator. Administrators (role `admin`, the local administrators among them) are out of connectors' reach: `Disable`, `Enable`, `RevokeSessions` and an `Upsert` that would rename them all return `IDENTITY_PROTECTED_USER`, a check that reads the role in the transaction that writes, while `SignIn` works (an administrator who explicitly linked an external identity can sign in with it). A taken username returns `IDENTITY_USERNAME_TAKEN` (`params.username`); the core never renames on its own, so the connector picks another and retries. These methods read and write the database and must not be called from a hook.
+
+Connectors in plugin packages (the `write:accounts` permission, the `host.accounts` host interface and the manifest's `sign_in`) and password connectors (LDAP) are not implemented yet.
 
 ## Reapplying holds and the node fleet
 
@@ -525,7 +550,8 @@ The core's part of the first five pushed tables (`availability`, `fleet_capacity
 <!-- translation-source-sha256: 600e483e0b83247381c3c8f35d4c3a9cd2add820dab7afdc49b2c72a818f3699 # Extension Points: The Module Contract and Installable Extensions -->
 <!-- translation-source-sha256: 6e2c8b3b69d01b86bf00ccf832608a3f9f438723c909f6c6ff0f4fb9bf33a032 ## Tiers -->
 <!-- translation-source-sha256: c038a66ecb98cf6640ab0f130c8fdecc416cee3f7838156205d8e11c42acf375 ## How a build composes -->
-<!-- translation-source-sha256: a63aa30594be40919849244acd8942a89d064215adac10a57ac1f53eb15995b7 ## Modules and the Host -->
+<!-- translation-source-sha256: 86aa6e531e3d1c0b63f3412591990d3a9e6713c6edf71ff078e2221dd17005d1 ## Modules and the Host -->
+<!-- translation-source-sha256: f2e2926a990c7f3535acb120620b63622d84e1443d027436898fe4e5d8525301 ## Identity connectors -->
 <!-- translation-source-sha256: 17af93631f553ac2ba0f5326de9162d3e284e453aaf99937205830d33cb8318e ## Reapplying holds and the node fleet -->
 <!-- translation-source-sha256: f918d39747723d26b216444e3c7d418882aca42ea66fb74fbb6167f3f724eca6 ## Card holders -->
 <!-- translation-source-sha256: 2943f81690cda9ea5bf5f35a0039d7d1e8340998af623c72f252ab2b4f93de83 ## Node identity and node inventory -->

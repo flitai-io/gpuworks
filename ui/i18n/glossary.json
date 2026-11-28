@@ -1464,6 +1464,18 @@
       }
     },
     {
+      "term_en": "Sign-in Ticket",
+      "translations": {
+        "zh": "登录票据"
+      }
+    },
+    {
+      "term_en": "Browser Binding",
+      "translations": {
+        "zh": "浏览器绑定"
+      }
+    },
+    {
       "term_en": "Authority",
       "translations": {
         "zh": "权威"

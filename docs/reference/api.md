@@ -129,6 +129,9 @@ JSON 字段按 [API 规范](api-conventions.md) 使用 snake_case，例如 `node
 | GET | `/api/v1/auth/me` | 返回当前用户与实时权限；不延长空闲期限 | 管理会话或平台 API Token |
 | POST | `/api/v1/auth/activity` | 报告真实操作并延长空闲期限；无请求体，成功返回 204 | 管理会话 |
 | POST | `/api/v1/auth/password` | 修改当前登录用户自己的密码；成功后该用户的全部管理会话失效 | 管理会话 |
+| GET | `/api/v1/auth/sign-in-options` | 登录页的登录方式：`{local_password, entries:[{source,label,icon,url}]}` | 无 |
+| GET | `/api/v1/auth/sign-in/start?source=<来源>` | 通过身份连接器登录的起点：设浏览器绑定 Cookie，302 到连接器的起始路由 | 无 |
+| GET | `/api/v1/auth/complete?ticket=<票据>` | 在开始登录的浏览器里兑换登录票据，建会话后 302 到控制台 | 无（浏览器绑定 Cookie） |
 
 ### 登录请求与响应
 
@@ -162,6 +165,44 @@ Cookie 设置为 `HttpOnly`、`SameSite=Lax`，其中保存的是不透明会话
 按响应头 `Retry-After` 指定的秒数等待后重试。账号已停用返回 `403 USER_DISABLED`；`server.yaml` 的
 `auth.local_password` 为 `local_admin` 而该用户不是本地管理员时返回 `403 LOCAL_PASSWORD_DISABLED`
 （两者都在密码校验通过之后才判断，不向其他人透露账号状态）。其他错误见[常见 HTTP 状态与错误码](api-conventions.md#常见-http-状态与错误码)。
+
+### 通过身份连接器登录
+
+身份连接器是对接站点身份源（OIDC、SAML、办公平台的 OAuth2 等）的扩展模块；账号与会话仍由 server 建立
+（[ADR 0085](../adr/0085-external-identity-connectors.md)）。没有装任何连接器时，`entries` 为空，登录页只有密码登录。
+
+`GET /api/v1/auth/sign-in-options` 不需登录，返回：
+
+```json
+{"local_password":"all","entries":[{"source":"acme","label":"Acme ID","url":"/api/v1/auth/sign-in/start?source=acme"}]}
+```
+
+| 字段 | 含义 |
+|---|---|
+| `local_password` | `server.yaml` 的 `auth.local_password`：`all`，或 `local_admin`（只有本地管理员用密码登录，见[配置](configuration.md)） |
+| `entries[].source` | 连接器的来源名 |
+| `entries[].label` | 按钮文字，由连接器给出，原样显示 |
+| `entries[].icon` | 连接器给出的图标名，原样返回；这是预留字段，控制台目前不显示它 |
+| `entries[].url` | 按钮链接，即 server 的登录起点 |
+
+所属功能被锁定或隐藏的连接器不出现在 `entries` 里。登录页只按这份列表渲染；`local_password` 为 `local_admin` 且有可用的连接器时，密码表单折叠在「以本地管理员身份用密码登录」之后。
+
+一次登录的经过：
+
+1. 浏览器打开 `GET /api/v1/auth/sign-in/start?source=<来源>`。server 生成一个随机的浏览器绑定，连同来源名写进一次性 Cookie（`HttpOnly`、`SameSite=Lax`、10 分钟，路径 `/api/v1/auth`；`Secure` 与会话 Cookie 相同），再 302 到连接器的起始路由，查询参数 `handle` 是由来源与绑定派生、反推不出绑定的句柄。来源不存在或不可用时返回 `404 IDENTITY_SOURCE_UNAVAILABLE`（`params.source`），不会跳转到别处。
+2. 连接器把浏览器带去身份源，回来后自己校验，再向 server 换取绑定到 `handle` 的一次性票据（60 秒内有效，只能用一次，库里只存哈希）。
+3. 连接器把浏览器 302 到 `GET /api/v1/auth/complete?ticket=<票据>`。server 只核对票据与浏览器带来的绑定 Cookie 是否对应（票据须是为浏览器开始登录时的那个来源签发的），不看 `Origin` 与 `Sec-Fetch-Site`（经身份源跳回的这次请求本来就是跨站的）。对应且账号启用时建立会话、写会话 Cookie，302 到 `/`；绑定 Cookie 无论成败都被清除。
+
+兑换不成时 302 到 `/login?code=<码>`，登录页显示该码的文字：
+
+| 码 | 情况 |
+|---|---|
+| `IDENTITY_TICKET_INVALID` | 票据不存在、过期、已用过，不是为这个浏览器开始登录的来源签发的，或与这个浏览器的绑定不对应（例如在另一个浏览器打开了兑换链接）；试过一次的票据即作废 |
+| `IDENTITY_SOURCE_UNAVAILABLE` | 签发票据之后，该来源的登录已不可用（功能被锁定或隐藏） |
+| `USER_DISABLED` | 账号已停用 |
+| `SERVICE_UNAVAILABLE` | server 读写数据库失败，没能兑换票据或建立会话；错误记在 server 日志里，重新开始登录即可 |
+
+整台服务端被限制时，这三条路由与连接器的公开路由照常可用：它们是登录。
 
 ### 修改密码
 
@@ -2477,7 +2518,7 @@ Playground 与 `/v1` 网关的边界、外部模型命名 `external:<config-id>:
 另行构建的服务端可以在 `/api/v1/x/<名称>/` 下挂载自己的管理路由（`api.Deps.Extensions`）。社区版不挂载任何扩展路由，路由清单与没有扩展时完全相同。
 
 - **命名空间与冲突**：扩展名须符合 `[a-z][a-z0-9_]{1,31}`；路由（相对 `/api/v1`）须为 `/x/<名称>` 或以 `/x/<名称>/` 开头。核心不在 `/api/v1/x/` 下注册任何路由，所以扩展名可以与核心路径段同名（如 `nodes`），`/api/v1/nodes` 仍是核心路由。命名空间越界、同一方法与路径重复注册，`Router` 都会在启动时直接 panic。
-- **鉴权**：扩展路由与核心路由走同一套管理鉴权（含会话的来源检查与续期）。按声明分三档：`read`（任何已登录用户与平台令牌，读令牌只能 GET/HEAD/OPTIONS）、`admin`（另需管理员，否则 `403 ADMINISTRATOR_REQUIRED`）、`admin-session`（管理员且只接受登录会话，平台令牌返回 `403 PLATFORM_TOKEN_NOT_ALLOWED`）。
+- **鉴权**：扩展路由与核心路由走同一套管理鉴权（含会话的来源检查与续期）。按声明分四档：`read`（任何已登录用户与平台令牌，读令牌只能 GET/HEAD/OPTIONS）、`admin`（另需管理员，否则 `403 ADMINISTRATOR_REQUIRED`）、`admin-session`（管理员且只接受登录会话，平台令牌返回 `403 PLATFORM_TOKEN_NOT_ALLOWED`）、`public`（不鉴权、不读会话，按客户端地址限流：每条路由每个地址每分钟 60 次、突发 30，超出返回 `429 TOO_MANY_REQUESTS` 并带 `Retry-After`；用于身份连接器的起始与回调路由，整台服务端被限制时照常可用）。
 - **功能可用性**：每条扩展路由要么属于一个功能（feature），要么明确标为社区路由，二者必居其一。功能的可用性为 `full`、`read_only`、`locked` 或 `hidden`，在 server 端执行：`read_only` 时只放行读请求（以及声明为只读时可写的路由），写请求返回 `403 FEATURE_READ_ONLY`；`locked` 时返回 `403 FEATURE_UNAVAILABLE`；`hidden` 时返回 `404 FEATURE_UNAVAILABLE`；没有组件回答可用性时按不可用处理，返回 `FEATURE_PROVIDER_ABSENT`。错误的 `params.feature` 是功能名。
 - **整台服务端的可用性**：另行构建的服务端可以把整台服务端设为 `read_only` 或 `locked`。`read_only` 时读请求、`/v1/*` 和 `/api/v1/playground/v1/*` 照常，改动返回 `403 PLATFORM_READ_ONLY`；`locked` 时读请求照常，登录、健康检查、控制台清单、已接入机器的连接、插件包管理、服务端升级、诊断包、只收回权限的账号操作（停用账号、删除账号的外部身份链接；启用账号与新增链接仍按改动拒绝）以及设置该限制的扩展自己的路由也可用，改动和 `/v1/*` 返回 `403 PLATFORM_LOCKED`。`/api/v1` 下的请求先鉴权再拒绝，未登录的请求得到的仍是 401；`/v1/*` 的拒绝是网关的错误形状，码相同。安装和升级插件包按改动拒绝。受限时 `GET /api/v1/console/manifest` 带 `platform`（`access`、`message`，以及只给管理员的 `link`）；社区版从不受限，清单里没有这个字段。
 - **AI 助手与 MCP**：扩展的 GET 路由默认不对 AI 助手和 MCP 开放，只有显式标记的才会出现在可读路由列表里并能被读取。

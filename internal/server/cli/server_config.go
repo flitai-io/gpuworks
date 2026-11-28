@@ -75,6 +75,9 @@ func applyServerConfig(cfg *app.Config, file serverconfig.File, given map[string
 	if file.Auth.LocalPassword != "" {
 		cfg.AuthLocalPassword = file.Auth.LocalPassword
 	}
+	if file.Auth.External.Provision != "" {
+		cfg.AuthExternalProvision = file.Auth.External.Provision
+	}
 	if file.UdockerBundleSource != "" {
 		cfg.UdockerBundleSource = file.UdockerBundleSource
 	}

@@ -46,12 +46,12 @@ const (
 	ErrorManagementOriginRejected               = "MANAGEMENT_ORIGIN_REJECTED"
 	ErrorAdministratorRequired                  = "ADMINISTRATOR_REQUIRED"
 	ErrorUserNotFound                           = "USER_NOT_FOUND"
-	ErrorUserDisabled                           = "USER_DISABLED"
+	ErrorUserDisabled                           = messages.ErrorUserDisabled
 	ErrorLocalPasswordDisabled                  = "LOCAL_PASSWORD_DISABLED"
 	ErrorLastLocalAdmin                         = "LAST_LOCAL_ADMIN"
-	ErrorExternalIdentityInvalid                = "EXTERNAL_IDENTITY_INVALID"
-	ErrorExternalIdentityTaken                  = "EXTERNAL_IDENTITY_TAKEN"
-	ErrorExternalIdentityNotFound               = "EXTERNAL_IDENTITY_NOT_FOUND"
+	ErrorExternalIdentityInvalid                = messages.ErrorExternalIdentityInvalid
+	ErrorExternalIdentityTaken                  = messages.ErrorExternalIdentityTaken
+	ErrorExternalIdentityNotFound               = messages.ErrorExternalIdentityNotFound
 	ErrorHostAddressRequired                    = "HOST_ADDRESS_REQUIRED"
 	ErrorHostAddressInvalid                     = "HOST_ADDRESS_INVALID"
 	ErrorServerOutboundPolicyInvalid            = "SERVER_OUTBOUND_POLICY_INVALID"

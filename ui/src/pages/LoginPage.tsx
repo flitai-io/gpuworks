@@ -3,9 +3,11 @@ import { Alert, Button, Form, Input, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
+import type { SignInOptions } from "../api";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import ForgotPasswordHint from "../components/ForgotPasswordHint";
 import { BrandMark, useBranding, useDocumentBranding } from "../branding";
+import { Button as ZButton } from "../components/ui/button";
 
 const { Title } = Typography;
 
@@ -35,10 +37,60 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
         <section className="auth-form-panel">
           <CloudServerOutlined style={{ color: "#005bd4", fontSize: 24, marginBottom: 16 }} aria-hidden="true" />
           <Title level={2} className="auth-title">{t("title")}</Title>
-          <LoginForm onLogin={onLogin} />
+          <SignInMethods onLogin={onLogin} />
         </section>
       </div>
     </main>
+  );
+}
+
+// The codes /api/v1/auth/complete sends the browser back with (?code=) when
+// a sign-in through an identity source does not go through.
+const SIGN_IN_REFUSALS = new Set(["IDENTITY_TICKET_INVALID", "IDENTITY_SOURCE_UNAVAILABLE", "USER_DISABLED", "SERVICE_UNAVAILABLE"]);
+
+function refusalFromLocation(): string {
+  const code = new URLSearchParams(window.location.search).get("code") ?? "";
+  return SIGN_IN_REFUSALS.has(code) ? code : "";
+}
+
+/**
+ * The password form and the identity sources the server offers, as
+ * GET /api/v1/auth/sign-in-options says. Until it answers, or if it fails,
+ * the password form alone is shown: the server decides who may use it.
+ */
+function SignInMethods({ onLogin }: { onLogin: () => void }) {
+  const { t } = useTranslation("auth");
+  const [options, setOptions] = useState<SignInOptions | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [refusal] = useState(refusalFromLocation);
+  useEffect(() => {
+    let alive = true;
+    api.signInOptions().then((o) => { if (alive) setOptions(o); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const entries = options?.entries ?? [];
+  // Only local administrators use a password here; their form stays one
+  // click away, since they must always be able to sign in.
+  const passwordFolded = options?.local_password === "local_admin" && entries.length > 0 && !showPassword;
+  return (
+    <>
+      {refusal && <p role="alert" className="mb-3 text-body text-fg-danger">{t(`apiError.${refusal}`, { ns: "common" })}</p>}
+      {passwordFolded ? null : <LoginForm onLogin={onLogin} />}
+      {entries.length > 0 && (
+        <nav aria-label={t("signInWithOthers")} className="mt-4 flex flex-col gap-2">
+          {!passwordFolded && <p className="text-label text-fg-muted text-center">{t("signInWithOthers")}</p>}
+          {entries.map((e) => (
+            <ZButton key={e.source} asChild variant="tertiary" size="lg">
+              <a href={e.url}>{e.label}</a>
+            </ZButton>
+          ))}
+        </nav>
+      )}
+      {passwordFolded && (
+        <ZButton variant="link" size="md" className="mt-3 w-full" onClick={() => setShowPassword(true)}>{t("localAdminSignIn")}</ZButton>
+      )}
+    </>
   );
 }
 

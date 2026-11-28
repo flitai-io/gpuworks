@@ -69,6 +69,8 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 		r.Post("/slurm/enroll", a.slurmEnroll)
 		r.Post("/slurm/gpu-nodes", a.slurmReportGPUNodes)
 		r.Post("/auth/logout", a.logout)
+		// Signing in through an identity connector (sign_in.go).
+		a.signInRoutes(r)
 		// Open to the sign-in page; it reveals nothing (see prefetchUpdates).
 		r.Post("/updates/prefetch", a.prefetchUpdates)
 		// Open to the sign-in page, which shows the product name and logo.

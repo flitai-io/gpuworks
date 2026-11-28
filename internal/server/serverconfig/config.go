@@ -106,7 +106,27 @@ type Auth struct {
 	// administrators may, and everyone else signs in through an external
 	// identity (ADR 0085 decision 8).
 	LocalPassword string `yaml:"local_password,omitempty"`
+	// External is how a sign-in through an identity connector finds its
+	// account.
+	External AuthExternal `yaml:"external,omitempty"`
 }
+
+// AuthExternal is the sign-in policy for external identities (ADR 0085
+// decision 5).
+type AuthExternal struct {
+	// Provision is what a sign-in through an identity nobody linked does:
+	// "auto" (the default when empty) creates an account with role user and
+	// no local password, "existing" refuses it, so only identities an
+	// administrator linked sign in.
+	Provision string `yaml:"provision,omitempty"`
+}
+
+// ProvisionAuto and ProvisionExisting are the values of
+// AuthExternal.Provision.
+const (
+	ProvisionAuto     = "auto"
+	ProvisionExisting = "existing"
+)
 
 // LocalPasswordAll and LocalPasswordLocalAdmin are the values of
 // Auth.LocalPassword.
@@ -119,9 +139,14 @@ const (
 func (a Auth) Validate() error {
 	switch a.LocalPassword {
 	case "", LocalPasswordAll, LocalPasswordLocalAdmin:
+	default:
+		return fmt.Errorf("auth.local_password %q is not one of %s, %s", a.LocalPassword, LocalPasswordAll, LocalPasswordLocalAdmin)
+	}
+	switch a.External.Provision {
+	case "", ProvisionAuto, ProvisionExisting:
 		return nil
 	}
-	return fmt.Errorf("auth.local_password %q is not one of %s, %s", a.LocalPassword, LocalPasswordAll, LocalPasswordLocalAdmin)
+	return fmt.Errorf("auth.external.provision %q is not one of %s, %s", a.External.Provision, ProvisionAuto, ProvisionExisting)
 }
 
 // Log configures the server's own log.

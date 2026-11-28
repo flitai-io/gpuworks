@@ -71,7 +71,11 @@ var platformRecoveryRoutes = map[string]bool{
 	"GET /api/v1/healthz":      true,
 	"POST /api/v1/auth/login":  true,
 	"POST /api/v1/auth/logout": true,
-	"GET /api/v1/auth/me":      true,
+	// Signing in through an identity connector (ADR 0085) is signing in.
+	"GET /api/v1/auth/sign-in-options": true,
+	"GET /api/v1/auth/sign-in/start":   true,
+	"GET /api/v1/auth/complete":        true,
+	"GET /api/v1/auth/me":              true,
 	// The session of a signed-in administrator stays alive, and a password
 	// can be changed, while the server is limited.
 	"POST /api/v1/auth/activity": true,
@@ -336,7 +340,7 @@ func (a *apiHandlers) platformGuard(routes chi.Routes) func(http.Handler) http.H
 				return
 			}
 			class, _ := classifyPlatformRoute(r.Method, pattern, path, owner)
-			if class.allows(limit.Access) || a.publicPackageRoute(r.Method, pattern, path) {
+			if class.allows(limit.Access) || a.publicPackageRoute(r.Method, pattern, path) || a.publicModuleRoute(r.Method, pattern) {
 				next.ServeHTTP(w, r)
 				return
 			}

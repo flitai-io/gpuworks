@@ -1135,7 +1135,13 @@
     "LAST_LOCAL_ADMIN": "This is the last enabled local administrator. The platform keeps one so it stays reachable, so this account cannot be disabled.",
     "EXTERNAL_IDENTITY_INVALID": "The source must match [a-z][a-z0-9_]{1,31} and the subject must be 1 to 256 bytes.",
     "EXTERNAL_IDENTITY_TAKEN": "This external identity is already linked to an account.",
-    "EXTERNAL_IDENTITY_NOT_FOUND": "No external identity of this account has this id."
+    "EXTERNAL_IDENTITY_NOT_FOUND": "No account is linked to this external identity, or the link is not this account's.",
+    "IDENTITY_TICKET_INVALID": "This sign-in could not be completed. It may have expired or been started in another browser. Start the sign-in again.",
+    "IDENTITY_PROTECTED_USER": "An identity connector cannot disable, enable, rename or sign out an administrator. An administrator manages this account.",
+    "IDENTITY_NOT_PROVISIONED": "No account is linked to this identity, and this server creates none. Ask an administrator to link your account.",
+    "IDENTITY_USERNAME_TAKEN": "Another account already has the username {{username}}.",
+    "IDENTITY_SOURCE_CONFLICT": "The identity source {{source}} belongs to another extension, or this extension did not declare it.",
+    "IDENTITY_SOURCE_UNAVAILABLE": "Signing in through this identity source is not available now. Sign in another way, or ask an administrator."
   },
   "apiErrorDetail": "{{category}}: {{detail}}",
   "checkStatus": {

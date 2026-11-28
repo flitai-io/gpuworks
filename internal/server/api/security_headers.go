@@ -40,7 +40,8 @@ func (a *apiHandlers) routingError(status int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		protected := r.URL.Path == "/api/v1" || strings.HasPrefix(r.URL.Path, "/api/v1/")
 		switch r.URL.Path {
-		case "/api/v1/auth/login", "/api/v1/auth/logout", "/api/v1/updates/prefetch", "/api/v1/branding", "/api/v1/agent/connect":
+		case "/api/v1/auth/login", "/api/v1/auth/logout", "/api/v1/updates/prefetch", "/api/v1/branding", "/api/v1/agent/connect",
+			"/api/v1/auth/sign-in-options", "/api/v1/auth/sign-in/start", "/api/v1/auth/complete":
 			protected = false
 		}
 		if protected {

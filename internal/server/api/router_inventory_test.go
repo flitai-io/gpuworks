@@ -128,7 +128,10 @@ GET /api/v1/analytics/key-usage
 GET /api/v1/analytics/quality
 GET /api/v1/analytics/usage
 GET /api/v1/apikeys
+GET /api/v1/auth/complete
 GET /api/v1/auth/me
+GET /api/v1/auth/sign-in-options
+GET /api/v1/auth/sign-in/start
 GET /api/v1/batches
 GET /api/v1/batches/dictionary
 GET /api/v1/batches/{id}

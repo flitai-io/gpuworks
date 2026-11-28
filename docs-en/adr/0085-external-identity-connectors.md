@@ -1,6 +1,6 @@
 # ADR 0085: External Identity: Plugins Are Identity Connectors, the Core Creates Accounts and Issues Sessions
 
-Date: 2026-11-27 · Status: Proposed (adds to [ADR 0071](0071-installable-extensions.md) decisions 3, 11 and 19 and to [ADR 0081](0081-role-gated-plugin-routes.md); the extension level terms are in [ADR 0084](0084-extension-levels-and-table-kind-registry.md))
+Date: 2026-11-27 · Status: Accepted, steps 1 and 2 implemented, the rest not (adds to [ADR 0071](0071-installable-extensions.md) decisions 3, 11 and 19 and to [ADR 0081](0081-role-gated-plugin-routes.md); the extension level terms are in [ADR 0084](0084-extension-levels-and-table-kind-registry.md))
 
 ## Background
 
@@ -23,10 +23,10 @@ These identity sources all differ, and the variation is on the side of sites and
 
 3. **Two connector shapes.**
    - **Redirect** (OIDC, SAML, office-platform OAuth2):
-     1. The sign-in page lists the entries (decision 6). A click goes first to the core's `GET /api/v1/auth/sign-in/start?source=…`. The core makes a random **browser binding**, stores it in a one-time cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, valid for 10 minutes), then redirects the browser to the `start` route the connector declared, with a handle in the query: derived from the binding, and impossible to turn back into it (an HMAC with a key derived from the master key);
+     1. The sign-in page lists the entries (decision 6). A click goes first to the core's `GET /api/v1/auth/sign-in/start?source=…`. The core makes a random **browser binding**, stores it with the source name in a one-time cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, valid for 10 minutes), then redirects the browser to the `start` route the connector declared, with a handle in the query: derived from the source and the binding, and impossible to turn back into the binding (an HMAC with a key derived from the master key);
      2. The connector takes the browser to the identity source, carrying the handle in its own state. The identity source returns to the connector's `public` callback route, and the connector checks the result itself (state, nonce, signature, token exchange);
      3. The connector calls the host's `accounts.sign_in` (decision 4) with `{source, subject, profile, handle}`. The core finds or creates the user by link (decision 5) and returns a one-time sign-in ticket bound to that handle;
-     4. The connector redirects the browser to the core's `GET /api/v1/auth/complete?ticket=…`. The core checks that the ticket matches the binding cookie the browser brings; only then does it create the session and set the session cookie, delete the binding cookie and go to the console.
+     4. The connector redirects the browser to the core's `GET /api/v1/auth/complete?ticket=…`. The core checks that the ticket matches the binding cookie the browser brings: the ticket must have been issued for the cookie's source and bound to the handle computed from it; only then does it create the session and set the session cookie, delete the binding cookie and go to the console.
 
      A ticket is valid for 60 seconds, can be used once, is stored only as a hash, and is bound to the source and handle it was issued for. Redemption **trusts only the browser binding** and looks at neither `Sec-Fetch-Site` nor `Origin`: the top-level GET returning through the identity source is cross-site by nature, so `managementOriginAllowed` would refuse it, and a top-level GET carries no `Origin`, so that check binds nothing anyway. The binding stops login CSRF: a ticket an attacker obtained with their own identity is bound to the attacker's browser; when a victim is lured into opening the redemption link, the victim's browser has no matching cookie, and redemption is refused with `IDENTITY_TICKET_INVALID`. Connector routes do not need to set core cookies; their own state cookie is set through `Cookies` as usual.
    - **Password** (LDAP): at sign-in, when the core finds the username linked to a password source, it calls that connector's check (`POST /gwx/v1/accounts/verify`, 5-second timeout) synchronously within the sign-in request and gets one of three results: passed, failed, identity source unreachable. This is exactly the one synchronous call ADR 0071 decision 3 allows. Users without a link are checked against the local password as usual; when the identity source is unreachable, local users and existing sessions are unaffected, with no offline verification cache (ADR 0071 decision 19).
@@ -43,7 +43,7 @@ These identity sources all differ, and the variation is on the side of sites and
    **Administrators are out of connectors' reach.** For a user whose `users.local_admin` is true or whose `users.role` is `admin`, `disable`, `enable`, `revoke_sessions`, and an `upsert` that would change the username are all refused with `IDENTITY_PROTECTED_USER`; disabling, restoring, renaming or signing out an administrator account can only be done by an administrator through core interfaces. `sign_in` is not affected: an administrator who explicitly linked an external identity can sign in with it. So a connector (including a compromised plugin package) cannot disable the local administrator or delete their sessions, and the floor of ADR 0071 decision 11 cannot be broken by a connector on purpose, not just hold while connectors are down. At implementation, contract tests will prove that neither a compiled module nor a fake plugin process can disable, restore, rename or sign out a local administrator or a platform administrator.
 
 5. **The core decides whether to find or create a user.**
-   - An existing `(source, subject)` link: that is the user; when `username` changed, it is updated or kept by site policy.
+   - An existing `(source, subject)` link: that is the user. A sign-in never renames; the username changes only through a directory sync (`upsert`), under the same administrator protection.
    - No link: with the site policy `auth.external.provision` set to `auto` (the default), a new user is created, with role `user` and no local password; with `existing`, it is refused (`IDENTITY_NOT_PROVISIONED`), and only people an administrator linked beforehand can sign in.
    - **Never link automatically to an existing user by username or email**: that would let an identity source or plugin take over any local account of the same name (administrators included). Linking an existing user to an external identity is only done explicitly by an administrator through core interfaces.
    - When a new user's `username` collides with an existing user, it is refused (`IDENTITY_USERNAME_TAKEN{username}`); the connector picks another (for example with a source prefix) and retries, and the core never renames on its own.
@@ -60,7 +60,7 @@ These identity sources all differ, and the variation is on the side of sites and
 
 9. **`public` routes for compiled modules.** `api.RouteAccess` gains `AccessPublic`: unauthenticated, rate-limited per client address (the same rules as `public` plugin routes), never a session write; the route must still name a feature or be marked a community route.
 
-10. **Codes.** `IDENTITY_TICKET_INVALID` (the ticket does not exist, expired, was used, the source does not match, or it does not match the browser binding), `IDENTITY_PROTECTED_USER` (a connector tried to disable, restore, rename or sign out an administrator), `IDENTITY_NOT_PROVISIONED`, `IDENTITY_USERNAME_TAKEN{username}`, `IDENTITY_SOURCE_CONFLICT{source}` (the source name is owned by another package or module), `IDENTITY_SOURCE_UNAVAILABLE{source}` (the identity source is unreachable during a password check), `USER_DISABLED`, `LOCAL_PASSWORD_DISABLED`.
+10. **Codes.** `IDENTITY_TICKET_INVALID` (the ticket does not exist, expired, was used, the source does not match, or it does not match the browser binding), `IDENTITY_PROTECTED_USER` (a connector tried to disable, restore, rename or sign out an administrator), `IDENTITY_NOT_PROVISIONED`, `IDENTITY_USERNAME_TAKEN{username}`, `IDENTITY_SOURCE_CONFLICT{source}` (the source name is owned by another package or module), `IDENTITY_SOURCE_UNAVAILABLE{source}` (signing in through this source is not possible now: no extension offers a sign-in through it, its feature is locked or hidden, or the identity source is unreachable during a password check), `USER_DISABLED`, `LOCAL_PASSWORD_DISABLED`.
 
 ## Extension level
 
@@ -85,16 +85,16 @@ These identity sources all differ, and the variation is on the side of sites and
 
 ## Implementation status
 
-Not implemented. Order, each step with contract tests (compiled modules through `internal/testenv/extmodule`, plugin packages against a fake plugin process, ADR 0071 decision 21):
+Steps 1 and 2 are implemented (2026-11-27), for compiled modules only; steps 3 and 4 are not. Order, each step with contract tests (compiled modules through `internal/testenv/extmodule`, plugin packages against a fake plugin process, ADR 0071 decision 21):
 
-1. Migrations for `user_identities` and `users.disabled_at`; enforcing disablement (sessions, sign-in, platform tokens, API keys) and the administrator interfaces to disable, restore and link; `auth.local_password`.
-2. The browser binding and `GET /api/v1/auth/sign-in/start`, tickets and `GET /api/v1/auth/complete`, the check that keeps administrators out of connectors' reach, `app.Host.Accounts()`, `api.AccessPublic`, `GET /api/v1/auth/sign-in-options` and the sign-in page entries. After this step, a compiled module can implement a redirect connector.
+1. **Implemented.** `user_identities` (migration 252) and `users.disabled_at`; enforcing disablement (sessions, sign-in, platform tokens, API keys); the administrator interfaces to disable, restore, list links, link and unlink (`/api/v1/users…`, see the [API reference](../reference/api.md#accounts账号与外部身份)); `auth.local_password`.
+2. **Implemented.** The browser binding and `GET /api/v1/auth/sign-in/start`; tickets (`sign_in_tickets` of migration 253, kept in the database so any cluster member can redeem them) and `GET /api/v1/auth/complete`, which redirects (302) to `/login?code=<code>` on a refusal; the check that keeps administrators out of connectors' reach; `DeclareIdentitySources`, `OfferSignIn` and `Accounts()` of `app.Host`; `api.AccessPublic`; `GET /api/v1/auth/sign-in-options` and the sign-in page entries; `auth.external.provision` (see [Extension points](../dev/extensions.md#身份连接器) and the [API reference](../reference/api.md#通过身份连接器登录)). A compiled module can now implement a redirect connector.
 3. The `write:accounts` permission for plugin packages, the `host.accounts` host interface and the manifest's `sign_in` declaration.
 4. The synchronous check interface for password connectors.
 
-<!-- translation-source-sha256: 13bbe40a7699473736ab1458265564f06fa0f8e4b5436252cc48fbd0aa2f6014 # ADR 0085: External Identity: Plugins Are Identity Connectors, the Core Creates Accounts and Issues Sessions -->
+<!-- translation-source-sha256: c6890feff7b100f8f0ad4a1f1451c4aafae99ba3eb06ddccfe3290923de07a68 # ADR 0085: External Identity: Plugins Are Identity Connectors, the Core Creates Accounts and Issues Sessions -->
 <!-- translation-source-sha256: a9b89a0d37a27045da734b29e4c42fbe8c18e709426c5670c535c0a3536cf009 ## Background -->
-<!-- translation-source-sha256: 411bb728db44ae720d5974565286b34fa81612a9814edfa4727a5638ecfc3e8a ## Decision -->
+<!-- translation-source-sha256: a17aa47aaacedab884010f709a0a0f3b9ccd0842fca70c3c7eee2d09657a0972 ## Decision -->
 <!-- translation-source-sha256: faf40b805c5bc1b22d8a18f0d7b80320fcc208a69eef6823e055d6e845901ffc ## Extension level -->
 <!-- translation-source-sha256: eaeee62586f9665447d7722bc0da9c3226e048659e0d3d461eaedb9575fdadbb ## Trade-offs -->
-<!-- translation-source-sha256: beb8b9c4519a933d70d7b44a64a368a6fededada856225311490e5a22634b33a ## Implementation status -->
+<!-- translation-source-sha256: e50a546687c29b6acfe798ed481ef8836604140db4ca8892a2d135a2059ab17c ## Implementation status -->

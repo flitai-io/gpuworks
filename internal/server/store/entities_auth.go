@@ -33,7 +33,9 @@ type UserIdentity struct {
 	ID     uint `gorm:"primaryKey"`
 	UserID uint `gorm:"index;not null"`
 	// Source is the extension's source name, [a-z][a-z0-9_]{1,31}.
-	Source string `gorm:"size:32;not null;uniqueIndex:idx_user_identities_source_subject,priority:1"`
+	// idx_user_identities_source orders one source's links by id, for the
+	// connector's paged reads (Store.AccountsBySource).
+	Source string `gorm:"size:32;not null;uniqueIndex:idx_user_identities_source_subject,priority:1;index:idx_user_identities_source"`
 	// Subject is the identity source's id for this user.
 	Subject string `gorm:"size:256;not null;uniqueIndex:idx_user_identities_source_subject,priority:2"`
 	// CreatedAt is when the link was made; LastSignInAt the last sign-in
@@ -48,6 +50,33 @@ func (UserIdentity) TableName() string { return "user_identities" }
 // ADR 0071 decision 11: the stored flag counts only while the role is admin,
 // so a demoted user loses it without a write.
 func (u User) IsLocalAdmin() bool { return u.LocalAdmin && u.Role == "admin" }
+
+// IsAdmin reports whether the account is an administrator; the local
+// administrators are among them. An administrator is out of an identity
+// connector's reach (ADR 0085 decision 4).
+func (u User) IsAdmin() bool { return u.Role == "admin" }
+
+// SignInTicket is a one-time sign-in ticket an identity connector obtained for
+// a user (ADR 0085 decision 3): the core redeems it at /api/v1/auth/complete in
+// the browser that started the sign-in, then deletes it. Only the ticket's
+// hash is kept. Rows live 60 seconds; every issue sweeps the expired ones, so
+// the table holds the sign-ins of the last minute.
+type SignInTicket struct {
+	// TokenHash is HashToken of the ticket the connector was handed.
+	TokenHash string `gorm:"primaryKey;size:64"`
+	UserID    uint   `gorm:"not null"`
+	// IdentityID is the user_identities row the sign-in went through; its
+	// last_sign_in_at is set when the ticket is redeemed.
+	IdentityID uint `gorm:"not null"`
+	// Source is the identity source the ticket was issued for, and Handle
+	// the browser binding's handle it is bound to.
+	Source    string    `gorm:"size:32;not null"`
+	Handle    string    `gorm:"size:64;not null"`
+	CreatedAt time.Time `gorm:"not null"`
+	ExpiresAt time.Time `gorm:"not null;index"`
+}
+
+func (SignInTicket) TableName() string { return "sign_in_tickets" }
 
 // APIKey authenticates data-plane (/v1) and API access. The prefix is stored in
 // clear for O(1) lookup; the full key is verified against an argon2id hash.

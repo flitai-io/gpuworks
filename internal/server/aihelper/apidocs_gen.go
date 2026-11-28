@@ -41,7 +41,13 @@ var routeDocs = map[string]string{
 
 	"/api/v1/apikeys": "API key 列表（管理员可见全部，普通用户仅自己拥有的 key），每项含只读数字 `id`，供用量筛选关联；不含明文、secret 或 hash，含已吊销的 key：已吊销的带 `revoked_at`（UTC 时间），未吊销的不出现该字段。`all_deployments` 为 true 时可调用全部模型服务；为 false 时只能调用 `deployments`（`[{id,name,served_name}]`）中的部署，这些部署全被删除后列表为空、key 什么都调用不了。`priority` 是 key 的请求优先级绑定 `{class, ceiling, policy}`：`class` 为空表示使用默认优先级，`ceiling` 为空表示上限等于自身优先级，`policy` 为 `within_ceiling`（默认）、`fixed` 或 `down_only`，见[请求优先级](../explanation/request-priority.md)",
 
+	"/api/v1/auth/complete": "在开始登录的浏览器里兑换登录票据，建会话后 302 到控制台",
+
 	"/api/v1/auth/me": "返回当前用户与实时权限；不延长空闲期限",
+
+	"/api/v1/auth/sign-in-options": "登录页的登录方式：`{local_password, entries:[{source,label,icon,url}]}`",
+
+	"/api/v1/auth/sign-in/start": "通过身份连接器登录的起点：设浏览器绑定 Cookie，302 到连接器的起始路由",
 
 	"/api/v1/batches": "批处理任务列表，最新优先，返回分页结构 `{items,page,page_size,total}`。`state` 为 8 种状态之一，多个值以逗号分隔；非法值返回 400 `LIST_FILTER_INVALID`；不支持 `q`，带 `q` 同样返回 400 `LIST_FILTER_INVALID`。管理员看到所有用户的任务，其他用户只看到自己的。列表项不含 `input_filename`",
 

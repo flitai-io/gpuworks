@@ -357,3 +357,32 @@ func TestAuthLocalPasswordValidation(t *testing.T) {
 		t.Fatalf("load with an invalid value = %v, want an auth.local_password error", err)
 	}
 }
+
+// auth.external.provision accepts auto, existing and empty; anything else is
+// refused at load.
+func TestAuthExternalProvisionValidation(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		ok    bool
+	}{
+		{"", true}, {ProvisionAuto, true}, {ProvisionExisting, true},
+		{"none", false}, {"AUTO", false}, {"true", false},
+	} {
+		if err := (Auth{External: AuthExternal{Provision: tc.value}}).Validate(); (err == nil) != tc.ok {
+			t.Fatalf("auth.external.provision %q: err=%v, want ok=%t", tc.value, err, tc.ok)
+		}
+	}
+	path := filepath.Join(t.TempDir(), FileName)
+	if err := os.WriteFile(path, []byte("auth:\n  external:\n    provision: existing\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := Load(path); err != nil || f.Auth.External.Provision != ProvisionExisting {
+		t.Fatalf("load = %+v %v", f.Auth, err)
+	}
+	if err := os.WriteFile(path, []byte("auth:\n  external:\n    provision: everyone\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "auth.external.provision") {
+		t.Fatalf("load with an invalid value = %v, want an auth.external.provision error", err)
+	}
+}

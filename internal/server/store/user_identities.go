@@ -160,35 +160,50 @@ func (s *Store) DisableUser(id uint) (*User, error) {
 		if err := tx.First(&out, id).Error; err != nil {
 			return sessionLookupError(err)
 		}
-		if out.DisabledAt != nil {
-			return nil
-		}
-		if out.IsLocalAdmin() {
-			var remaining int64
-			if err := tx.Model(&User{}).
-				Where("role = ? AND local_admin = ? AND disabled_at IS NULL AND id <> ?", "admin", true, id).
-				Count(&remaining).Error; err != nil {
-				return err
-			}
-			if remaining == 0 {
-				return ErrLastLocalAdmin
-			}
-		}
-		now := time.Now().UTC()
-		if err := tx.Model(&User{}).Where("id = ?", id).Update("disabled_at", now).Error; err != nil {
-			return err
-		}
-		out.DisabledAt = &now
-		if err := tx.Where("user_id = ?", id).Find(&sessions).Error; err != nil {
-			return err
-		}
-		return tx.Where("user_id = ?", id).Delete(&ManagementSession{}).Error
+		var err error
+		sessions, err = disableUserTx(tx, &out)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	// Publishing after the commit: an open stream re-checks its credential
-	// on this topic and ends before it forwards another change.
+	s.userDisabled(id, sessions)
+	return &out, nil
+}
+
+// disableUserTx disables u, read in tx, and answers the sessions it deleted.
+// An account already disabled is left as it is.
+func disableUserTx(tx *gorm.DB, u *User) ([]ManagementSession, error) {
+	if u.DisabledAt != nil {
+		return nil, nil
+	}
+	if u.IsLocalAdmin() {
+		var remaining int64
+		if err := tx.Model(&User{}).
+			Where("role = ? AND local_admin = ? AND disabled_at IS NULL AND id <> ?", "admin", true, u.ID).
+			Count(&remaining).Error; err != nil {
+			return nil, err
+		}
+		if remaining == 0 {
+			return nil, ErrLastLocalAdmin
+		}
+	}
+	now := time.Now().UTC()
+	if err := tx.Model(&User{}).Where("id = ?", u.ID).Update("disabled_at", now).Error; err != nil {
+		return nil, err
+	}
+	u.DisabledAt = &now
+	var sessions []ManagementSession
+	if err := tx.Where("user_id = ?", u.ID).Find(&sessions).Error; err != nil {
+		return nil, err
+	}
+	return sessions, tx.Where("user_id = ?", u.ID).Delete(&ManagementSession{}).Error
+}
+
+// userDisabled runs after the commit that disabled an account.
+func (s *Store) userDisabled(id uint, sessions []ManagementSession) {
+	// An open stream re-checks its credential on this topic and ends before
+	// it forwards another change.
 	for _, session := range sessions {
 		s.publishManagementSession(session.TokenHash, "user-disabled")
 	}
@@ -196,7 +211,6 @@ func (s *Store) DisableUser(id uint) (*User, error) {
 	// processes follow within their caches' TTLs (ADR 0085 decision 7).
 	s.apiKeys.forgetUser(id)
 	s.platformTokens.forgetUser(id)
-	return &out, nil
 }
 
 // EnableUser restores a disabled account; its data and keys work again.
@@ -207,19 +221,29 @@ func (s *Store) EnableUser(id uint) (*User, error) {
 		if err := tx.First(&out, id).Error; err != nil {
 			return sessionLookupError(err)
 		}
-		if out.DisabledAt == nil {
-			return nil
-		}
-		if err := tx.Model(&User{}).Where("id = ?", id).Update("disabled_at", nil).Error; err != nil {
-			return err
-		}
-		out.DisabledAt = nil
-		return nil
+		return enableUserTx(tx, &out)
 	})
 	if err != nil {
 		return nil, err
 	}
+	s.userEnabled(id)
+	return &out, nil
+}
+
+// enableUserTx enables u, read in tx; an enabled account is left as it is.
+func enableUserTx(tx *gorm.DB, u *User) error {
+	if u.DisabledAt == nil {
+		return nil
+	}
+	if err := tx.Model(&User{}).Where("id = ?", u.ID).Update("disabled_at", nil).Error; err != nil {
+		return err
+	}
+	u.DisabledAt = nil
+	return nil
+}
+
+// userEnabled runs after the commit that enabled an account.
+func (s *Store) userEnabled(id uint) {
 	s.apiKeys.forgetUser(id)
 	s.platformTokens.forgetUser(id)
-	return &out, nil
 }

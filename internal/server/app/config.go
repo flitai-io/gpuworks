@@ -114,6 +114,11 @@ type Config struct {
 	// "local_admin" only the local administrators, the floor that stays
 	// reachable when every identity connector is down.
 	AuthLocalPassword string
+	// AuthExternalProvision is server.yaml's auth.external.provision (ADR
+	// 0085 decision 5): "auto" (the default) creates an account for a
+	// sign-in through an unlinked external identity, "existing" signs in
+	// only identities an administrator linked.
+	AuthExternalProvision string
 
 	ProxyMaxBodyBytes int64 // max /v1 request body spooled to disk before routing (413 beyond)
 

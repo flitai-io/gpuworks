@@ -40,6 +40,11 @@ type ExtensionDeps struct {
 	// own routes are served under any limit, so its page can lift it.
 	Platform      PlatformLimiter
 	PlatformOwner string
+	// SignIns are the sign-in entries the extensions offer
+	// (sign_in.go), and Accounts redeems their tickets; without them the
+	// sign-in page has the password form only.
+	SignIns  []SignInOption
+	Accounts SignInRedeemer
 }
 
 // Extension is a set of management routes a separately built server mounts.
@@ -88,6 +93,11 @@ const (
 	// AccessAdminSession: administrators signed in with a session; no
 	// platform token.
 	AccessAdminSession
+	// AccessPublic: no authentication, limited per client address like a
+	// public plugin route (60 a minute, bursts of 30); a session is never
+	// read or renewed. For what a browser reaches before it has signed in,
+	// such as an identity connector's start and callback routes.
+	AccessPublic
 )
 
 func (a RouteAccess) String() string {
@@ -96,6 +106,8 @@ func (a RouteAccess) String() string {
 		return "admin"
 	case AccessAdminSession:
 		return "admin-session"
+	case AccessPublic:
+		return "public"
 	}
 	return "read"
 }
@@ -162,6 +174,7 @@ type extensionMounter struct {
 func (a *apiHandlers) mountExtensions(r chi.Router) {
 	ext := a.d.Extensions
 	if len(ext.Extensions) == 0 {
+		a.checkSignIns()
 		return
 	}
 	m := &extensionMounter{a: a, r: r, seen: map[string]bool{}}
@@ -184,6 +197,7 @@ func (a *apiHandlers) mountExtensions(r chi.Router) {
 		}
 	}
 	m.name = "" // a Mounter kept past Routes mounts nothing
+	a.checkSignIns()
 }
 
 func (m *extensionMounter) Handle(spec RouteSpec, h http.Handler) {
@@ -212,8 +226,17 @@ func (m *extensionMounter) Handle(spec RouteSpec, h http.Handler) {
 	if spec.AIReadable && spec.Method != http.MethodGet {
 		panic(fmt.Sprintf("api: extension %s: %s: only a GET route can be AIReadable", m.name, where))
 	}
+	if spec.Access == AccessPublic && spec.AIReadable {
+		panic(fmt.Sprintf("api: extension %s: %s: a public route cannot be AIReadable", m.name, where))
+	}
+	if spec.Access > AccessPublic {
+		panic(fmt.Sprintf("api: extension %s: %s: unknown access %d", m.name, where, spec.Access))
+	}
 	m.checkFeature(where, spec.Feature, spec.Community)
 	m.seen[key] = true
+	if spec.Access == AccessPublic {
+		m.a.notePublic(spec)
+	}
 	m.r.Method(spec.Method, spec.Pattern, &extensionEndpoint{spec: spec, next: m.a.extensionChain(spec, h)})
 }
 
@@ -250,6 +273,11 @@ func (m *extensionMounter) checkNav(n dto.NavContribution) dto.NavContribution {
 // the feature gate.
 func (a *apiHandlers) extensionChain(spec RouteSpec, h http.Handler) http.Handler {
 	h = a.featureGuard(spec, h)
+	if spec.Access == AccessPublic {
+		// No session is read, so there are no claims and no assistant
+		// read; the limiter stands where authentication would.
+		return a.publicRouteLimit(spec, h)
+	}
 	h = assistantGuard(spec, h)
 	h = a.withClaims(h)
 	if spec.Access != AccessRead {

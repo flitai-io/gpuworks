@@ -33,6 +33,9 @@ const { DEFAULT_LOGO, resetBrandingForTest } = await import("../src/branding.tsx
 
 const originalPrefetch = apiModule.api.prefetchUpdates;
 const originalBranding = apiModule.api.branding;
+const originalSignInOptions = apiModule.api.signInOptions;
+const passwordOnly = async () => ({ local_password: "all" as const, entries: [] });
+apiModule.api.signInOptions = passwordOnly;
 const originalFetch = globalThis.fetch;
 const defaultBranding = async () => ({ product_name: "", console_title: "", login_description: "", logo: "" });
 apiModule.api.branding = defaultBranding;
@@ -40,10 +43,12 @@ afterEach(() => {
   cleanup();
   apiModule.api.prefetchUpdates = originalPrefetch;
   apiModule.api.branding = defaultBranding;
+  apiModule.api.signInOptions = passwordOnly;
   globalThis.fetch = originalFetch;
+  window.history.replaceState(null, "", "/");
   resetBrandingForTest();
 });
-after(() => { apiModule.api.branding = originalBranding; });
+after(() => { apiModule.api.branding = originalBranding; apiModule.api.signInOptions = originalSignInOptions; });
 after(() => closeChannels());
 
 function page(onLogin: () => void = () => {}) {
@@ -190,4 +195,88 @@ test("invalid credentials retain their specific sign-in guidance", async () => {
   await user.type(await screen.findByLabelText("Username"), "admin");
   await user.type(screen.getByLabelText("Password"), "password{Enter}");
   assert.ok((await screen.findByRole("alert")).textContent?.includes("Incorrect username or password. Check your credentials and try again."));
+});
+
+const acme = { source: "acme", label: "Acme ID", url: "/api/v1/auth/sign-in/start?source=acme" };
+
+test("while the sign-in options load, and when they fail, the password form is all there is", async () => {
+  apiModule.api.prefetchUpdates = async () => {};
+  let resolve!: (v: Awaited<ReturnType<typeof passwordOnly>>) => void;
+  apiModule.api.signInOptions = () => new Promise((r) => { resolve = r; });
+  const view = render(page());
+  assert.ok(await screen.findByRole("button", { name: "Sign in" }));
+  assert.equal(screen.queryByRole("navigation"), null);
+  resolve({ local_password: "all", entries: [] });
+  await waitFor(() => assert.ok(screen.getByLabelText("Password")));
+  assert.equal(screen.queryByRole("navigation"), null, "no entries, no list");
+  view.unmount();
+
+  apiModule.api.signInOptions = async () => { throw new Error("server unreachable"); };
+  render(page());
+  assert.ok(await screen.findByLabelText("Password"));
+  assert.equal(screen.queryByRole("navigation"), null);
+  assert.equal(screen.queryByRole("alert"), null, "a failed options read is not an error the user can act on");
+});
+
+test("the identity sources the server offers are links under the password form", async () => {
+  apiModule.api.prefetchUpdates = async () => {};
+  apiModule.api.signInOptions = async () => ({ local_password: "all", entries: [acme] });
+  render(page());
+  const nav = await screen.findByRole("navigation", { name: "Or sign in with" });
+  const link = within(nav).getByRole("link", { name: "Acme ID" });
+  assert.equal(link.getAttribute("href"), "/api/v1/auth/sign-in/start?source=acme");
+  assert.ok(screen.getByLabelText("Password"), "the password form stays for everyone");
+  // Keyboard: the entry is the next stop after the password form's last
+  // control, and Enter follows it.
+  const user = userEvent.setup();
+  screen.getByRole("button", { name: "Forgot password?" }).focus();
+  await user.tab();
+  assert.ok(document.activeElement === link, "one Tab from the password form reaches the entry");
+  await user.tab({ shift: true });
+  assert.ok(document.activeElement === screen.getByRole("button", { name: "Forgot password?" }), "Shift+Tab goes back to the form");
+  link.focus();
+  let followed = "";
+  link.addEventListener("click", (e) => { followed = link.getAttribute("href") ?? ""; e.preventDefault(); });
+  await user.keyboard("{Enter}");
+  assert.equal(followed, "/api/v1/auth/sign-in/start?source=acme");
+});
+
+test("when only local administrators use a password, the form is one click away", async () => {
+  apiModule.api.prefetchUpdates = async () => {};
+  apiModule.api.signInOptions = async () => ({ local_password: "local_admin", entries: [acme] });
+  render(page());
+  assert.ok(await screen.findByRole("link", { name: "Acme ID" }));
+  assert.equal(screen.queryByLabelText("Password"), null);
+  const user = userEvent.setup();
+  const reveal = screen.getByRole("button", { name: "Sign in with a password as a local administrator" });
+  reveal.focus();
+  await user.keyboard("{Enter}");
+  assert.ok(await screen.findByLabelText("Password"));
+});
+
+test("local administrators keep the password form when no identity source is offered", async () => {
+  apiModule.api.prefetchUpdates = async () => {};
+  apiModule.api.signInOptions = async () => ({ local_password: "local_admin", entries: [] });
+  render(page());
+  await waitFor(() => assert.ok(screen.getByLabelText("Password")));
+  assert.equal(screen.queryByRole("button", { name: "Sign in with a password as a local administrator" }), null);
+});
+
+test("a refused sign-in comes back with its code, and only known codes are shown", async () => {
+  apiModule.api.prefetchUpdates = async () => {};
+  window.history.replaceState(null, "", "/login?code=IDENTITY_TICKET_INVALID");
+  const view = render(page());
+  const alert = await screen.findByRole("alert");
+  assert.ok(alert.textContent?.includes(locale("common").apiError.IDENTITY_TICKET_INVALID));
+  view.unmount();
+
+  window.history.replaceState(null, "", "/login?code=SERVICE_UNAVAILABLE");
+  const fault = render(page());
+  assert.ok((await screen.findByRole("alert")).textContent?.includes(locale("common").apiError.SERVICE_UNAVAILABLE));
+  fault.unmount();
+
+  window.history.replaceState(null, "", "/login?code=SOMETHING_ELSE");
+  render(page());
+  assert.ok(await screen.findByLabelText("Password"));
+  assert.equal(screen.queryByRole("alert"), null);
 });

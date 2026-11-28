@@ -30,3 +30,23 @@ type ExternalIdentityRequest struct {
 	Source  string `json:"source"`
 	Subject string `json:"subject"`
 }
+
+// SignInOptions is GET /api/v1/auth/sign-in-options (ADR 0085 decision 6):
+// how this server signs people in, for the sign-in page to render as is.
+type SignInOptions struct {
+	// LocalPassword is server.yaml's auth.local_password: "all", or
+	// "local_admin" when only local administrators use the password form.
+	LocalPassword string `json:"local_password"`
+	// Entries are the identity sources a user can sign in through now, in
+	// the order the extensions offered them; empty for none.
+	Entries []SignInEntry `json:"entries"`
+}
+
+// SignInEntry is one "sign in with ..." button: URL is the core's
+// /api/v1/auth/sign-in/start for the source.
+type SignInEntry struct {
+	Source string `json:"source"`
+	Label  string `json:"label"`
+	Icon   string `json:"icon,omitempty"`
+	URL    string `json:"url"`
+}

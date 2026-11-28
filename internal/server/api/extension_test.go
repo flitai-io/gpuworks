@@ -108,6 +108,8 @@ func TestExtensionMountRefusesBadRegistrations(t *testing.T) {
 		{"both", []Extension{fakeExtension{name: "fake", routes: []RouteSpec{{Method: http.MethodGet, Pattern: "/x/fake", Feature: "fake.things", Community: true}}}}, "choose one"},
 		{"undeclared feature", []Extension{fakeExtension{name: "fake", routes: []RouteSpec{{Method: http.MethodGet, Pattern: "/x/fake", Feature: "fake.other"}}}}, "undeclared feature"},
 		{"readable write", []Extension{fakeExtension{name: "fake", routes: []RouteSpec{{Method: http.MethodPost, Pattern: "/x/fake", Community: true, AIReadable: true}}}}, "only a GET route"},
+		{"readable public", []Extension{fakeExtension{name: "fake", routes: []RouteSpec{{Method: http.MethodGet, Pattern: "/x/fake", Access: AccessPublic, Community: true, AIReadable: true}}}}, "a public route cannot be AIReadable"},
+		{"unknown access", []Extension{fakeExtension{name: "fake", routes: []RouteSpec{{Method: http.MethodGet, Pattern: "/x/fake", Access: AccessPublic + 1, Community: true}}}}, "unknown access"},
 		{"nil handler", []Extension{fakeExtension{name: "fake", nilH: true, routes: []RouteSpec{get("/x/fake")}}}, "has no handler"},
 		{"menu entry", []Extension{fakeNavExtension{fakeExtension{name: "fake", nav: []dto.NavContribution{{ID: "x", Group: "g", LabelKey: "k", Route: "no-slash"}}}}}, "needs an id"},
 		{"menu entry twice", []Extension{fakeNavExtension{fakeExtension{name: "fake", nav: []dto.NavContribution{{ID: "x", Group: "g", LabelKey: "k", Route: "/x"}, {ID: "x", Group: "g", LabelKey: "k", Route: "/y"}}}}}, "added twice"},
@@ -328,6 +330,7 @@ func TestRouteInventoryNamesExtensionRoutes(t *testing.T) {
 		{Method: http.MethodGet, Pattern: "/x/fake/things", Feature: "fake.things", Action: "fake.list"},
 		{Method: http.MethodPost, Pattern: "/x/fake/things", Access: AccessAdmin, Feature: "fake.things", Action: "fake.create"},
 		{Method: http.MethodPost, Pattern: "/x/fake/session", Access: AccessAdminSession, Community: true},
+		{Method: http.MethodGet, Pattern: "/x/fake/start", Access: AccessPublic, Feature: "fake.things", Action: "fake.start"},
 	}}
 	got, err := RouteInventory(Router(Deps{Extensions: ExtensionDeps{Extensions: []Extension{ext}, Features: gate}}))
 	if err != nil {
@@ -344,6 +347,7 @@ func TestRouteInventoryNamesExtensionRoutes(t *testing.T) {
 		}
 	}
 	want := []string{
+		"GET /api/v1/x/fake/start [access=public] [action=fake.start] [feature=fake.things]",
 		"GET /api/v1/x/fake/things [access=read] [action=fake.list] [feature=fake.things]",
 		"POST /api/v1/x/fake/session [access=admin-session] [community]",
 		"POST /api/v1/x/fake/things [access=admin] [action=fake.create] [feature=fake.things]",

@@ -80,12 +80,37 @@ type Service interface{ Run(ctx context.Context) error }
 | `NodeNamesByID(ctx, ids)` | 指定节点的显示名，以 id 为键（`map[uint]string`），读池上一次查询 |
 | `ClusterObservation(ctx, timeout)` | 本 server 所在控制面集群的一次观测（`app.ClusterObservation`）：成员、角色、谁在回应、能否再失去一个成员；与 `cluster-status` 报告同源。单机或不含集群运行时的构建回答 `Clustered: false`。只读，可在 `Init` 之后、服务请求时调用；每个探测以 `timeout` 为限并依次进行 |
 | `HostIdentity(salt)` | 管理 server 所在机器的加盐身份（`hostidentity.Salted`），见[管理 server 的主机身份](#管理-server-的主机身份) |
+| `DeclareIdentitySources(names...)` | 认领身份源的来源名（`user_identities.source`，`[a-z][a-z0-9_]{1,31}`），一个名字只属于一个模块，已被别的模块认领时返回 `IDENTITY_SOURCE_CONFLICT`，见[身份连接器](#身份连接器) |
+| `OfferSignIn(entry)` | 在登录页放一个登录入口（`app.SignInEntry{Source, Label, Icon, Start}`；`Icon` 是预留字段，控制台目前不显示）：来源须是本模块认领的，`Start` 须是本模块一条 `AccessPublic` 的 GET 路由 |
+| `Accounts()` | 本模块身份源的账号操作（`*accounts.Accounts`，包 `internal/server/accounts`），见[身份连接器](#身份连接器)；任何时候都可调用 |
 
-`Host` 不交出 `*store.Store`，也不交出数据库句柄。`Init` 返回之后再注册会被拒绝（`ReapplySchedulingHolds`、`ReapplySchedulingHoldsFor`、`NodeFleet`、`CardFleet`、`NodeIdentity`、`NodeInventory` 、`NodeNamesByID` 与 `HostIdentity` 不是注册，任何时候都可调用）：有返回值的方法返回 `app.ErrHostClosed`，其他方法 panic。`Init` 出错时 `New` 失败并关闭数据库，同一数据目录可以立即再次启动。
+`Host` 不交出 `*store.Store`，也不交出数据库句柄。`Init` 返回之后再注册会被拒绝（`ReapplySchedulingHolds`、`ReapplySchedulingHoldsFor`、`NodeFleet`、`CardFleet`、`NodeIdentity`、`NodeInventory` 、`NodeNamesByID`、`HostIdentity` 与 `Accounts` 不是注册，任何时候都可调用）：有返回值的方法返回 `app.ErrHostClosed`，其他方法 panic。`Init` 出错时 `New` 失败并关闭数据库，同一数据目录可以立即再次启动。
 
-扩展路由挂在 `/api/v1/x/<名>/` 下：`api.RouteSpec.Pattern` 相对 `/api/v1`，是 `/x/<名>` 或以 `/x/<名>/` 开头，且是规整的路径（没有 `.`、`..`、`//` 与结尾的 `/`）；越出自己的命名空间、路径不规整，或同一方法下两个模式只差参数名（`{id}` 与 `{name}`），都在路由构建时 panic。核心不在 `/api/v1/x/` 下注册任何路由，所以模块名可以与核心路径段同名（如 `nodes`），也不会与核心将来新增的路径冲突。
+扩展路由挂在 `/api/v1/x/<名>/` 下：`api.RouteSpec.Pattern` 相对 `/api/v1`，是 `/x/<名>` 或以 `/x/<名>/` 开头，且是规整的路径（没有 `.`、`..`、`//` 与结尾的 `/`）；越出自己的命名空间、路径不规整，或同一方法下两个模式只差参数名（`{id}` 与 `{name}`），都在路由构建时 panic。路由的访问级别是 `AccessRead`、`AccessAdmin`、`AccessAdminSession` 或 `AccessPublic`：`AccessPublic` 不鉴权、不读会话，按客户端地址限流（规则同插件包的 `public` 路由），不能对 AI 助手开放，整台 server 被限制时照常服务；它用于浏览器登录之前就要到达的路由，例如身份连接器的起始与回调路由。核心不在 `/api/v1/x/` 下注册任何路由，所以模块名可以与核心路径段同名（如 `nodes`），也不会与核心将来新增的路径冲突。
 
 所有 `Init` 结束后，server 先释放本构建没有任何模块认领的扩展停止调度与卡的保持（换了构建或去掉了模块时，它们不会一直留着），有保持者（节点或卡）时再对全部节点及其卡应用一次保持，然后构建功能门（`featuregate.New`）并交给 API。
+
+## 身份连接器
+
+身份连接器与站点的身份源（OIDC、SAML、办公平台的 OAuth2 等）对话；账号、会话与停用都在核心，连接器读不到用户表，也不设置会话 Cookie（[ADR 0085](../adr/0085-external-identity-connectors.md)）。编译模块这样做一个跳转式连接器：
+
+1. 在 `Init` 里 `DeclareIdentitySources("acme")` 认领来源名，挂一条 `AccessPublic` 的 GET 起始路由和身份源回调要用的路由，再 `OfferSignIn` 把起始路由放到登录页。
+2. 用户点登录页的按钮时，浏览器先到核心的 `GET /api/v1/auth/sign-in/start?source=acme`：核心设一次性的浏览器绑定 Cookie，再把浏览器带到起始路由，查询参数 `handle` 是由绑定派生的句柄。起始路由把 `handle` 随自己的 state 带去身份源。
+3. 回调路由自己校验身份源的结果，然后调 `Accounts().SignIn("acme", subject, accounts.Profile{Username: …}, handle)` 换一张票据，把浏览器 302 到 `/api/v1/auth/complete?ticket=<票据>`。核心只在持有对应绑定的浏览器里兑换它（[API 参考](../reference/api.md#通过身份连接器登录)）。
+
+`*accounts.Accounts` 的每个操作都以来源名为范围，来源不是本模块认领的返回 `IDENTITY_SOURCE_CONFLICT`：
+
+| 方法 | 作用 |
+|---|---|
+| `SignIn(source, subject, profile, handle)` | 按 `(source, subject)` 找链接的账号；没有时按 `server.yaml` 的 `auth.external.provision`：`auto`（默认）建一个角色为 `user`、没有本地密码的账号，`existing` 拒绝（`IDENTITY_NOT_PROVISIONED`）。返回绑定到 `handle` 的一次性票据（60 秒）。从不按用户名或邮箱找账号，也从不改已链接账号的用户名 |
+| `Upsert(source, subject, profile)` | 目录同步一位成员：没有链接时建账号（不看 `provision`，目录是站点自己的），有链接时把用户名改成 `profile.Username` |
+| `Disable` / `Enable(source, subject)` | 停用、恢复链接的账号（停用的效果见[API 参考](../reference/api.md#会话什么时候失效)） |
+| `RevokeSessions(source, subject)` | 结束链接账号的全部管理会话，返回结束了几个；平台令牌与 API key 不受影响 |
+| `List(source, cursor, limit)` | 按链接顺序分页读本来源的账号（`accounts.Account{Subject, UserID, Username, Protected, Disabled}`），`limit` 不超过 500；`next` 为 0 时没有下一页 |
+
+`profile`（`accounts.Profile`）只有用户名、显示名与邮箱，不带角色：外部身份永远不能让谁成为管理员。管理员（角色为 `admin`，本地管理员也在其中）不受连接器管辖：对他们的 `Disable`、`Enable`、`RevokeSessions` 与会改用户名的 `Upsert` 一律返回 `IDENTITY_PROTECTED_USER`，这项检查在写入的同一事务里读角色，`SignIn` 照常（管理员显式链接过外部身份后可以用它登录）。用户名被占用返回 `IDENTITY_USERNAME_TAKEN`（`params.username`），核心不自动改名，由连接器换一个再试。这些方法读写数据库，不能在钩子里调用。
+
+插件包的连接器（`write:accounts` 权限、`host.accounts` 宿主接口与清单的 `sign_in`）与密码式连接器（LDAP）还没有实现。
 
 ## 保持者的重新应用与节点集合
 
