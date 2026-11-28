@@ -13,6 +13,7 @@
 | 厂商定义 | 新增 `internal/accelerator/<厂商>.go`；在 `vendor.go` 里加厂商常量；在 `vendor_spec.go` 的 `vendorSpecs` 里加一行 |
 | 驱动 | 新增 `internal/agent/gpu/<厂商>*.go`；在 `gpu.go` 的 `defaultProbers` 里加一行 |
 | 夹具 | `internal/agent/gpu/testdata/`，真机上抓的工具原始输出 |
+| 卡型规格（可选） | `internal/accelerator/<厂商>_card_specs.go`，见第一步「卡型规格」 |
 | 指标（有新指标时） | 在 `internal/platformmetrics` 里登记指标名 |
 | Kubernetes（`runtimes` 列了 `kube` 时） | 在 `internal/accelerator/kube.go` 的 `ClassifyKubeResource` 里加扩展资源名 |
 
@@ -58,6 +59,19 @@ var exampleVendor = vendorSpec{
 - `detectCommand` 只在工具名是这家独有时填（昆仑芯的 `xpu-smi` 与 Intel 的同名，所以不填）。
 - `pci` 以真机 `lspci -nn` 为准，在定义上方的注释里写明机器和日期。不要为了方便加整个 `0x03` 显示类，服务器的 BMC 显示芯片也是这一类。
 - 上游 `pci.ids` 没有这张卡的名字时，在 `pciModels` 里写型号名和出处。
+
+### 卡型规格（可选）
+
+概览和卡详情显示的峰值算力、显存带宽与互联带宽，来自定义里的 `cardSpecs`（类型 `CardSpec`，见 `card_spec.go`）。不写也能接入，那时这家的卡显示为「未收录」。规格条目放在 `internal/accelerator/<厂商>_card_specs.go`，照 `nvidia_card_specs.go` 写。
+
+每一条要满足：
+
+- `Name` 是平台存的型号名：厂商工具打印的名字去掉品牌词（`NormalizeGPUName`），逐字匹配，变体（SXM 与 PCIe、不同显存）各写一条，不用相近型号代填。
+- `NameSeen` 写这个名字是哪个工具、在什么硬件上、哪天打印出来的。只从规格书抄来的名字不算，没有真机输出就不收这一条。
+- 每个数字都有厂商自己的文档作出处（`Sources`，带链接、文档版本和查询日期），`Covers` 写明它支持哪几类数字：算力、显存带宽、互联带宽、互联带宽按单向还是双向计。
+- 算力按文档原样抄写（`Stated`），文档给的是含稀疏的数字就标 `Sparse`，由代码折算成稠密值。`Precisions` 里的每个精度要么写进 `Peaks`，要么写进 `Unsupported`，不留空：缺一个精度时分不清是不支持还是没查。
+
+`go test -run TestCardSpecsAreTraceable ./internal/accelerator/` 检查以上各条。
 
 ## 第二步：驱动
 
@@ -165,6 +179,7 @@ go test -race ./internal/accelerator/... ./internal/agent/gpu/...
 | 10 | 失败路径的测试真的在测 | 评审者任选一个失败路径用例，去掉驱动里对应的处理，确认用例变红 |
 | 11 | 没有抄表测试 | 新增的测试里没有把定义的字段值再列一遍的断言。`TestVendorRuntimeAdmission` 里的那一行除外：它写的是调度前接受和拒绝哪些运行时 |
 | 12 | 文档只写验证过的事实 | 支持矩阵里新增的每一格在验证一节有对应的证据 |
+| 13 | 卡型规格可溯源 | `go test -run TestCardSpecsAreTraceable ./internal/accelerator/` 通过；评审者任选一条，打开它的出处链接核对数字，并在合并请求里找到 `NameSeen` 所说的真机输出 |
 
 第 4、5、6 条的命令（表格里写不下竖线，原样写在这里；把 `<厂商>` 换成文件名前缀）：
 

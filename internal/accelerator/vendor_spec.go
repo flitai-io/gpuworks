@@ -57,6 +57,11 @@ type vendorSpec struct {
 	// An entry is added only when it was read off real hardware and says
 	// where; it is removed once upstream has the name.
 	pciModels []PCIModel
+	// cardSpecs are the published peak figures of its card models
+	// (CardSpecOf); a model not listed reads as unknown. An entry needs the
+	// vendor's document for every figure and a name read off real hardware
+	// (CardSpec).
+	cardSpecs []CardSpec
 	// arch derives the architecture identity from what the card reports;
 	// nil leaves the reported id as it is (GPUArch).
 	arch func(archID, computeCapability string) Arch

@@ -13,6 +13,7 @@ What you do not need to change: any runtime driver (`internal/agent/runtime/*`),
 | Vendor definition | New `internal/accelerator/<vendor>.go`; the vendor constant in `vendor.go`; one line in `vendorSpecs` in `vendor_spec.go` |
 | Driver | New `internal/agent/gpu/<vendor>*.go`; one line in `defaultProbers` in `gpu.go` |
 | Fixtures | `internal/agent/gpu/testdata/`, raw tool output captured on real hardware |
+| Card specs (optional) | `internal/accelerator/<vendor>_card_specs.go`, see "Card Specs" in Step 1 |
 | Metrics (with a new metric) | Register the metric name in `internal/platformmetrics` |
 | Kubernetes (when `runtimes` lists `kube`) | Add the extended resource name to `ClassifyKubeResource` in `internal/accelerator/kube.go` |
 
@@ -58,6 +59,19 @@ There is one rule: **not declared means not supported.**
 - Fill in `detectCommand` only when the tool's name is this vendor's alone (Kunlunxin's `xpu-smi` shares its name with Intel's, so it has none).
 - `pci` follows `lspci -nn` on real hardware, with the machine and the date in the comment above the definition. Do not add the whole `0x03` display class for convenience: a server's BMC display chip is in that class too.
 - When upstream `pci.ids` has no name for the card, give the model name and where it was read in `pciModels`.
+
+### Card Specs (Optional)
+
+The peak compute, memory bandwidth and interconnect bandwidth shown on the overview and the card detail come from `cardSpecs` in the definition (type `CardSpec`, see `card_spec.go`). A vendor can be added without them; its cards then read as not catalogued. Put the entries in `internal/accelerator/<vendor>_card_specs.go`, written like `nvidia_card_specs.go`.
+
+Each entry must meet these rules:
+
+- `Name` is the model name the platform stores: the name the vendor tool prints without the brand word (`NormalizeGPUName`), matched exactly. Each variant (SXM and PCIe, different memory sizes) gets its own entry; no model stands in for a similar one.
+- `NameSeen` says which tool printed that name, on what hardware and on what day. A name copied from a datasheet does not count; without real-hardware output the entry is not added.
+- Every figure has the vendor's own document as its source (`Sources`, with link, document version and retrieval date), and `Covers` says which kinds of figure it vouches for: compute, memory bandwidth, interconnect bandwidth, and whether interconnect bandwidth counts one direction or both.
+- Rates are copied as the document prints them (`Stated`). When the document gives a figure with sparsity, mark it `Sparse` and the code converts it to the dense rate. Every precision in `Precisions` goes either into `Peaks` or into `Unsupported`, never neither: with one missing, nobody can tell whether the card lacks it or nobody looked.
+
+`go test -run TestCardSpecsAreTraceable ./internal/accelerator/` checks all of the above.
 
 ## Step 2: The Driver
 
@@ -165,6 +179,7 @@ Check a merge request that adds a vendor or a runtime against each row. Every ro
 | 10 | The failure-path tests really test | The reviewer picks any one failure-path case, removes the handling it covers from the driver, and confirms the case turns red |
 | 11 | No test copies a table | No new test asserts the definition's field values listed out again. The row in `TestVendorRuntimeAdmission` is the exception: it states which runtimes are accepted and refused before scheduling |
 | 12 | The documents state only what was verified | Each cell added to the support matrix has matching evidence in the verification section |
+| 13 | Card specs are traceable | `go test -run TestCardSpecsAreTraceable ./internal/accelerator/` passes; the reviewer picks one entry, opens its source links to check the figures, and finds in the merge request the real-hardware output `NameSeen` refers to |
 
 The commands for rows 4, 5 and 6 (a table cannot hold a vertical bar, so they are written out here; replace `<vendor>` with the file name prefix):
 
@@ -185,13 +200,14 @@ grep -n 'probeCards(' internal/agent/gpu/<vendor>*.go | grep -v '_test\.go'
 - Do not take "the device node exists" or "the environment variable is set" for "inference runs".
 
 <!-- translation-source-sha256: 70761906f3f9d64cc518f65d6f2a068e4d3bc5f680e70d2d14dff422aa3f3bd2 # Adding a New Accelerator Vendor -->
-<!-- translation-source-sha256: 1e5b74d35315defd480717c1c2da072c7d9c96f0971aab21b9a67d0f172e1474 ## Files to Touch -->
+<!-- translation-source-sha256: 0be45eaa9e5040ee6ba442767d3febf2e6818f5309910f0ffeece6f340946e2a ## Files to Touch -->
 <!-- translation-source-sha256: 72f35532382ae1f8b24c0827fa855a5c43bf367873e2e75b1910e2509f73face ## Step 1: The Vendor Definition -->
+<!-- translation-source-sha256: 1e77368a2805d8b364b25ba612c2a89bb4b092d0912b0b3e347e4609425da95d ### Card Specs (Optional) -->
 <!-- translation-source-sha256: f87115249ebd97728701ece1fbf0b11cebb5e1ca1db5ed142eea0cab744d0030 ## Step 2: The Driver -->
 <!-- translation-source-sha256: 8fa3cafc245b6882ec70b3edaff7eee36df16d04a1e496ebe3a2502d1294761d ### Granting Devices -->
 <!-- translation-source-sha256: 78d3739634eae66535d388435344994d7005d2d16ad271250e6eb6e4d251ae22 ## Step 3: Fixtures and Tests -->
 <!-- translation-source-sha256: e5f1e773baca5a8cd4cf9893e9316affc36ea6e6872236476e3c1b7d7e9324ce ## Step 4: Before Submitting -->
 <!-- translation-source-sha256: ee9f7e0f0fc8ea4baad3104d491662e298b0ac9a7ed15220e70e8295c9de2f77 ## Verification on Real Hardware -->
-<!-- translation-source-sha256: 2a010a7d0323e9c73afa958349150abfecfac4d1c07beed17b014624fdf36c94 ## Review Standard -->
+<!-- translation-source-sha256: b2b0c303b43d7f10cdd708ff1a4ac203f97966e4c2e742e3af6335e258f06f96 ## Review Standard -->
 <!-- translation-source-sha256: 269ac2f3dc089de79070bc268adb2c3ab12a39310a1abc4f1971ce5855e8834b ## What Not to Do -->
 <!-- translation-localized-code-block: 9ea29b074ac27a071bd49a8841fc9ac5eadd74e70c0d486438071610e8081ac5 ae3c0ad7266f2638793520aca2ce887f5d5ef0911f479687ccc57079bc8f7471 -->

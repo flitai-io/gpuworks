@@ -43,6 +43,7 @@ var nvidiaVendor = vendorSpec{
 	pciID:          0x10de,
 	pci:            &pciVendor{classes: []uint32{pciClassVGA, pciClass3D}, drivers: []string{"nvidia"}},
 	arch:           nvidiaArch,
+	cardSpecs:      nvidiaCardSpecs,
 
 	runtimes:    []string{RuntimeDocker, RuntimeNerdctl, RuntimeUdocker, RuntimeKube},
 	supports:    Features,
