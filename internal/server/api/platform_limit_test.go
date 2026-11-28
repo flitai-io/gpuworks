@@ -378,36 +378,3 @@ func TestPlatformGuardAddsNothingWhenNothingIsLimited(t *testing.T) {
 		}
 	}
 }
-
-// A route of an installed package that anyone may call without signing in
-// is served under any limit, as signing in is: a package that signs users
-// in keeps working. The package's other routes follow their method.
-func TestAPackagesPublicRouteIsServedUnderALimit(t *testing.T) {
-	limiter := newSwitchLimiter(featuregate.Full)
-	rig := newDynamicRig(t, []DynamicRoute{
-		dynRoute("POST", "/login", DynamicPublic, func(r *DynamicRoute) { r.RatePerMinute, r.RateBurst = 600, 600 }),
-		dynRoute("GET", "/items", DynamicMember),
-		dynRoute("POST", "/items", DynamicMember),
-	}, func(d *Deps) { d.Extensions.Platform = limiter })
-	const refused = http.StatusForbidden
-	for _, tc := range []struct {
-		name, bearer, method, path string
-		full, readOnly, locked     int
-	}{
-		{"a package's public route", "", "POST", "/api/v1/x/acme_fake/login", 200, 200, 200},
-		{"a package's read", rig.member, "GET", "/api/v1/x/acme_fake/items", 200, 200, 200},
-		{"a package's change", rig.member, "POST", "/api/v1/x/acme_fake/items", 200, refused, refused},
-		{"a package's change without a session", "", "POST", "/api/v1/x/acme_fake/items", 401, 401, 401},
-		{"a package's public path by another method", "", "DELETE", "/api/v1/x/acme_fake/login", 401, 401, 401},
-	} {
-		for _, state := range []struct {
-			access featuregate.Access
-			want   int
-		}{{featuregate.Full, tc.full}, {featuregate.ReadOnly, tc.readOnly}, {featuregate.Locked, tc.locked}} {
-			limiter.set(PlatformLimit{Access: state.access})
-			if rec := rig.do(tc.bearer, tc.method, tc.path, ""); rec.Code != state.want {
-				t.Errorf("%s under %s: %s %s = %d %s, want %d", tc.name, state.access, tc.method, tc.path, rec.Code, rec.Body.String(), state.want)
-			}
-		}
-	}
-}

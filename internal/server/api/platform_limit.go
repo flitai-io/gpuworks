@@ -301,9 +301,15 @@ func platformRefusal(limit PlatformLimit) *messages.ProductError {
 // The data plane and the routes that hand out enrollment material carry
 // credentials the guard cannot check, and are refused to anyone.
 //
-// A route of an installed package that anyone may call without signing in
-// (DynamicPublic) is served under any limit, as signing in is: a package
-// that signs users in must keep working.
+// An extension route anyone may call without signing in (a compiled
+// module's AccessPublic route, an installed package's DynamicPublic route)
+// follows its method: a read is served, a change is refused like any other.
+// Needing no sign-in is not a reason to serve a write on a limited server.
+// Only a compiled module's SignIn route is served under any limit, as
+// signing in with a password is. A refused public route answers the
+// refusal at once: it is public, so no session is asked for first. A public
+// route of a hidden feature goes on to its chain, which answers 404 as it
+// does on an unlimited server, so the limit shows nobody that it exists.
 //
 // It resolves the route the request would reach in routes (the router it is
 // installed on), so the class comes from the route's pattern, never from a
@@ -336,11 +342,15 @@ func (a *apiHandlers) platformGuard(routes chi.Routes) func(http.Handler) http.H
 				return
 			}
 			class, _ := classifyPlatformRoute(r.Method, pattern, path, owner)
-			if class.allows(limit.Access) || a.publicPackageRoute(r.Method, pattern, path) {
+			public, signIn, feature := a.publicExtensionRoute(r.Method, pattern, path)
+			if signIn {
+				class = platformRecovery
+			}
+			if class.allows(limit.Access) || (public && feature != "" && a.d.Extensions.Features.Access(feature) == featuregate.Hidden) {
 				next.ServeHTTP(w, r)
 				return
 			}
-			if strings.HasPrefix(pattern, "/api/v1/") {
+			if !public && strings.HasPrefix(pattern, "/api/v1/") {
 				if _, err := a.authenticateIdentity(r); err != nil {
 					a.writeManagementAuthError(w, err)
 					return
@@ -359,14 +369,24 @@ func (a *apiHandlers) platformGuard(routes chi.Routes) func(http.Handler) http.H
 	}
 }
 
-// publicPackageRoute reports whether the request is for an installed
-// package's route that needs no sign-in.
-func (a *apiHandlers) publicPackageRoute(method, pattern, path string) bool {
+// publicExtensionRoute reports whether the request is for an extension
+// route that needs no sign-in (a compiled module's AccessPublic route or an
+// installed package's DynamicPublic route), whether it is a compiled
+// module's SignIn route, and the feature the route belongs to. A package
+// route declares no sign-in role yet: that is a manifest field, and a new
+// manifest schema (ADR 0085, step 3).
+func (a *apiHandlers) publicExtensionRoute(method, pattern, path string) (public, signIn bool, feature featuregate.Key) {
+	if spec, ok := a.publicRoutes[method+" "+pattern]; ok {
+		return true, spec.SignIn, spec.Feature
+	}
 	if a.dynamic == nil || pattern != platformExtensionRoot+"*" {
-		return false
+		return false, false, ""
 	}
 	route, match := a.dynamic.ext.Match(method, strings.TrimPrefix(path, strings.TrimSuffix(platformExtensionRoot, "/")))
-	return match == DynamicFound && route.Access == DynamicPublic
+	if match != DynamicFound || route.Access != DynamicPublic {
+		return false, false, ""
+	}
+	return true, false, route.Feature
 }
 
 // consolePlatform is the limit as the console manifest shows it; nil while

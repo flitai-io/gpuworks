@@ -11,7 +11,7 @@ import (
 // RouteInventory lists every route h serves, sorted, one "METHOD /path" per
 // route. An extension route adds its access, action and feature:
 // "METHOD /path [access=admin] [action=x.y] [feature=k]", or "[community]"
-// in place of the feature. A plugin route, installed now, reads
+// in place of the feature, and "[sign-in]" last on a SignIn route. A plugin route, installed now, reads
 // "METHOD /api/v1/x/<id><pattern> [access=..] [action=..] [feature=k]
 // [x=<id>@<version>]", with "[ungated]" in place of an absent feature; the
 // mount serving them adds no line. A route set's inventory is its registration
@@ -45,6 +45,9 @@ func RouteInventory(h http.Handler) ([]string, error) {
 				line += " [community]"
 			} else {
 				line += " [feature=" + string(s.Feature) + "]"
+			}
+			if s.SignIn {
+				line += " [sign-in]"
 			}
 		}
 		out = append(out, line)

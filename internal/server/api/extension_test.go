@@ -328,6 +328,8 @@ func TestRouteInventoryNamesExtensionRoutes(t *testing.T) {
 		{Method: http.MethodGet, Pattern: "/x/fake/things", Feature: "fake.things", Action: "fake.list"},
 		{Method: http.MethodPost, Pattern: "/x/fake/things", Access: AccessAdmin, Feature: "fake.things", Action: "fake.create"},
 		{Method: http.MethodPost, Pattern: "/x/fake/session", Access: AccessAdminSession, Community: true},
+		{Method: http.MethodGet, Pattern: "/x/fake/start", Access: AccessPublic, Feature: "fake.things"},
+		{Method: http.MethodPost, Pattern: "/x/fake/acs", Access: AccessPublic, Community: true, SignIn: true},
 	}}
 	got, err := RouteInventory(Router(Deps{Extensions: ExtensionDeps{Extensions: []Extension{ext}, Features: gate}}))
 	if err != nil {
@@ -344,7 +346,9 @@ func TestRouteInventoryNamesExtensionRoutes(t *testing.T) {
 		}
 	}
 	want := []string{
+		"GET /api/v1/x/fake/start [access=public] [feature=fake.things]",
 		"GET /api/v1/x/fake/things [access=read] [action=fake.list] [feature=fake.things]",
+		"POST /api/v1/x/fake/acs [access=public] [community] [sign-in]",
 		"POST /api/v1/x/fake/session [access=admin-session] [community]",
 		"POST /api/v1/x/fake/things [access=admin] [action=fake.create] [feature=fake.things]",
 	}

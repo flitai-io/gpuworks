@@ -42,12 +42,17 @@ func newPublicLimiter(limit int) *publicLimiter {
 // take spends one token of route's bucket for ip at now, or says how long
 // until one is there.
 func (l *publicLimiter) take(route *DynamicRoute, ip string, now time.Time) time.Duration {
-	perMinute, burst := route.RatePerMinute, route.RateBurst
+	return l.takeKey(route.Plugin+" "+route.Method+" "+route.Pattern, route.RatePerMinute, route.RateBurst, ip, now)
+}
+
+// takeKey is take for any public route, named by route; a rate of zero is
+// the default rate.
+func (l *publicLimiter) takeKey(route string, perMinute, burst int, ip string, now time.Time) time.Duration {
 	if perMinute <= 0 || burst <= 0 {
 		perMinute, burst = defaultPublicPerMinute, defaultPublicBurst
 	}
 	rate := float64(perMinute) / 60 // tokens a second
-	key := route.Plugin + " " + route.Method + " " + route.Pattern + " " + clientGroup(ip)
+	key := route + " " + clientGroup(ip)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	var b *publicBucket

@@ -58,7 +58,7 @@ These identity sources all differ, and the variation is on the side of sites and
 
 8. **Local sign-in and the floor.** The site policy `auth.local_password` is `all` (the default) or `local_admin`. With `local_admin`, only users whose `users.local_admin` is true can sign in with a local password, and everyone else only through an external identity; the local administrator's password sign-in always works, as ADR 0071 decision 11 requires, so the administrator can still sign in when every connector is down.
 
-9. **`public` routes for compiled modules.** `api.RouteAccess` gains `AccessPublic`: unauthenticated, rate-limited per client address (the same rules as `public` plugin routes), never a session write; the route must still name a feature or be marked a community route.
+9. **`public` routes for compiled modules.** `api.RouteAccess` gains `AccessPublic`: unauthenticated, rate-limited per client address (the same rules as `public` plugin routes), and its chain never reads or renews a session; the route must still name a feature or be marked a community route. A connector's start and callback routes set `RouteSpec.SignIn`; while the whole server is limited only these public routes are served, and other public routes follow their method, see [ADR 0088](0088-extension-public-routes-under-a-platform-limit.md).
 
 10. **Codes.** `IDENTITY_TICKET_INVALID` (the ticket does not exist, expired, was used, the source does not match, or it does not match the browser binding), `IDENTITY_PROTECTED_USER` (a connector tried to disable, restore, rename or sign out an administrator), `IDENTITY_NOT_PROVISIONED`, `IDENTITY_USERNAME_TAKEN{username}`, `IDENTITY_SOURCE_CONFLICT{source}` (the source name is owned by another package or module), `IDENTITY_SOURCE_UNAVAILABLE{source}` (the identity source is unreachable during a password check), `USER_DISABLED`, `LOCAL_PASSWORD_DISABLED`.
 
@@ -85,16 +85,16 @@ These identity sources all differ, and the variation is on the side of sites and
 
 ## Implementation status
 
-Not implemented. Order, each step with contract tests (compiled modules through `internal/testenv/extmodule`, plugin packages against a fake plugin process, ADR 0071 decision 21):
+Step 1 is implemented (2026-11-27); `api.AccessPublic` and `RouteSpec.SignIn` from step 2 are implemented under [ADR 0088](0088-extension-public-routes-under-a-platform-limit.md) (2026-11-28); the rest of step 2 and steps 3–4 are not implemented. Order, each step with contract tests (compiled modules through `internal/testenv/extmodule`, plugin packages against a fake plugin process, ADR 0071 decision 21):
 
-1. Migrations for `user_identities` and `users.disabled_at`; enforcing disablement (sessions, sign-in, platform tokens, API keys) and the administrator interfaces to disable, restore and link; `auth.local_password`.
-2. The browser binding and `GET /api/v1/auth/sign-in/start`, tickets and `GET /api/v1/auth/complete`, the check that keeps administrators out of connectors' reach, `app.Host.Accounts()`, `api.AccessPublic`, `GET /api/v1/auth/sign-in-options` and the sign-in page entries. After this step, a compiled module can implement a redirect connector.
+1. **Implemented.** `user_identities` (migration 252) and `users.disabled_at`; enforcing disablement (sessions, sign-in, platform tokens, API keys); the administrator interfaces to disable, restore, view links, link and unlink (`/api/v1/users…`, see the [API reference](../reference/api.md#accounts账号与外部身份)); `auth.local_password`.
+2. The browser binding and `GET /api/v1/auth/sign-in/start`, tickets and `GET /api/v1/auth/complete`, the check that keeps administrators out of connectors' reach, `app.Host.Accounts()`, `api.AccessPublic` (**implemented**, together with `RouteSpec.SignIn`, see ADR 0088), `GET /api/v1/auth/sign-in-options` and the sign-in page entries. After this step, a compiled module can implement a redirect connector.
 3. The `write:accounts` permission for plugin packages, the `host.accounts` host interface and the manifest's `sign_in` declaration.
 4. The synchronous check interface for password connectors.
 
 <!-- translation-source-sha256: 13bbe40a7699473736ab1458265564f06fa0f8e4b5436252cc48fbd0aa2f6014 # ADR 0085: External Identity: Plugins Are Identity Connectors, the Core Creates Accounts and Issues Sessions -->
 <!-- translation-source-sha256: a9b89a0d37a27045da734b29e4c42fbe8c18e709426c5670c535c0a3536cf009 ## Background -->
-<!-- translation-source-sha256: 411bb728db44ae720d5974565286b34fa81612a9814edfa4727a5638ecfc3e8a ## Decision -->
+<!-- translation-source-sha256: c310b88ac2bf88ed16a7f9ba6aa2b9cbd15427adde6fd78c3be1b07781cf1814 ## Decision -->
 <!-- translation-source-sha256: faf40b805c5bc1b22d8a18f0d7b80320fcc208a69eef6823e055d6e845901ffc ## Extension level -->
 <!-- translation-source-sha256: eaeee62586f9665447d7722bc0da9c3226e048659e0d3d461eaedb9575fdadbb ## Trade-offs -->
-<!-- translation-source-sha256: beb8b9c4519a933d70d7b44a64a368a6fededada856225311490e5a22634b33a ## Implementation status -->
+<!-- translation-source-sha256: 5b55a41e3b536b24baa9697159c07dc3d94b6cc6d9f56dd900dce27f94be7e06 ## Implementation status -->

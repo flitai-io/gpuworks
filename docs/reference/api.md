@@ -2477,11 +2477,11 @@ Playground 与 `/v1` 网关的边界、外部模型命名 `external:<config-id>:
 另行构建的服务端可以在 `/api/v1/x/<名称>/` 下挂载自己的管理路由（`api.Deps.Extensions`）。社区版不挂载任何扩展路由，路由清单与没有扩展时完全相同。
 
 - **命名空间与冲突**：扩展名须符合 `[a-z][a-z0-9_]{1,31}`；路由（相对 `/api/v1`）须为 `/x/<名称>` 或以 `/x/<名称>/` 开头。核心不在 `/api/v1/x/` 下注册任何路由，所以扩展名可以与核心路径段同名（如 `nodes`），`/api/v1/nodes` 仍是核心路由。命名空间越界、同一方法与路径重复注册，`Router` 都会在启动时直接 panic。
-- **鉴权**：扩展路由与核心路由走同一套管理鉴权（含会话的来源检查与续期）。按声明分三档：`read`（任何已登录用户与平台令牌，读令牌只能 GET/HEAD/OPTIONS）、`admin`（另需管理员，否则 `403 ADMINISTRATOR_REQUIRED`）、`admin-session`（管理员且只接受登录会话，平台令牌返回 `403 PLATFORM_TOKEN_NOT_ALLOWED`）。
+- **鉴权**：扩展路由与核心路由走同一套管理鉴权（含会话的来源检查与续期）。按声明分四档：`read`（任何已登录用户与平台令牌，读令牌只能 GET/HEAD/OPTIONS）、`admin`（另需管理员，否则 `403 ADMINISTRATOR_REQUIRED`）、`admin-session`（管理员且只接受登录会话，平台令牌返回 `403 PLATFORM_TOKEN_NOT_ALLOWED`）、`public`（不认证；这条链路不读取、也不续期会话，处理函数拿不到调用方；按客户端地址限流，默认每分钟 60 次、突发 30，超出回 `429 TOO_MANY_REQUESTS` 与 `Retry-After`；不能对 AI 助手可读）。
 - **功能可用性**：每条扩展路由要么属于一个功能（feature），要么明确标为社区路由，二者必居其一。功能的可用性为 `full`、`read_only`、`locked` 或 `hidden`，在 server 端执行：`read_only` 时只放行读请求（以及声明为只读时可写的路由），写请求返回 `403 FEATURE_READ_ONLY`；`locked` 时返回 `403 FEATURE_UNAVAILABLE`；`hidden` 时返回 `404 FEATURE_UNAVAILABLE`；没有组件回答可用性时按不可用处理，返回 `FEATURE_PROVIDER_ABSENT`。错误的 `params.feature` 是功能名。
-- **整台服务端的可用性**：另行构建的服务端可以把整台服务端设为 `read_only` 或 `locked`。`read_only` 时读请求、`/v1/*` 和 `/api/v1/playground/v1/*` 照常，改动返回 `403 PLATFORM_READ_ONLY`；`locked` 时读请求照常，登录、健康检查、控制台清单、已接入机器的连接、插件包管理、服务端升级、诊断包、只收回权限的账号操作（停用账号、删除账号的外部身份链接；启用账号与新增链接仍按改动拒绝）以及设置该限制的扩展自己的路由也可用，改动和 `/v1/*` 返回 `403 PLATFORM_LOCKED`。`/api/v1` 下的请求先鉴权再拒绝，未登录的请求得到的仍是 401；`/v1/*` 的拒绝是网关的错误形状，码相同。安装和升级插件包按改动拒绝。受限时 `GET /api/v1/console/manifest` 带 `platform`（`access`、`message`，以及只给管理员的 `link`）；社区版从不受限，清单里没有这个字段。
+- **整台服务端的可用性**：另行构建的服务端可以把整台服务端设为 `read_only` 或 `locked`。`read_only` 时读请求、`/v1/*` 和 `/api/v1/playground/v1/*` 照常，改动返回 `403 PLATFORM_READ_ONLY`；`locked` 时读请求照常，登录、健康检查、控制台清单、已接入机器的连接、插件包管理、服务端升级、诊断包、只收回权限的账号操作（停用账号、删除账号的外部身份链接；启用账号与新增链接仍按改动拒绝）以及设置该限制的扩展自己的路由也可用，改动和 `/v1/*` 返回 `403 PLATFORM_LOCKED`。扩展里不需要登录的路由按方法分类：读照常，改动在只读和锁定时直接返回 403 与限制的码，不先鉴权；只有扩展声明为登录流程的路由在任何限制下可用。`/api/v1` 下的请求先鉴权再拒绝，未登录的请求得到的仍是 401；`/v1/*` 的拒绝是网关的错误形状，码相同。安装和升级插件包按改动拒绝。受限时 `GET /api/v1/console/manifest` 带 `platform`（`access`、`message`，以及只给管理员的 `link`）；社区版从不受限，清单里没有这个字段。
 - **AI 助手与 MCP**：扩展的 GET 路由默认不对 AI 助手和 MCP 开放，只有显式标记的才会出现在可读路由列表里并能被读取。
-- **路由清单**：`api.RouteInventory` 每行一条路由；扩展路由附带 `[access=…] [action=…] [feature=…]`（社区路由为 `[community]`），既不属于功能也未标为社区路由的扩展路由会使清单失败。
+- **路由清单**：`api.RouteInventory` 每行一条路由；扩展路由附带 `[access=…] [action=…] [feature=…]`（社区路由为 `[community]`），登录路由在行末再加 `[sign-in]`；既不属于功能也未标为社区路由的扩展路由会使清单失败。
 
 `GET /api/v1/console/manifest` 的字段：
 

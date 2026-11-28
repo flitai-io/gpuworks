@@ -311,6 +311,11 @@ type apiHandlers struct {
 	// extensionNav are the extensions' console menu entries, checked once
 	// by Router (extension.go).
 	extensionNav []dto.NavContribution
+	// publicRoutes are the extensions' AccessPublic routes by "METHOD
+	// /api/v1<pattern>", and publicLimits their rate per client address
+	// (extension_public.go).
+	publicRoutes map[string]RouteSpec
+	publicLimits *publicLimiter
 	// aiAsks and mcpCalls count each user's questions and MCP tool calls
 	// in flight (ai.go, mcp.go).
 	aiAsks, mcpCalls inFlightLimiter
